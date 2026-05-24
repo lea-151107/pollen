@@ -82,4 +82,4 @@ Client style), built with Go and Bubble Tea.
 - Save filename is derived from the response's *original* request URL, not
   whatever the URL bar holds at the moment `s` is pressed
 
-[0.1.0]: <repo>/releases/tag/v0.1.0
+[0.1.0]: https://github.com/lea-151107/pollen/releases/tag/v0.1.0
