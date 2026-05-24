@@ -169,6 +169,11 @@ func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
 		return h, nil
 
 	case km.String() == "enter":
+		// Do nothing when the current row has no key — prevents stacking empty
+		// rows when the user mashes Enter on a blank line.
+		if strings.TrimSpace(h.rows[h.activeRow].keyInput.Value()) == "" {
+			return h, nil
+		}
 		// Add a new row after current and move to it.
 		if h.activeRow == len(h.rows)-1 {
 			h.rows = append(h.rows, newHeaderRow())

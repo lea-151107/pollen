@@ -142,6 +142,10 @@ func (r Response) View(width, height int) string {
 			r.resp.DurationMs,
 			formatSize(r.resp.SizeBytes),
 		)
+		if r.resp.ContentType != "" {
+			statusLine += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("44")).
+				Render(r.resp.ContentType)
+		}
 		if r.resp.Truncated {
 			statusLine += lipgloss.NewStyle().Foreground(lipgloss.Color("214")).
 				Render(fmt.Sprintf("   (truncated at %s)", formatSize(httpx.MaxResponseBytes)))

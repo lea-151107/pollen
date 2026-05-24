@@ -22,6 +22,9 @@ func saveResponseBytes(b []byte, resp *history.Response, reqURL string) (string,
 		return "", errors.New("no body to save")
 	}
 	name := pickFilename(resp, reqURL)
+	if resp != nil {
+		name = ensureExtension(name, resp.ContentType)
+	}
 	dest, err := uniquePath(".", name)
 	if err != nil {
 		return "", err
@@ -52,6 +55,23 @@ func pickFilename(resp *history.Response, reqURL string) string {
 		}
 	}
 	return "response.bin"
+}
+
+// ensureExtension appends an extension derived from contentType when the name
+// has none. Returns name unchanged when a) name already has an extension,
+// b) contentType is empty, or c) the MIME type has no known extension.
+func ensureExtension(name, contentType string) string {
+	if filepath.Ext(name) != "" {
+		return name
+	}
+	if contentType == "" {
+		return name
+	}
+	exts, err := mime.ExtensionsByType(contentType)
+	if err != nil || len(exts) == 0 {
+		return name
+	}
+	return name + exts[0]
 }
 
 func sanitizeFilename(name string) string {

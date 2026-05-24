@@ -17,7 +17,7 @@ type sendResultMsg struct {
 	entry history.Entry
 }
 
-type clearCopyResultMsg struct{}
+type clearStatusMsg struct{}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -44,8 +44,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFocus()
 		return m, nil
 
-	case clearCopyResultMsg:
-		m.copyResult = ""
+	case clearStatusMsg:
+		m.statusMsg = ""
 		return m, nil
 
 	case tea.KeyMsg:
@@ -83,10 +83,16 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.saveResponse()
 
 	case key.Matches(km, m.keys.NextFocus):
-		// Headers consumes Tab when it has an active suggestion.
+		// Headers consumes Tab when it has an active suggestion (autocomplete).
 		if m.focus == focusHeaders && m.headers.HasSuggestion() {
 			var cmd tea.Cmd
 			m.headers, cmd = m.headers.Update(km)
+			return m, cmd
+		}
+		// Body editor consumes Tab while typing to insert indentation.
+		if m.focus == focusBody && m.body.InEditorMode() {
+			var cmd tea.Cmd
+			m.body, cmd = m.body.Update(km)
 			return m, cmd
 		}
 		m.cycleFocus(true)
@@ -122,16 +128,16 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c", "C":
 		s := httpx.ToCurl(req)
 		if err := clipboard.WriteAll(s); err != nil {
-			m.copyResult = "copy failed: " + err.Error()
+			m.statusMsg = "copy failed: " + err.Error()
 		} else {
-			m.copyResult = "copied as cURL"
+			m.statusMsg = "copied as cURL"
 		}
 	case "f", "F":
 		s := httpx.ToFetch(req)
 		if err := clipboard.WriteAll(s); err != nil {
-			m.copyResult = "copy failed: " + err.Error()
+			m.statusMsg = "copy failed: " + err.Error()
 		} else {
-			m.copyResult = "copied as fetch"
+			m.statusMsg = "copied as fetch"
 		}
 	case "esc", "q":
 		// just close
@@ -139,10 +145,10 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.copyMenuOpen = false
-	if m.copyResult == "" {
+	if m.statusMsg == "" {
 		return m, nil
 	}
-	return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearCopyResultMsg{} })
+	return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
 }
 
 func (m Model) currentRequest() history.Request {
@@ -171,16 +177,16 @@ func (m *Model) saveResponse() tea.Cmd {
 	bytes := m.response.CurrentBytes()
 	resp := m.response.CurrentResponse()
 	if len(bytes) == 0 {
-		m.copyResult = "no body to save"
-		return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearCopyResultMsg{} })
+		m.statusMsg = "no body to save"
+		return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
 	}
 	dest, err := saveResponseBytes(bytes, resp, m.urlBar.Value())
 	if err != nil {
-		m.copyResult = "save failed: " + err.Error()
+		m.statusMsg = "save failed: " + err.Error()
 	} else {
-		m.copyResult = "saved to " + dest
+		m.statusMsg = "saved to " + dest
 	}
-	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearCopyResultMsg{} })
+	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
 }
 
 func (m *Model) sendRequest() tea.Cmd {

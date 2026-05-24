@@ -80,6 +80,11 @@ func (b *Body) Blur() {
 
 func (b Body) Focused() bool { return b.focused }
 
+// InEditorMode is true when the user is typing inside the textarea (as opposed
+// to navigating the JSON/Form/Raw tab selector). Used by the parent model to
+// route Tab to the editor for indentation instead of cycling focus.
+func (b Body) InEditorMode() bool { return b.focused && !b.tabFocus }
+
 func (b Body) Update(msg tea.Msg) (Body, tea.Cmd) {
 	if !b.focused {
 		return b, nil
@@ -113,6 +118,15 @@ func (b Body) Update(msg tea.Msg) (Body, tea.Cmd) {
 		ta.Blur()
 		b.editors[b.Type()] = ta
 		b.tabFocus = true
+		return b, nil
+	}
+
+	// Tab inside the editor inserts two spaces (JSON-friendly indent), instead
+	// of cycling focus. Esc → Tab is the path to leave the editor.
+	if ok && km.String() == "tab" {
+		ta := b.editors[b.Type()]
+		ta.InsertString("  ")
+		b.editors[b.Type()] = ta
 		return b, nil
 	}
 
@@ -165,7 +179,7 @@ func (b Body) View(width, height int) string {
 				Render("  ←/→ tab  •  Enter to edit")
 		} else {
 			hint = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).
-				Render("  Esc to leave editor")
+				Render("  Tab: indent  •  Esc: leave editor")
 		}
 	}
 

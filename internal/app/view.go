@@ -91,10 +91,13 @@ func (m Model) renderStatusBar() string {
 		"Ctrl+H: history",
 		"Ctrl+C: quit",
 	}
+	if m.focus == focusResponse && m.response.CurrentBytes() != nil {
+		parts = append(parts, "s: save")
+	}
 	left := strings.Join(parts, "  ·  ")
 	right := ""
-	if m.copyResult != "" {
-		right = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(m.copyResult)
+	if m.statusMsg != "" {
+		right = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(m.statusMsg)
 	}
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2
