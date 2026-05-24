@@ -10,6 +10,7 @@ type KeyMap struct {
 	Copy       key.Binding
 	ToggleHist key.Binding
 	ToggleTLS  key.Binding
+	SwitchEnv  key.Binding
 	Cancel     key.Binding
 }
 
@@ -22,6 +23,7 @@ func DefaultKeyMap() KeyMap {
 		Copy:       key.NewBinding(key.WithKeys("ctrl+y")),
 		ToggleHist: key.NewBinding(key.WithKeys("ctrl+h")),
 		ToggleTLS:  key.NewBinding(key.WithKeys("ctrl+t")),
+		SwitchEnv:  key.NewBinding(key.WithKeys("ctrl+e")),
 		Cancel:     key.NewBinding(key.WithKeys("esc")),
 	}
 }
@@ -52,6 +54,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 				{Keys: bindingKeys(k.Copy), Desc: "Copy as cURL / fetch"},
 				{Keys: bindingKeys(k.ToggleHist), Desc: "Toggle history panel"},
 				{Keys: bindingKeys(k.ToggleTLS), Desc: "Toggle TLS verification skip"},
+				{Keys: bindingKeys(k.SwitchEnv), Desc: "Switch variable environment"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
 				{Keys: "?", Desc: "This help"},
 				{Keys: "u", Desc: "Undo last history delete"},

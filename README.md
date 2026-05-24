@@ -64,35 +64,52 @@ History stores binary response **metadata only** — the body bytes are dropped
 to keep the JSON readable and small. Reload a binary entry and you'll see the
 size/Content-Type only.
 
-## Variables
+## Variables and environments
 
 Pollen expands `{{name}}` tokens in the URL, header values, and request body
-at send time. Define variables in `~/.config/pollen/env.json`:
+at send time, looking up the name in the **currently active environment**
+from `~/.config/pollen/env.json`:
 
 ```json
 {
-  "vars": {
-    "baseUrl": "https://api.example.com",
-    "token": "sk-test-abc123"
+  "current": "dev",
+  "environments": {
+    "dev": {
+      "baseUrl": "http://localhost:8080",
+      "token": "dev-token"
+    },
+    "prod": {
+      "baseUrl": "https://api.example.com",
+      "token": "sk-live-abc123"
+    }
   }
 }
 ```
 
-Then write requests like:
+Use the variables in any request:
 
 - URL: `{{baseUrl}}/v1/users`
 - Header `Authorization`: `Bearer {{token}}`
 - Body: `{ "callback": "{{baseUrl}}/done" }`
 
+Switch environments at runtime with **`Ctrl+E`** — a menu lists every
+environment defined in env.json. The selection is persisted, so the next
+launch starts in the same environment.
+
+The status bar shows the active environment as `[env: dev]` whenever any
+environment is selected.
+
 Notes:
 
-- Unknown names (no entry in `vars`) are **left untouched** so you can spot
-  unresolved references in the response or saved history
+- The v0.1.0 flat-`vars` format is migrated automatically into a single
+  `default` environment on first load
+- Unknown names (no entry in the active env) are **left untouched** so you
+  can spot unresolved references in the response or saved history
 - Expansion is single-pass — a value that itself contains `{{...}}` is not
   re-expanded (avoids infinite loops)
-- **History stores the expanded form**, so secrets in `env.json` will end
-  up in `history.json` once sent. Treat history.json with the same care as
-  any file containing credentials
+- **History stores the expanded form**, so secrets in `env.json` end up in
+  `history.json` once sent. Treat `history.json` with the same care as any
+  file containing credentials
 
 ## License
 

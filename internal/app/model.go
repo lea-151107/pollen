@@ -42,8 +42,10 @@ type Model struct {
 	height      int
 	showHistory bool
 
-	copyMenuOpen bool
-	helpOpen     bool
+	copyMenuOpen      bool
+	helpOpen          bool
+	envSwitcherOpen   bool
+	envSwitcherCursor int // selected index in env switcher menu
 
 	statusMsg  string // transient toast: copy result / save result / error
 	statusKind statusKind

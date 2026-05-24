@@ -54,6 +54,9 @@ func (m Model) View() string {
 	if m.helpOpen {
 		return helpView(m.keys, m.width, m.height)
 	}
+	if m.envSwitcherOpen {
+		return envSwitcherView(m.env.Names(), m.envSwitcherCursor, m.env.Current, m.width, m.height)
+	}
 
 	return view
 }
@@ -107,9 +110,16 @@ func (m Model) renderStatusBar() string {
 	parts = append(parts, "?: help")
 	left := strings.Join(parts, "  ·  ")
 
-	// Right side: optional TLS warning, then transient status message.
+	// Right side: env name, optional TLS warning, then transient status message.
 	right := ""
+	if name := m.env.Current; name != "" {
+		right += lipgloss.NewStyle().Foreground(lipgloss.Color("44")).Bold(true).
+			Render("[env: " + name + "]")
+	}
 	if httpx.SkipTLSVerify.Load() {
+		if right != "" {
+			right += " "
+		}
 		right += lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).
 			Render("[TLS: insecure]")
 	}
@@ -200,6 +210,35 @@ func padRightHelp(s string, w int) string {
 		return s + " "
 	}
 	return s + strings.Repeat(" ", w-len(rs))
+}
+
+func envSwitcherView(names []string, cursor int, current string, w, h int) string {
+	var sb strings.Builder
+	sb.WriteString("Switch environment\n\n")
+	for i, n := range names {
+		marker := "  "
+		line := n
+		if n == current {
+			line += " (current)"
+		}
+		if i == cursor {
+			marker = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("> ")
+			line = lipgloss.NewStyle().Background(lipgloss.Color("205")).
+				Foreground(lipgloss.Color("0")).Render(line)
+		}
+		sb.WriteString(marker)
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n↑/↓ select  ·  Enter confirm  ·  Esc cancel")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(sb.String())
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 
 func copyMenuView(w, h int) string {

@@ -128,6 +128,9 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case m.envSwitcherOpen:
+		return m.handleEnvSwitcher(km)
+
 	case km.String() == "?" && !isTextEditingFocus(m.focus, m.body.InEditorMode()):
 		m.helpOpen = true
 		return m, nil
@@ -158,6 +161,23 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.showHistory && m.focus == focusHistory {
 			m.focus = focusURL
 			m.applyFocus()
+		}
+		return m, nil
+
+	case key.Matches(km, m.keys.SwitchEnv):
+		names := m.env.Names()
+		if len(names) == 0 {
+			m.setStatus(statusWarn, "no environments defined in env.json")
+			return m, m.statusTick(2 * time.Second)
+		}
+		m.envSwitcherOpen = true
+		// Start cursor at current selection if it exists.
+		m.envSwitcherCursor = 0
+		for i, n := range names {
+			if n == m.env.Current {
+				m.envSwitcherCursor = i
+				break
+			}
 		}
 		return m, nil
 
@@ -220,6 +240,39 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.response, cmd = m.response.Update(km)
 	}
 	return m, cmd
+}
+
+func (m Model) handleEnvSwitcher(km tea.KeyMsg) (tea.Model, tea.Cmd) {
+	names := m.env.Names()
+	switch km.String() {
+	case "up", "k":
+		if m.envSwitcherCursor > 0 {
+			m.envSwitcherCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.envSwitcherCursor < len(names)-1 {
+			m.envSwitcherCursor++
+		}
+		return m, nil
+	case "enter":
+		if m.envSwitcherCursor >= 0 && m.envSwitcherCursor < len(names) {
+			chosen := names[m.envSwitcherCursor]
+			if err := m.env.SetCurrent(chosen); err == nil {
+				// Persist the selection so it survives a restart.
+				_ = m.env.Save()
+				m.setStatus(statusOK, "switched to env: "+chosen)
+				m.envSwitcherOpen = false
+				return m, m.statusTick(2 * time.Second)
+			}
+		}
+		m.envSwitcherOpen = false
+		return m, nil
+	case "esc", "q":
+		m.envSwitcherOpen = false
+		return m, nil
+	}
+	return m, nil
 }
 
 func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
