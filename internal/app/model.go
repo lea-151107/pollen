@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lea/pollen/internal/env"
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/ui"
 )
@@ -27,6 +28,7 @@ var focusOrder = []focusArea{
 type Model struct {
 	keys  KeyMap
 	store *history.Store
+	env   *env.Env
 
 	method   ui.Method
 	urlBar   ui.URLBar
@@ -72,10 +74,14 @@ const (
 	statusError
 )
 
-func New(store *history.Store) Model {
+func New(store *history.Store, e *env.Env) Model {
+	if e == nil {
+		e = env.New()
+	}
 	m := Model{
 		keys:        DefaultKeyMap(),
 		store:       store,
+		env:         e,
 		method:      ui.NewMethod(),
 		urlBar:      ui.NewURLBar(),
 		headers:     ui.NewHeaders(),

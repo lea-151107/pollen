@@ -300,6 +300,15 @@ func (m *Model) saveResponse() tea.Cmd {
 
 func (m *Model) sendRequest() tea.Cmd {
 	req := m.currentRequest()
+	// Expand {{varName}} tokens before sending. Both the actual HTTP request
+	// and the history entry use the expanded form so the user always sees
+	// "what we sent" verbatim. (Trade-off: secrets stored in env leak to
+	// history.json — documented in README.)
+	req.URL = m.env.Expand(req.URL)
+	req.Body = m.env.Expand(req.Body)
+	for i := range req.Headers {
+		req.Headers[i].Value = m.env.Expand(req.Headers[i].Value)
+	}
 	if req.URL == "" {
 		m.response.SetError("URL is empty")
 		return nil

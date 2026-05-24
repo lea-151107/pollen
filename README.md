@@ -57,11 +57,42 @@ Press `?` inside the app for the full list at any time.
 |------|---------|
 | `~/.config/pollen/history.json` | Request/response history (most-recent first, cap 200) |
 | `~/.config/pollen/settings.json` | Persistent toggles (TLS skip) |
+| `~/.config/pollen/env.json` | User-defined variables for `{{name}}` expansion |
 | `~/.config/pollen/clipboard.txt` | Clipboard fallback if `xclip`/`wl-clipboard` missing |
 
 History stores binary response **metadata only** — the body bytes are dropped
 to keep the JSON readable and small. Reload a binary entry and you'll see the
 size/Content-Type only.
+
+## Variables
+
+Pollen expands `{{name}}` tokens in the URL, header values, and request body
+at send time. Define variables in `~/.config/pollen/env.json`:
+
+```json
+{
+  "vars": {
+    "baseUrl": "https://api.example.com",
+    "token": "sk-test-abc123"
+  }
+}
+```
+
+Then write requests like:
+
+- URL: `{{baseUrl}}/v1/users`
+- Header `Authorization`: `Bearer {{token}}`
+- Body: `{ "callback": "{{baseUrl}}/done" }`
+
+Notes:
+
+- Unknown names (no entry in `vars`) are **left untouched** so you can spot
+  unresolved references in the response or saved history
+- Expansion is single-pass — a value that itself contains `{{...}}` is not
+  re-expanded (avoids infinite loops)
+- **History stores the expanded form**, so secrets in `env.json` will end
+  up in `history.json` once sent. Treat history.json with the same care as
+  any file containing credentials
 
 ## License
 
