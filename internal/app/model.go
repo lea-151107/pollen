@@ -39,6 +39,8 @@ type Model struct {
 	showHistory bool
 
 	copyMenuOpen bool
+	helpOpen     bool
+
 	statusMsg string // transient toast: copy result / save result / error
 
 	errorMsg string

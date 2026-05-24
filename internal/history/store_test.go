@@ -56,6 +56,29 @@ func TestStore_SaveLoad(t *testing.T) {
 	}
 }
 
+func TestStore_DeleteAt(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i < 3; i++ {
+		s.Prepend(Entry{ID: string(rune('a' + i))})
+	}
+	// entries are [c, b, a] after prepends
+	if !s.DeleteAt(1) {
+		t.Fatal("DeleteAt(1) should succeed")
+	}
+	if len(s.Entries()) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(s.Entries()))
+	}
+	if s.Entries()[0].ID != "c" || s.Entries()[1].ID != "a" {
+		t.Errorf("wrong remaining entries: %+v", s.Entries())
+	}
+	if s.DeleteAt(-1) {
+		t.Error("DeleteAt(-1) should return false")
+	}
+	if s.DeleteAt(10) {
+		t.Error("DeleteAt(10) should return false")
+	}
+}
+
 func TestStore_PrependLimit(t *testing.T) {
 	s := newTestStore(t)
 	for i := 0; i < maxEntries+50; i++ {

@@ -1,14 +1,20 @@
 package httpx
 
 import (
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/lea/pollen/internal/history"
 )
+
+// SkipTLSVerify controls whether HTTP requests skip TLS certificate verification.
+// Atomic so the UI can toggle it from any goroutine safely.
+var SkipTLSVerify atomic.Bool
 
 // MaxResponseBytes caps how much of a response body is read into memory. A
 // dev tool that accidentally hits a large download endpoint shouldn't OOM the
@@ -43,6 +49,11 @@ func Do(req history.Request) (*history.Response, error) {
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
+	if SkipTLSVerify.Load() {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // user-opt-in for self-signed testing
+		}
+	}
 	start := time.Now()
 	resp, err := client.Do(httpReq)
 	if err != nil {

@@ -60,6 +60,16 @@ func (s *Store) Prepend(e Entry) {
 	}
 }
 
+// DeleteAt removes the entry at index i. Returns false when the index is out
+// of range.
+func (s *Store) DeleteAt(i int) bool {
+	if i < 0 || i >= len(s.entries) {
+		return false
+	}
+	s.entries = append(s.entries[:i], s.entries[i+1:]...)
+	return true
+}
+
 // Save writes the current entries to disk atomically.
 func (s *Store) Save() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {

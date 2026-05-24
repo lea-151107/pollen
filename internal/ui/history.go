@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,11 +35,14 @@ func (h History) Selected() *history.Entry {
 	return &h.entries[h.selected]
 }
 
-func (h *History) Focus() { h.focused = true }
-func (h *History) Blur()  { h.focused = false }
-func (h History) Focused() bool { return h.focused }
+func (h History) SelectedIndex() int { return h.selected }
+
+func (h *History) Focus()        { h.focused = true }
+func (h *History) Blur()         { h.focused = false }
+func (h History) Focused() bool  { return h.focused }
 
 type HistorySelectMsg struct{ Entry history.Entry }
+type HistoryDeleteMsg struct{ Index int }
 
 func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 	if !h.focused {
@@ -61,6 +65,11 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 		if e := h.Selected(); e != nil {
 			entry := *e
 			return h, func() tea.Msg { return HistorySelectMsg{Entry: entry} }
+		}
+	case km.String() == "d":
+		if h.Selected() != nil {
+			idx := h.selected
+			return h, func() tea.Msg { return HistoryDeleteMsg{Index: idx} }
 		}
 	}
 	return h, nil
@@ -110,18 +119,135 @@ func (h History) View(width, height int) string {
 	lines = append(lines, title)
 	innerWidth := inner - 2 // -2 padding
 	for i := start; i < end; i++ {
-		e := h.entries[i]
-		line := fmt.Sprintf("%-6s %s", e.Request.Method, e.Request.URL)
-		line = truncate(line, innerWidth)
-		if h.focused && i == h.selected {
-			line = lipgloss.NewStyle().
-				Background(lipgloss.Color("205")).
-				Foreground(lipgloss.Color("0")).
-				Render(line)
-		}
-		lines = append(lines, line)
+		selected := h.focused && i == h.selected
+		lines = append(lines, renderHistoryRow(h.entries[i], innerWidth, selected))
 	}
 	return border.Render(joinLines(lines))
+}
+
+// renderHistoryRow lays out "STAT METH URL ... TIME" within width chars.
+// Sections drop in order time → status when space gets tight.
+func renderHistoryRow(e history.Entry, width int, selected bool) string {
+	if width <= 0 {
+		return ""
+	}
+	status, statusColor := statusBadge(e)
+	method := e.Request.Method
+	if len(method) > 6 {
+		method = method[:6]
+	}
+	url := e.Request.URL
+	timeStr := formatRelative(e.Timestamp)
+
+	// Try full layout: "STA METH   URL...   TIME"
+	// "STA" (3) + " " + "METH" (left-padded to 6) + " " + URL... + " " + TIME
+	const sep = "  "
+	statW := 3
+	methW := 6
+	timeW := len(timeStr)
+
+	const minURLW = 8
+	// All sections fit?
+	full := statW + 1 + methW + 1 + minURLW + 1 + timeW
+	noTime := statW + 1 + methW + 1 + minURLW
+	noStatus := methW + 1 + minURLW
+
+	switch {
+	case width >= full:
+		urlSpace := width - statW - 1 - methW - 1 - timeW - 1
+		urlPadded := padRight(truncate(url, urlSpace), urlSpace)
+		raw := fmt.Sprintf("%s %-6s %s %s", status, method, urlPadded, timeStr)
+		if selected {
+			return selectedStyle().Render(raw)
+		}
+		// Colorize only the status badge; rest is default.
+		statusStyled := lipgloss.NewStyle().Foreground(statusColor).Render(status)
+		timeStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(timeStr)
+		return fmt.Sprintf("%s %-6s %s %s", statusStyled, method, urlPadded, timeStyled)
+
+	case width >= noTime:
+		urlSpace := width - statW - 1 - methW - 1
+		raw := fmt.Sprintf("%s %-6s %s", status, method, truncate(url, urlSpace))
+		if selected {
+			return selectedStyle().Render(padRight(raw, width))
+		}
+		statusStyled := lipgloss.NewStyle().Foreground(statusColor).Render(status)
+		return fmt.Sprintf("%s %-6s %s", statusStyled, method, truncate(url, urlSpace))
+
+	case width >= noStatus:
+		urlSpace := width - methW - 1
+		raw := fmt.Sprintf("%-6s %s", method, truncate(url, urlSpace))
+		if selected {
+			return selectedStyle().Render(padRight(raw, width))
+		}
+		return raw
+
+	default:
+		raw := truncate(method+" "+url, width)
+		if selected {
+			return selectedStyle().Render(padRight(raw, width))
+		}
+		return raw
+	}
+}
+
+func selectedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color("205")).
+		Foreground(lipgloss.Color("0"))
+}
+
+func statusBadge(e history.Entry) (string, lipgloss.Color) {
+	if e.Response == nil {
+		return "ERR", lipgloss.Color("8")
+	}
+	s := e.Response.Status
+	text := fmt.Sprintf("%-3d", s)
+	if s >= 1000 {
+		text = "???"
+	}
+	switch {
+	case s >= 200 && s < 300:
+		return text, lipgloss.Color("10")
+	case s >= 300 && s < 400:
+		return text, lipgloss.Color("214")
+	case s >= 400 && s < 500:
+		return text, lipgloss.Color("9")
+	case s >= 500:
+		return text, lipgloss.Color("13")
+	}
+	return text, lipgloss.Color("8")
+}
+
+func formatRelative(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := time.Since(t)
+	switch {
+	case d < 0:
+		return "soon" // clock skew safety
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+func padRight(s string, w int) string {
+	rs := []rune(s)
+	if len(rs) >= w {
+		return s
+	}
+	pad := make([]rune, w-len(rs))
+	for i := range pad {
+		pad[i] = ' '
+	}
+	return s + string(pad)
 }
 
 func truncate(s string, w int) string {

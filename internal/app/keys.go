@@ -9,6 +9,7 @@ type KeyMap struct {
 	Send       key.Binding
 	Copy       key.Binding
 	ToggleHist key.Binding
+	ToggleTLS  key.Binding
 	Cancel     key.Binding
 }
 
@@ -20,6 +21,7 @@ func DefaultKeyMap() KeyMap {
 		Send:       key.NewBinding(key.WithKeys("ctrl+s")),
 		Copy:       key.NewBinding(key.WithKeys("ctrl+y")),
 		ToggleHist: key.NewBinding(key.WithKeys("ctrl+h")),
+		ToggleTLS:  key.NewBinding(key.WithKeys("ctrl+t")),
 		Cancel:     key.NewBinding(key.WithKeys("esc")),
 	}
 }

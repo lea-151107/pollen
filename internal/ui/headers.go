@@ -28,12 +28,14 @@ func newHeaderRow() headerRow {
 }
 
 type Headers struct {
-	rows       []headerRow
-	activeRow  int
-	activeCol  int // 0=key, 1=value
-	focused    bool
-	suggestion string // first matching suggestion (for tab-completion)
+	rows        []headerRow
+	activeRow   int
+	activeCol   int // 0=key, 1=value
+	focused     bool
+	suggestions []string // top matches for the current key prefix; [0] is what Tab accepts
 }
+
+const maxSuggestions = 5
 
 func NewHeaders() Headers {
 	return Headers{rows: []headerRow{newHeaderRow()}}
@@ -76,13 +78,13 @@ func (h *Headers) Blur() {
 		h.rows[i].keyInput.Blur()
 		h.rows[i].valInput.Blur()
 	}
-	h.suggestion = ""
+	h.suggestions = nil
 }
 
 func (h Headers) Focused() bool { return h.focused }
 
 func (h Headers) HasSuggestion() bool {
-	return h.focused && h.suggestion != ""
+	return h.focused && len(h.suggestions) > 0
 }
 
 func (h *Headers) refreshFocus() {
@@ -104,23 +106,26 @@ func (h *Headers) refreshFocus() {
 	}
 }
 
-func (h *Headers) currentSuggestion() string {
+func (h *Headers) currentSuggestions() []string {
 	if h.activeCol != 0 {
-		return ""
+		return nil
 	}
 	prefix := h.rows[h.activeRow].keyInput.Value()
 	if prefix == "" {
-		return ""
+		return nil
 	}
 	matches := headers.Suggest(prefix)
 	if len(matches) == 0 {
-		return ""
+		return nil
 	}
-	// Skip if user already typed the exact header.
+	// Hide once the user has typed the exact first match.
 	if strings.EqualFold(matches[0], prefix) {
-		return ""
+		return nil
 	}
-	return matches[0]
+	if len(matches) > maxSuggestions {
+		matches = matches[:maxSuggestions]
+	}
+	return matches
 }
 
 func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
@@ -138,7 +143,7 @@ func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
 			h.activeRow--
 			h.refreshFocus()
 		}
-		h.suggestion = h.currentSuggestion()
+		h.suggestions = h.currentSuggestions()
 		return h, nil
 
 	case key.Matches(km, key.NewBinding(key.WithKeys("down"))):
@@ -146,26 +151,27 @@ func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
 			h.activeRow++
 			h.refreshFocus()
 		}
-		h.suggestion = h.currentSuggestion()
+		h.suggestions = h.currentSuggestions()
 		return h, nil
 
 	case km.String() == "right" && h.activeCol == 0 && cursorAtEnd(h.rows[h.activeRow].keyInput):
 		h.activeCol = 1
 		h.refreshFocus()
-		h.suggestion = ""
+		h.suggestions = nil
 		return h, nil
 
 	case km.String() == "left" && h.activeCol == 1 && h.rows[h.activeRow].valInput.Position() == 0:
 		h.activeCol = 0
 		h.refreshFocus()
-		h.suggestion = h.currentSuggestion()
+		h.suggestions = h.currentSuggestions()
 		return h, nil
 
-	case km.String() == "tab" && h.suggestion != "" && h.activeCol == 0:
-		// Accept suggestion.
-		h.rows[h.activeRow].keyInput.SetValue(h.suggestion)
-		h.rows[h.activeRow].keyInput.SetCursor(len(h.suggestion))
-		h.suggestion = ""
+	case km.String() == "tab" && len(h.suggestions) > 0 && h.activeCol == 0:
+		// Accept first (best) suggestion.
+		first := h.suggestions[0]
+		h.rows[h.activeRow].keyInput.SetValue(first)
+		h.rows[h.activeRow].keyInput.SetCursor(len(first))
+		h.suggestions = nil
 		return h, nil
 
 	case km.String() == "enter":
@@ -181,7 +187,7 @@ func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
 		h.activeRow++
 		h.activeCol = 0
 		h.refreshFocus()
-		h.suggestion = ""
+		h.suggestions = nil
 		return h, nil
 
 	case key.Matches(km, key.NewBinding(key.WithKeys("ctrl+d"))):
@@ -193,7 +199,7 @@ func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
 			}
 			h.refreshFocus()
 		}
-		h.suggestion = h.currentSuggestion()
+		h.suggestions = h.currentSuggestions()
 		return h, nil
 	}
 
@@ -201,7 +207,7 @@ func (h Headers) Update(msg tea.Msg) (Headers, tea.Cmd) {
 	var cmd tea.Cmd
 	if h.activeCol == 0 {
 		h.rows[h.activeRow].keyInput, cmd = h.rows[h.activeRow].keyInput.Update(msg)
-		h.suggestion = h.currentSuggestion()
+		h.suggestions = h.currentSuggestions()
 	} else {
 		h.rows[h.activeRow].valInput, cmd = h.rows[h.activeRow].valInput.Update(msg)
 	}
@@ -253,12 +259,20 @@ func (h Headers) View(width int) string {
 		lines = append(lines, row)
 	}
 
-	if h.suggestion != "" {
-		hint := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244")).
-			Italic(true).
-			Render("  ↹ " + h.suggestion)
-		lines = append(lines, hint)
+	if h.focused {
+		// Suggestion line takes priority; otherwise show editing hints so the
+		// user can discover ctrl+d / enter without reading the docs.
+		if len(h.suggestions) > 0 {
+			text := "  ↹ " + truncate(strings.Join(h.suggestions, "  ·  "), contentW-4)
+			lines = append(lines, lipgloss.NewStyle().
+				Foreground(lipgloss.Color("244")).
+				Italic(true).
+				Render(text))
+		} else {
+			lines = append(lines, lipgloss.NewStyle().
+				Foreground(lipgloss.Color("244")).
+				Render("  enter: new row  ·  ctrl+d: delete row"))
+		}
 	}
 
 	return border.Render(strings.Join(lines, "\n"))

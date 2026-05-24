@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/lea/pollen/internal/httpx"
 )
 
 func (m Model) View() string {
@@ -48,6 +50,9 @@ func (m Model) View() string {
 
 	if m.copyMenuOpen {
 		return copyMenuView(m.width, m.height)
+	}
+	if m.helpOpen {
+		return helpView(m.width, m.height)
 	}
 
 	return view
@@ -94,10 +99,20 @@ func (m Model) renderStatusBar() string {
 	if m.focus == focusResponse && m.response.CurrentBytes() != nil {
 		parts = append(parts, "s: save")
 	}
+	parts = append(parts, "?: help")
 	left := strings.Join(parts, "  ·  ")
+
+	// Right side: optional TLS warning, then transient status message.
 	right := ""
+	if httpx.SkipTLSVerify.Load() {
+		right += lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).
+			Render("[TLS: insecure]")
+	}
 	if m.statusMsg != "" {
-		right = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(m.statusMsg)
+		if right != "" {
+			right += "  "
+		}
+		right += lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(m.statusMsg)
 	}
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2
@@ -106,6 +121,35 @@ func (m Model) renderStatusBar() string {
 	}
 	content := left + strings.Repeat(" ", gap) + right
 	return style.Render(content)
+}
+
+func helpView(w, h int) string {
+	body := `Keybindings
+
+Global
+  Tab / Shift+Tab        Move focus
+  Ctrl+S                 Send request
+  Ctrl+Y                 Copy as cURL / fetch
+  Ctrl+H                 Toggle history panel
+  Ctrl+T                 Toggle TLS verification skip
+  Ctrl+C                 Quit
+  ?                      This help
+
+History    ↑/↓ move  ·  Enter load  ·  d delete
+Method     ↑/↓ cycle
+Headers    ↑/↓ ←/→ navigate  ·  Enter new row  ·  Ctrl+D delete  ·  Tab accept
+Body       ←/→ tab  ·  Enter edit  ·  Tab indent  ·  Esc leave
+Response   ↑/↓ PgUp/PgDn scroll  ·  s save
+
+Press ? or Esc to close`
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(body)
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 
 func copyMenuView(w, h int) string {

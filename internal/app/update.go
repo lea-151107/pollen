@@ -1,6 +1,7 @@
 package app
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -12,6 +13,28 @@ import (
 	"github.com/lea/pollen/internal/httpx"
 	"github.com/lea/pollen/internal/ui"
 )
+
+// isTextEditingFocus reports whether the currently focused panel is actively
+// accepting character input (so global single-key shortcuts like `?` should be
+// treated as ordinary input instead of triggering a global action).
+func isTextEditingFocus(f focusArea, bodyInEditor bool) bool {
+	switch f {
+	case focusURL, focusHeaders:
+		return true
+	case focusBody:
+		return bodyInEditor
+	}
+	return false
+}
+
+// clipboardHint returns a platform-specific install suggestion to append to a
+// failed-copy message. atotto/clipboard shells out to xclip/wl-copy on Linux.
+func clipboardHint() string {
+	if runtime.GOOS == "linux" {
+		return " (install xclip or wl-clipboard)"
+	}
+	return ""
+}
 
 type sendResultMsg struct {
 	entry history.Entry
@@ -44,6 +67,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFocus()
 		return m, nil
 
+	case ui.HistoryDeleteMsg:
+		if m.store.DeleteAt(msg.Index) {
+			_ = m.store.Save()
+			m.history.SetEntries(m.store.Entries())
+			m.statusMsg = "deleted 1 entry"
+			return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		}
+		return m, nil
+
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
@@ -64,6 +96,17 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case m.copyMenuOpen:
 		return m.handleCopyMenu(km)
 
+	case m.helpOpen:
+		switch km.String() {
+		case "?", "esc", "q":
+			m.helpOpen = false
+		}
+		return m, nil
+
+	case km.String() == "?" && !isTextEditingFocus(m.focus, m.body.InEditorMode()):
+		m.helpOpen = true
+		return m, nil
+
 	case key.Matches(km, m.keys.Send):
 		return m, m.sendRequest()
 
@@ -78,6 +121,16 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.applyFocus()
 		}
 		return m, nil
+
+	case key.Matches(km, m.keys.ToggleTLS):
+		newVal := !httpx.SkipTLSVerify.Load()
+		httpx.SkipTLSVerify.Store(newVal)
+		if newVal {
+			m.statusMsg = "TLS verification: OFF (insecure)"
+		} else {
+			m.statusMsg = "TLS verification: ON"
+		}
+		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
 
 	case m.focus == focusResponse && km.String() == "s":
 		return m, m.saveResponse()
@@ -128,14 +181,14 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c", "C":
 		s := httpx.ToCurl(req)
 		if err := clipboard.WriteAll(s); err != nil {
-			m.statusMsg = "copy failed: " + err.Error()
+			m.statusMsg = "copy failed: " + err.Error() + clipboardHint()
 		} else {
 			m.statusMsg = "copied as cURL"
 		}
 	case "f", "F":
 		s := httpx.ToFetch(req)
 		if err := clipboard.WriteAll(s); err != nil {
-			m.statusMsg = "copy failed: " + err.Error()
+			m.statusMsg = "copy failed: " + err.Error() + clipboardHint()
 		} else {
 			m.statusMsg = "copied as fetch"
 		}

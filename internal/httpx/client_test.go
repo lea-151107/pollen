@@ -137,6 +137,32 @@ func TestDo_DoesNotTruncateSmallBody(t *testing.T) {
 	}
 }
 
+func TestDo_TLSVerify(t *testing.T) {
+	// httptest.NewTLSServer uses a self-signed cert that the default client
+	// does not trust.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	// Default: should fail with x509 error.
+	SkipTLSVerify.Store(false)
+	if _, err := Do(history.Request{Method: "GET", URL: srv.URL}); err == nil {
+		t.Error("expected TLS verification error with default settings")
+	}
+
+	// Skip verify: should succeed.
+	SkipTLSVerify.Store(true)
+	defer SkipTLSVerify.Store(false) // restore for other tests
+	resp, err := Do(history.Request{Method: "GET", URL: srv.URL})
+	if err != nil {
+		t.Fatalf("expected success with SkipTLSVerify, got %v", err)
+	}
+	if resp.Status != 200 || resp.Body != "ok" {
+		t.Errorf("unexpected response: %+v", resp)
+	}
+}
+
 func TestDo_InvalidURL(t *testing.T) {
 	_, err := Do(history.Request{Method: "GET", URL: "://bad"})
 	if err == nil {
