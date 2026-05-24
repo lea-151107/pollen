@@ -16,6 +16,7 @@ import (
 type Response struct {
 	vp      viewport.Model
 	resp    *history.Response
+	reqURL  string // URL of the request that produced resp
 	err     string
 	loading bool
 	focused bool
@@ -26,13 +27,19 @@ func NewResponse() Response {
 	return Response{vp: vp}
 }
 
-func (r *Response) SetResponse(resp *history.Response) {
+func (r *Response) SetResponse(resp *history.Response, reqURL string) {
 	r.resp = resp
+	r.reqURL = reqURL
 	r.err = ""
 	r.loading = false
 	r.vp.SetContent(r.formatBody())
 	r.vp.GotoTop()
 }
+
+// RequestURL returns the URL of the request that produced the currently
+// displayed response. Used by the save action to derive a stable filename
+// even when the user has since edited the URL bar.
+func (r Response) RequestURL() string { return r.reqURL }
 
 func (r *Response) SetError(err string) {
 	r.resp = nil

@@ -61,7 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.entry.Error != "" {
 			m.response.SetError(msg.entry.Error)
 		} else if msg.entry.Response != nil {
-			m.response.SetResponse(msg.entry.Response)
+			m.response.SetResponse(msg.entry.Response, msg.entry.Request.URL)
 		}
 		m.store.Prepend(msg.entry)
 		_ = m.store.Save()
@@ -142,7 +142,12 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.statusTick(2 * time.Second)
 
 	case key.Matches(km, m.keys.Send):
-		return m, m.sendRequest()
+		// Split into two statements: `return m, m.sendRequest()` would rely on
+		// undefined evaluation order between `m` and the pointer-receiver call
+		// that mutates m. Current gc happens to evaluate the call first, but
+		// the Go spec leaves this unspecified.
+		cmd := m.sendRequest()
+		return m, cmd
 
 	case key.Matches(km, m.keys.Copy):
 		m.copyMenuOpen = true
@@ -173,7 +178,9 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.statusTick(2 * time.Second)
 
 	case m.focus == focusResponse && km.String() == "s":
-		return m, m.saveResponse()
+		// See note above on sendRequest — avoid relying on undefined eval order.
+		cmd := m.saveResponse()
+		return m, cmd
 
 	case key.Matches(km, m.keys.NextFocus):
 		// Headers consumes Tab when it has an active suggestion (autocomplete).
@@ -250,7 +257,7 @@ func (m *Model) applyEntry(e history.Entry) {
 	m.headers.Set(e.Request.Headers)
 	m.body.Set(e.Request.BodyType, e.Request.Body)
 	if e.Response != nil {
-		m.response.SetResponse(e.Response)
+		m.response.SetResponse(e.Response, e.Request.URL)
 	} else if e.Error != "" {
 		m.response.SetError(e.Error)
 	}
@@ -280,7 +287,9 @@ func (m *Model) saveResponse() tea.Cmd {
 		m.setStatus(statusError, "no body to save")
 		return m.statusTick(2 * time.Second)
 	}
-	dest, err := saveResponseBytes(bytes, resp, m.urlBar.Value())
+	// Use the URL of the request that produced this response, NOT m.urlBar
+	// which the user may have edited since the response arrived.
+	dest, err := saveResponseBytes(bytes, resp, m.response.RequestURL())
 	if err != nil {
 		m.setStatus(statusError, "save failed: "+err.Error())
 	} else {
