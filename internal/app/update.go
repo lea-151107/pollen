@@ -4,13 +4,13 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
+	"github.com/lea/pollen/internal/settings"
 	"github.com/lea/pollen/internal/ui"
 )
 
@@ -40,7 +40,7 @@ type sendResultMsg struct {
 	entry history.Entry
 }
 
-type clearStatusMsg struct{}
+type clearStatusMsg struct{ gen int }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -68,16 +68,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ui.HistoryDeleteMsg:
-		if m.store.DeleteAt(msg.Index) {
-			_ = m.store.Save()
-			m.history.SetEntries(m.store.Entries())
-			m.statusMsg = "deleted 1 entry"
-			return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		entries := m.store.Entries()
+		if msg.Index < 0 || msg.Index >= len(entries) {
+			return m, nil
 		}
-		return m, nil
+		// Snapshot before delete so `u` can restore it.
+		snapshot := entries[msg.Index]
+		if !m.store.DeleteAt(msg.Index) {
+			return m, nil
+		}
+		_ = m.store.Save()
+		m.history.SetEntries(m.store.Entries())
+		m.setStatus(statusOK, "deleted (u to undo)")
+		m.pendingUndo = &pendingUndo{entry: snapshot, index: msg.Index, gen: m.statusGen}
+		return m, m.statusTick(5 * time.Second)
 
 	case clearStatusMsg:
-		m.statusMsg = ""
+		// Ignore stale Ticks scheduled for an earlier message.
+		if msg.gen == m.statusGen {
+			m.statusMsg = ""
+			m.statusKind = statusOK
+			// Undo window expires together with the toast.
+			if m.pendingUndo != nil && m.pendingUndo.gen == msg.gen {
+				m.pendingUndo = nil
+			}
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -107,6 +122,15 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpOpen = true
 		return m, nil
 
+	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode()):
+		u := m.pendingUndo
+		m.store.InsertAt(u.index, u.entry)
+		_ = m.store.Save()
+		m.history.SetEntries(m.store.Entries())
+		m.pendingUndo = nil
+		m.setStatus(statusOK, "restored")
+		return m, m.statusTick(2 * time.Second)
+
 	case key.Matches(km, m.keys.Send):
 		return m, m.sendRequest()
 
@@ -125,12 +149,14 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.ToggleTLS):
 		newVal := !httpx.SkipTLSVerify.Load()
 		httpx.SkipTLSVerify.Store(newVal)
+		// Persist so the preference survives restarts; failure is non-fatal.
+		_ = (&settings.Settings{SkipTLSVerify: newVal}).Save()
 		if newVal {
-			m.statusMsg = "TLS verification: OFF (insecure)"
+			m.setStatus(statusWarn, "TLS verification: OFF (insecure)")
 		} else {
-			m.statusMsg = "TLS verification: ON"
+			m.setStatus(statusOK, "TLS verification: ON")
 		}
-		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		return m, m.statusTick(2 * time.Second)
 
 	case m.focus == focusResponse && km.String() == "s":
 		return m, m.saveResponse()
@@ -179,19 +205,9 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	req := m.currentRequest()
 	switch km.String() {
 	case "c", "C":
-		s := httpx.ToCurl(req)
-		if err := clipboard.WriteAll(s); err != nil {
-			m.statusMsg = "copy failed: " + err.Error() + clipboardHint()
-		} else {
-			m.statusMsg = "copied as cURL"
-		}
+		m.deliverCopy(httpx.ToCurl(req), "cURL")
 	case "f", "F":
-		s := httpx.ToFetch(req)
-		if err := clipboard.WriteAll(s); err != nil {
-			m.statusMsg = "copy failed: " + err.Error() + clipboardHint()
-		} else {
-			m.statusMsg = "copied as fetch"
-		}
+		m.deliverCopy(httpx.ToFetch(req), "fetch")
 	case "esc", "q":
 		// just close
 	default:
@@ -201,7 +217,7 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.statusMsg == "" {
 		return m, nil
 	}
-	return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
+	return m, m.statusTick(2 * time.Second)
 }
 
 func (m Model) currentRequest() history.Request {
@@ -226,20 +242,34 @@ func (m *Model) applyEntry(e history.Entry) {
 	}
 }
 
+// deliverCopy puts `content` on the clipboard, or on disk if clipboard fails,
+// and reports the outcome through statusMsg with appropriate kind.
+func (m *Model) deliverCopy(content, label string) {
+	mode, path, err := copyOrFallback(content)
+	switch {
+	case err != nil:
+		m.setStatus(statusError, "copy failed: "+err.Error()+clipboardHint())
+	case mode == copyClipboard:
+		m.setStatus(statusOK, "copied as "+label)
+	case mode == copyFile:
+		m.setStatus(statusWarn, "clipboard unavailable - wrote "+label+" to "+path)
+	}
+}
+
 func (m *Model) saveResponse() tea.Cmd {
 	bytes := m.response.CurrentBytes()
 	resp := m.response.CurrentResponse()
 	if len(bytes) == 0 {
-		m.statusMsg = "no body to save"
-		return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
+		m.setStatus(statusError, "no body to save")
+		return m.statusTick(2 * time.Second)
 	}
 	dest, err := saveResponseBytes(bytes, resp, m.urlBar.Value())
 	if err != nil {
-		m.statusMsg = "save failed: " + err.Error()
+		m.setStatus(statusError, "save failed: "+err.Error())
 	} else {
-		m.statusMsg = "saved to " + dest
+		m.setStatus(statusOK, "saved to "+dest)
 	}
-	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearStatusMsg{} })
+	return m.statusTick(2 * time.Second)
 }
 
 func (m *Model) sendRequest() tea.Cmd {

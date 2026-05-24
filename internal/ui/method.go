@@ -28,8 +28,8 @@ func (m *Method) Set(method string) {
 	}
 }
 
-func (m *Method) Focus() { m.focused = true }
-func (m *Method) Blur()  { m.focused = false }
+func (m *Method) Focus()       { m.focused = true }
+func (m *Method) Blur()        { m.focused = false }
 func (m Method) Focused() bool { return m.focused }
 
 func (m Method) Update(msg tea.Msg) (Method, tea.Cmd) {

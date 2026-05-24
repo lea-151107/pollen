@@ -70,6 +70,20 @@ func (s *Store) DeleteAt(i int) bool {
 	return true
 }
 
+// InsertAt inserts e at position i. Indices outside [0,len] are clamped so an
+// out-of-range insert appends instead of erroring.
+func (s *Store) InsertAt(i int, e Entry) {
+	if i < 0 {
+		i = 0
+	}
+	if i > len(s.entries) {
+		i = len(s.entries)
+	}
+	s.entries = append(s.entries, Entry{})
+	copy(s.entries[i+1:], s.entries[i:])
+	s.entries[i] = e
+}
+
 // Save writes the current entries to disk atomically.
 func (s *Store) Save() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {

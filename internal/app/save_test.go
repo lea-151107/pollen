@@ -78,10 +78,10 @@ func TestEnsureExtension(t *testing.T) {
 	}{
 		{"photo", "image/png", "photo.png"},
 		{"data", "application/json", "data.json"},
-		{"already.png", "image/png", "already.png"},          // keep existing
-		{"plain", "", "plain"},                                // no CT
-		{"x", "totally/unknown-mime-xyz123", "x"},             // unknown MIME
-		{"y.bin", "", "y.bin"},                                // already has ext
+		{"already.png", "image/png", "already.png"}, // keep existing
+		{"plain", "", "plain"},                      // no CT
+		{"x", "totally/unknown-mime-xyz123", "x"},   // unknown MIME
+		{"y.bin", "", "y.bin"},                      // already has ext
 	}
 	for _, c := range cases {
 		got := ensureExtension(c.name, c.ct)

@@ -85,24 +85,23 @@ func sanitizeFilename(name string) string {
 }
 
 // uniquePath returns dir/name if it does not exist, otherwise appends "(2)",
-// "(3)" before the extension until a non-existing path is found.
+// "(3)", … before the extension until a non-existing path is found.
 func uniquePath(dir, name string) (string, error) {
-	candidate := filepath.Join(dir, name)
-	if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
-		return candidate, nil
-	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		// If we can't stat for a reason other than non-existence, bail out.
-		if !errors.Is(err, fs.ErrPermission) {
-			return "", err
-		}
-	}
-
 	ext := filepath.Ext(name)
 	stem := strings.TrimSuffix(name, ext)
-	for i := 2; i < 1000; i++ {
-		candidate = filepath.Join(dir, fmt.Sprintf("%s(%d)%s", stem, i, ext))
-		if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
+	for i := 1; i < 1000; i++ {
+		candidate := filepath.Join(dir, name)
+		if i > 1 {
+			candidate = filepath.Join(dir, fmt.Sprintf("%s(%d)%s", stem, i, ext))
+		}
+		_, err := os.Stat(candidate)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
 			return candidate, nil
+		case err == nil:
+			continue // file exists, try the next suffix
+		default:
+			return "", err // any other stat error is fatal
 		}
 	}
 	return "", errors.New("could not find a unique filename")

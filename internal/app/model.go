@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lea/pollen/internal/history"
@@ -41,10 +43,28 @@ type Model struct {
 	copyMenuOpen bool
 	helpOpen     bool
 
-	statusMsg string // transient toast: copy result / save result / error
+	statusMsg  string // transient toast: copy result / save result / error
+	statusKind statusKind
+	statusGen  int // monotonic; a clearStatusMsg only clears if its gen matches
 
-	errorMsg string
+	// pendingUndo holds the last deleted history entry for a short window so
+	// that the user can press `u` to restore it. Cleared with the status toast.
+	pendingUndo *pendingUndo
 }
+
+type pendingUndo struct {
+	entry history.Entry
+	index int
+	gen   int // matches statusGen at the time of delete
+}
+
+type statusKind int
+
+const (
+	statusOK statusKind = iota
+	statusWarn
+	statusError
+)
 
 func New(store *history.Store) Model {
 	m := Model{
@@ -90,6 +110,24 @@ func (m *Model) applyFocus() {
 	case focusResponse:
 		m.response.Focus()
 	}
+}
+
+// setStatus sets a transient message of the given kind and returns a Tick cmd
+// that schedules its automatic clearing after `ttl`. Each call bumps statusGen
+// so an older Tick can't wipe a newer message.
+func (m *Model) setStatus(kind statusKind, msg string) {
+	m.statusKind = kind
+	m.statusMsg = msg
+	m.statusGen++
+}
+
+// statusTick returns a command that clears the current status after ttl,
+// scoped by the current statusGen.
+func (m Model) statusTick(ttl time.Duration) tea.Cmd {
+	gen := m.statusGen
+	return tea.Tick(ttl, func(time.Time) tea.Msg {
+		return clearStatusMsg{gen: gen}
+	})
 }
 
 func (m *Model) cycleFocus(forward bool) {

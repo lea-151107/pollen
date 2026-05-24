@@ -48,8 +48,8 @@ func (r *Response) SetLoading(loading bool) {
 	}
 }
 
-func (r *Response) Focus() { r.focused = true }
-func (r *Response) Blur()  { r.focused = false }
+func (r *Response) Focus()       { r.focused = true }
+func (r *Response) Blur()        { r.focused = false }
 func (r Response) Focused() bool { return r.focused }
 
 func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
@@ -61,12 +61,25 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 	return r, cmd
 }
 
+// TextPreviewLimit caps how much of a text body the viewport renders. Bodies
+// larger than this still keep their full bytes in BodyBytes for the `s` save
+// action — only the display is truncated to keep rendering responsive.
+const TextPreviewLimit = 100 * 1024 // 100 KiB
+
 func (r Response) formatBody() string {
 	if r.resp == nil {
 		return ""
 	}
 	if !r.resp.IsBinary {
-		return r.resp.Body
+		body := r.resp.Body
+		if len(body) > TextPreviewLimit {
+			notice := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(
+				fmt.Sprintf("\n\n... (display truncated; %s total, press 's' to save full body)",
+					formatSize(len(body))),
+			)
+			return body[:TextPreviewLimit] + notice
+		}
+		return body
 	}
 	header := r.binaryHeader()
 	if len(r.resp.BodyBytes) == 0 {

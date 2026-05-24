@@ -52,7 +52,7 @@ func (m Model) View() string {
 		return copyMenuView(m.width, m.height)
 	}
 	if m.helpOpen {
-		return helpView(m.width, m.height)
+		return helpView(m.keys, m.width, m.height)
 	}
 
 	return view
@@ -96,8 +96,13 @@ func (m Model) renderStatusBar() string {
 		"Ctrl+H: history",
 		"Ctrl+C: quit",
 	}
-	if m.focus == focusResponse && m.response.CurrentBytes() != nil {
-		parts = append(parts, "s: save")
+	switch m.focus {
+	case focusMethod:
+		parts = append(parts, "↑↓: cycle method")
+	case focusResponse:
+		if m.response.CurrentBytes() != nil {
+			parts = append(parts, "s: save")
+		}
 	}
 	parts = append(parts, "?: help")
 	left := strings.Join(parts, "  ·  ")
@@ -112,7 +117,14 @@ func (m Model) renderStatusBar() string {
 		if right != "" {
 			right += "  "
 		}
-		right += lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(m.statusMsg)
+		color := lipgloss.Color("10")
+		switch m.statusKind {
+		case statusWarn:
+			color = lipgloss.Color("214")
+		case statusError:
+			color = lipgloss.Color("9")
+		}
+		right += lipgloss.NewStyle().Foreground(color).Render(m.statusMsg)
 	}
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2
@@ -123,25 +135,8 @@ func (m Model) renderStatusBar() string {
 	return style.Render(content)
 }
 
-func helpView(w, h int) string {
-	body := `Keybindings
-
-Global
-  Tab / Shift+Tab        Move focus
-  Ctrl+S                 Send request
-  Ctrl+Y                 Copy as cURL / fetch
-  Ctrl+H                 Toggle history panel
-  Ctrl+T                 Toggle TLS verification skip
-  Ctrl+C                 Quit
-  ?                      This help
-
-History    ↑/↓ move  ·  Enter load  ·  d delete
-Method     ↑/↓ cycle
-Headers    ↑/↓ ←/→ navigate  ·  Enter new row  ·  Ctrl+D delete  ·  Tab accept
-Body       ←/→ tab  ·  Enter edit  ·  Tab indent  ·  Esc leave
-Response   ↑/↓ PgUp/PgDn scroll  ·  s save
-
-Press ? or Esc to close`
+func helpView(km KeyMap, w, h int) string {
+	body := buildHelpBody(km.HelpSections(), w)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("205")).
@@ -150,6 +145,61 @@ Press ? or Esc to close`
 		Foreground(lipgloss.Color("230")).
 		Render(body)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+}
+
+// buildHelpBody renders the help sections, switching to a compact column-aligned
+// layout when the terminal is too narrow for the wide format.
+func buildHelpBody(sections []HelpSection, termWidth int) string {
+	var sb strings.Builder
+	sb.WriteString("Keybindings\n\n")
+
+	if termWidth < 70 {
+		// Compact: each section as "Title:\n  keys  desc" lines, key col 14.
+		for _, sec := range sections {
+			sb.WriteString(sec.Title)
+			sb.WriteString("\n")
+			for _, it := range sec.Items {
+				sb.WriteString("  ")
+				sb.WriteString(padRightHelp(it.Keys, 14))
+				sb.WriteString(it.Desc)
+				sb.WriteString("\n")
+			}
+			sb.WriteString("\n")
+		}
+	} else {
+		// Wide: Global section vertical, others as single-line "Title  k1 d1 · k2 d2".
+		for _, sec := range sections {
+			if sec.Title == "Global" {
+				sb.WriteString("Global\n")
+				for _, it := range sec.Items {
+					sb.WriteString("  ")
+					sb.WriteString(padRightHelp(it.Keys, 22))
+					sb.WriteString(it.Desc)
+					sb.WriteString("\n")
+				}
+				sb.WriteString("\n")
+				continue
+			}
+			sb.WriteString(padRightHelp(sec.Title, 10))
+			parts := make([]string, 0, len(sec.Items))
+			for _, it := range sec.Items {
+				parts = append(parts, it.Keys+" "+it.Desc)
+			}
+			sb.WriteString(strings.Join(parts, "  ·  "))
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("\nPress ? or Esc to close")
+	return sb.String()
+}
+
+func padRightHelp(s string, w int) string {
+	rs := []rune(s)
+	if len(rs) >= w {
+		return s + " "
+	}
+	return s + strings.Repeat(" ", w-len(rs))
 }
 
 func copyMenuView(w, h int) string {

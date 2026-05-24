@@ -75,12 +75,12 @@ func TestIsBinary_EmptyBody(t *testing.T) {
 
 func TestParseContentType(t *testing.T) {
 	cases := map[string]string{
-		"":                                   "",
-		"text/plain":                         "text/plain",
-		"text/plain; charset=utf-8":          "text/plain",
-		"Application/JSON":                   "application/json",
-		"application/vnd.api+json; q=0.9":    "application/vnd.api+json",
-		"garbage but no semicolon":           "garbage but no semicolon",
+		"":                                "",
+		"text/plain":                      "text/plain",
+		"text/plain; charset=utf-8":       "text/plain",
+		"Application/JSON":                "application/json",
+		"application/vnd.api+json; q=0.9": "application/vnd.api+json",
+		"garbage but no semicolon":        "garbage but no semicolon",
 	}
 	for in, want := range cases {
 		if got := ParseContentType(in); got != want {

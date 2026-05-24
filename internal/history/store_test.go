@@ -79,6 +79,45 @@ func TestStore_DeleteAt(t *testing.T) {
 	}
 }
 
+func TestStore_InsertAt(t *testing.T) {
+	s := newTestStore(t)
+	s.Prepend(Entry{ID: "c"})
+	s.Prepend(Entry{ID: "b"})
+	s.Prepend(Entry{ID: "a"})
+	// [a, b, c]
+
+	s.InsertAt(1, Entry{ID: "x"})
+	// [a, x, b, c]
+	got := s.Entries()
+	want := []string{"a", "x", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("len: got %d want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i].ID != w {
+			t.Errorf("at %d: got %q want %q", i, got[i].ID, w)
+		}
+	}
+}
+
+func TestStore_InsertAt_OutOfRange(t *testing.T) {
+	s := newTestStore(t)
+	s.Prepend(Entry{ID: "a"})
+
+	// Negative index → prepend
+	s.InsertAt(-5, Entry{ID: "x"})
+	if s.Entries()[0].ID != "x" {
+		t.Errorf("negative index should prepend, got %+v", s.Entries())
+	}
+
+	// Index beyond len → append
+	s.InsertAt(999, Entry{ID: "z"})
+	last := s.Entries()[len(s.Entries())-1]
+	if last.ID != "z" {
+		t.Errorf("out-of-range index should append, got %+v", s.Entries())
+	}
+}
+
 func TestStore_PrependLimit(t *testing.T) {
 	s := newTestStore(t)
 	for i := 0; i < maxEntries+50; i++ {

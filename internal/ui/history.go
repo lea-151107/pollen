@@ -23,7 +23,14 @@ func NewHistory() History {
 
 func (h *History) SetEntries(entries []history.Entry) {
 	h.entries = entries
-	if h.selected >= len(entries) {
+	switch {
+	case len(entries) == 0:
+		h.selected = 0
+	case h.selected >= len(entries):
+		// Cursor was on the last row that just got deleted — keep it on the
+		// new last row instead of jumping to the top.
+		h.selected = len(entries) - 1
+	case h.selected < 0:
 		h.selected = 0
 	}
 }
@@ -37,9 +44,9 @@ func (h History) Selected() *history.Entry {
 
 func (h History) SelectedIndex() int { return h.selected }
 
-func (h *History) Focus()        { h.focused = true }
-func (h *History) Blur()         { h.focused = false }
-func (h History) Focused() bool  { return h.focused }
+func (h *History) Focus()       { h.focused = true }
+func (h *History) Blur()        { h.focused = false }
+func (h History) Focused() bool { return h.focused }
 
 type HistorySelectMsg struct{ Entry history.Entry }
 type HistoryDeleteMsg struct{ Index int }
