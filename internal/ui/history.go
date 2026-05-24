@@ -44,6 +44,16 @@ func (h History) Selected() *history.Entry {
 
 func (h History) SelectedIndex() int { return h.selected }
 
+// Shift advances the cursor by delta. Used when an entry is Prepended to the
+// underlying store so the cursor keeps pointing at the same logical entry
+// instead of "moving" by one. SetEntries clamps the value afterwards.
+func (h *History) Shift(delta int) {
+	h.selected += delta
+	if h.selected < 0 {
+		h.selected = 0
+	}
+}
+
 func (h *History) Focus()       { h.focused = true }
 func (h *History) Blur()        { h.focused = false }
 func (h History) Focused() bool { return h.focused }

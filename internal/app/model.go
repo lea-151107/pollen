@@ -50,6 +50,12 @@ type Model struct {
 	// pendingUndo holds the last deleted history entry for a short window so
 	// that the user can press `u` to restore it. Cleared with the status toast.
 	pendingUndo *pendingUndo
+
+	// requestGen is bumped on each Send so that responses from older in-flight
+	// requests can be discarded when a newer Send is issued. Without this,
+	// pressing Ctrl+S twice in quick succession could let the slower (older)
+	// request's response overwrite the newer one.
+	requestGen int
 }
 
 type pendingUndo struct {
@@ -112,13 +118,16 @@ func (m *Model) applyFocus() {
 	}
 }
 
-// setStatus sets a transient message of the given kind and returns a Tick cmd
-// that schedules its automatic clearing after `ttl`. Each call bumps statusGen
-// so an older Tick can't wipe a newer message.
+// setStatus sets a transient message of the given kind. Each call bumps
+// statusGen so an older Tick can't wipe a newer message. It also clears any
+// pendingUndo — the undo window only lives as long as the "deleted" toast
+// itself, so replacing the toast invalidates the undo. Callers that want undo
+// must set pendingUndo AFTER calling setStatus.
 func (m *Model) setStatus(kind statusKind, msg string) {
 	m.statusKind = kind
 	m.statusMsg = msg
 	m.statusGen++
+	m.pendingUndo = nil
 }
 
 // statusTick returns a command that clears the current status after ttl,

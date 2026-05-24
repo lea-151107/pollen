@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"runtime"
 	"time"
 
@@ -38,6 +39,7 @@ func clipboardHint() string {
 
 type sendResultMsg struct {
 	entry history.Entry
+	gen   int // matches Model.requestGen at the time of dispatch
 }
 
 type clearStatusMsg struct{ gen int }
@@ -50,6 +52,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case sendResultMsg:
+		// Discard out-of-order results from older Send presses; only the
+		// latest in-flight request's response should land in the UI.
+		if msg.gen != m.requestGen {
+			return m, nil
+		}
 		m.response.SetLoading(false)
 		if msg.entry.Error != "" {
 			m.response.SetError(msg.entry.Error)
@@ -58,7 +65,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.store.Prepend(msg.entry)
 		_ = m.store.Save()
+		// Prepend shifts every existing entry by 1 — slide the cursor too so
+		// it keeps pointing at the same entry the user was looking at.
+		m.history.Shift(1)
 		m.history.SetEntries(m.store.Entries())
+		// Any history mutation invalidates a pending undo (indices have shifted).
+		m.pendingUndo = nil
 		return m, nil
 
 	case ui.HistorySelectMsg:
@@ -88,10 +100,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen == m.statusGen {
 			m.statusMsg = ""
 			m.statusKind = statusOK
-			// Undo window expires together with the toast.
-			if m.pendingUndo != nil && m.pendingUndo.gen == msg.gen {
-				m.pendingUndo = nil
-			}
+			// Undo window expires together with the toast that announced it.
+			m.pendingUndo = nil
 		}
 		return m, nil
 
@@ -149,11 +159,15 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.ToggleTLS):
 		newVal := !httpx.SkipTLSVerify.Load()
 		httpx.SkipTLSVerify.Store(newVal)
-		// Persist so the preference survives restarts; failure is non-fatal.
-		_ = (&settings.Settings{SkipTLSVerify: newVal}).Save()
-		if newVal {
+		// Persist; surface persistence failures so the user knows the
+		// preference won't survive a restart.
+		saveErr := (&settings.Settings{SkipTLSVerify: newVal}).Save()
+		switch {
+		case saveErr != nil:
+			m.setStatus(statusWarn, fmt.Sprintf("TLS toggled (settings save failed: %v)", saveErr))
+		case newVal:
 			m.setStatus(statusWarn, "TLS verification: OFF (insecure)")
-		} else {
+		default:
 			m.setStatus(statusOK, "TLS verification: ON")
 		}
 		return m, m.statusTick(2 * time.Second)
@@ -248,11 +262,14 @@ func (m *Model) deliverCopy(content, label string) {
 	mode, path, err := copyOrFallback(content)
 	switch {
 	case err != nil:
-		m.setStatus(statusError, "copy failed: "+err.Error()+clipboardHint())
+		// err means BOTH the system clipboard AND the file fallback failed.
+		// The xclip-install hint isn't useful here — the real problem is
+		// likely disk/permission, so spell that out instead.
+		m.setStatus(statusError, "copy failed (clipboard and file fallback): "+err.Error())
 	case mode == copyClipboard:
 		m.setStatus(statusOK, "copied as "+label)
 	case mode == copyFile:
-		m.setStatus(statusWarn, "clipboard unavailable - wrote "+label+" to "+path)
+		m.setStatus(statusWarn, "clipboard unavailable - wrote "+label+" to "+path+clipboardHint())
 	}
 }
 
@@ -279,6 +296,8 @@ func (m *Model) sendRequest() tea.Cmd {
 		return nil
 	}
 	m.response.SetLoading(true)
+	m.requestGen++
+	gen := m.requestGen
 	return func() tea.Msg {
 		entry := history.Entry{
 			ID:        uuid.NewString(),
@@ -291,6 +310,6 @@ func (m *Model) sendRequest() tea.Cmd {
 		} else {
 			entry.Response = resp
 		}
-		return sendResultMsg{entry: entry}
+		return sendResultMsg{entry: entry, gen: gen}
 	}
 }

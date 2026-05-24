@@ -64,6 +64,9 @@ func (h *Headers) Set(values []history.Header) {
 	h.rows = append(h.rows, newHeaderRow())
 	h.activeRow = 0
 	h.activeCol = 0
+	// Defensive: prior suggestions are based on the old active row's text and
+	// would be misleading after a wholesale replacement.
+	h.suggestions = nil
 	h.refreshFocus()
 }
 

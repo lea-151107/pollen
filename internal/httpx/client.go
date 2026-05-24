@@ -50,9 +50,12 @@ func Do(req history.Request) (*history.Response, error) {
 
 	client := &http.Client{Timeout: 60 * time.Second}
 	if SkipTLSVerify.Load() {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // user-opt-in for self-signed testing
-		}
+		// Clone DefaultTransport so we keep Proxy, keep-alive, HTTP/2, dial
+		// timeouts, and conn pooling defaults — only override the TLS config.
+		// We must NOT mutate DefaultTransport itself (it's shared).
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user-opt-in for self-signed testing
+		client.Transport = tr
 	}
 	start := time.Now()
 	resp, err := client.Do(httpReq)

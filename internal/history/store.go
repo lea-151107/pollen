@@ -3,6 +3,7 @@ package history
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -34,7 +35,11 @@ func Open() (*Store, error) {
 	}
 	var f File
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, err
+		// Corrupt JSON shouldn't brick startup. Surface a warning to stderr but
+		// continue with an empty store; the on-disk file is left untouched so
+		// the user can inspect/recover it. The next Save() will rewrite it.
+		fmt.Fprintf(os.Stderr, "pollen: history.json is corrupt (%v); starting with empty history\n", err)
+		return s, nil
 	}
 	s.entries = f.Entries
 	return s, nil

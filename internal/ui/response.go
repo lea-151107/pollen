@@ -73,11 +73,13 @@ func (r Response) formatBody() string {
 	if !r.resp.IsBinary {
 		body := r.resp.Body
 		if len(body) > TextPreviewLimit {
+			// Put the notice at the TOP so the user sees it immediately
+			// rather than after scrolling through ~100KB of preview.
 			notice := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(
-				fmt.Sprintf("\n\n... (display truncated; %s total, press 's' to save full body)",
-					formatSize(len(body))),
+				fmt.Sprintf("(display truncated to %s of %s; press 's' to save full body)",
+					formatSize(TextPreviewLimit), formatSize(len(body))),
 			)
-			return body[:TextPreviewLimit] + notice
+			return notice + "\n\n" + body[:TextPreviewLimit]
 		}
 		return body
 	}

@@ -56,6 +56,39 @@ func TestStore_SaveLoad(t *testing.T) {
 	}
 }
 
+func TestOpen_CorruptFileReturnsEmpty(t *testing.T) {
+	// Redirect XDG_CONFIG_HOME so Open's default path lands in TempDir.
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	// Write a corrupt history.json.
+	pollenDir := filepath.Join(dir, "pollen")
+	if err := os.MkdirAll(pollenDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := filepath.Join(pollenDir, "history.json")
+	if err := os.WriteFile(corrupt, []byte("{not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open()
+	if err != nil {
+		t.Fatalf("Open should not error on corrupt JSON: %v", err)
+	}
+	if s == nil {
+		t.Fatal("Open should return non-nil store on corrupt JSON")
+	}
+	if len(s.Entries()) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(s.Entries()))
+	}
+
+	// The corrupt file should be left in place (not overwritten by Open).
+	data, _ := os.ReadFile(corrupt)
+	if string(data) != "{not valid json" {
+		t.Errorf("corrupt file should be preserved; got %q", data)
+	}
+}
+
 func TestStore_DeleteAt(t *testing.T) {
 	s := newTestStore(t)
 	for i := 0; i < 3; i++ {
