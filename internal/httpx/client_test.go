@@ -1,0 +1,149 @@
+package httpx
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/lea/pollen/internal/history"
+)
+
+func TestDo_GET(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if got := r.Header.Get("X-Test"); got != "yes" {
+			t.Errorf("expected X-Test: yes, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	resp, err := Do(history.Request{
+		Method:  "GET",
+		URL:     srv.URL,
+		Headers: []history.Header{{Key: "X-Test", Value: "yes"}},
+	})
+	if err != nil {
+		t.Fatalf("Do failed: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Errorf("expected 200, got %d", resp.Status)
+	}
+	if resp.Body != `{"ok":true}` {
+		t.Errorf("unexpected body: %s", resp.Body)
+	}
+}
+
+func TestDo_POST_JSON_AutoContentType(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("expected json content-type, got %q", got)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != `{"a":1}` {
+			t.Errorf("unexpected body: %s", body)
+		}
+		w.WriteHeader(201)
+	}))
+	defer srv.Close()
+
+	resp, err := Do(history.Request{
+		Method:   "POST",
+		URL:      srv.URL,
+		BodyType: history.BodyJSON,
+		Body:     `{"a":1}`,
+	})
+	if err != nil {
+		t.Fatalf("Do failed: %v", err)
+	}
+	if resp.Status != 201 {
+		t.Errorf("expected 201, got %d", resp.Status)
+	}
+}
+
+func TestDo_POST_Form(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.PostForm.Get("name") != "test" || r.PostForm.Get("foo") != "bar" {
+			t.Errorf("unexpected form: %v", r.PostForm)
+		}
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	resp, err := Do(history.Request{
+		Method:   "POST",
+		URL:      srv.URL,
+		BodyType: history.BodyForm,
+		Body:     "name=test\nfoo=bar",
+	})
+	if err != nil {
+		t.Fatalf("Do failed: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Errorf("expected 200, got %d", resp.Status)
+	}
+}
+
+func TestDo_TruncatesOversizedBody(t *testing.T) {
+	// Send slightly more than the cap to force truncation.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		// Write cap+1024 bytes of NUL to make the receiver hit the limit.
+		chunk := make([]byte, 64*1024)
+		written := 0
+		for written < MaxResponseBytes+1024 {
+			n, err := w.Write(chunk)
+			if err != nil {
+				return
+			}
+			written += n
+		}
+	}))
+	defer srv.Close()
+
+	resp, err := Do(history.Request{Method: "GET", URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if !resp.Truncated {
+		t.Errorf("expected Truncated=true")
+	}
+	if resp.SizeBytes != MaxResponseBytes {
+		t.Errorf("expected SizeBytes=%d, got %d", MaxResponseBytes, resp.SizeBytes)
+	}
+	if len(resp.BodyBytes) != MaxResponseBytes {
+		t.Errorf("expected BodyBytes len=%d, got %d", MaxResponseBytes, len(resp.BodyBytes))
+	}
+}
+
+func TestDo_DoesNotTruncateSmallBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("small"))
+	}))
+	defer srv.Close()
+
+	resp, err := Do(history.Request{Method: "GET", URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Truncated {
+		t.Error("did not expect truncation for small body")
+	}
+}
+
+func TestDo_InvalidURL(t *testing.T) {
+	_, err := Do(history.Request{Method: "GET", URL: "://bad"})
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+	if !strings.Contains(err.Error(), "missing protocol") && !strings.Contains(err.Error(), "parse") {
+		// Just want some error, the exact text varies.
+		t.Logf("error: %v", err)
+	}
+}

@@ -1,0 +1,100 @@
+package app
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/lea/pollen/internal/history"
+)
+
+func TestPickFilename_ContentDisposition(t *testing.T) {
+	resp := &history.Response{
+		Headers: []history.Header{
+			{Key: "Content-Disposition", Value: `attachment; filename="photo.png"`},
+		},
+	}
+	got := pickFilename(resp, "https://example.com/api/whatever")
+	if got != "photo.png" {
+		t.Errorf("want photo.png, got %q", got)
+	}
+}
+
+func TestPickFilename_URLPath(t *testing.T) {
+	got := pickFilename(nil, "https://example.com/files/report.pdf")
+	if got != "report.pdf" {
+		t.Errorf("want report.pdf, got %q", got)
+	}
+}
+
+func TestPickFilename_Fallback(t *testing.T) {
+	cases := []string{
+		"https://example.com",
+		"https://example.com/",
+		"not-a-url",
+	}
+	for _, in := range cases {
+		got := pickFilename(nil, in)
+		if got != "response.bin" && got != "not-a-url" {
+			t.Errorf("%q: unexpected %q", in, got)
+		}
+	}
+}
+
+func TestPickFilename_SanitizePath(t *testing.T) {
+	resp := &history.Response{
+		Headers: []history.Header{
+			{Key: "Content-Disposition", Value: `attachment; filename="../etc/passwd"`},
+		},
+	}
+	got := pickFilename(resp, "")
+	if strings.Contains(got, "..") || strings.Contains(got, "/") {
+		t.Errorf("filename should be sanitized, got %q", got)
+	}
+}
+
+func TestUniquePath_AvoidsOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "photo.png"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "photo(2).png"), []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := uniquePath(dir, "photo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "photo(3).png")
+	if got != want {
+		t.Errorf("want %q, got %q", want, got)
+	}
+}
+
+func TestSaveResponseBytes(t *testing.T) {
+	dir := t.TempDir()
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	bytes := []byte{0x89, 0x50, 0x4e, 0x47}
+	resp := &history.Response{
+		Headers: []history.Header{
+			{Key: "Content-Disposition", Value: `attachment; filename="test.png"`},
+		},
+	}
+	dest, err := saveResponseBytes(bytes, resp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(bytes) {
+		t.Errorf("content mismatch: got %x", got)
+	}
+}

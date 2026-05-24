@@ -28,5 +28,22 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project binary
+/pollen
+
+# Default name for saved binary responses ('s' key)
+/response.bin
+/response(*).bin
+
+# Local plans / scratch
+/.claude/
