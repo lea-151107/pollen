@@ -308,9 +308,10 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) currentRequest() history.Request {
 	headers := m.headers.Values()
-	// Inject Authorization from the Auth panel unless the user already wrote
-	// one in Headers — explicit Headers entries take precedence.
-	if authVal := m.auth.HeaderValue(); authVal != "" && !hasHeader(headers, "Authorization") {
+	// Build the Authorization header from the Auth panel's raw inputs.
+	// Explicit Headers entries take precedence — we don't override what the
+	// user wrote manually.
+	if authVal := buildAuthFromPanel(m.auth); authVal != "" && !hasHeader(headers, "Authorization") {
 		headers = append(headers, history.Header{Key: "Authorization", Value: authVal})
 	}
 	return history.Request{
@@ -320,6 +321,19 @@ func (m Model) currentRequest() history.Request {
 		Body:     m.body.Value(),
 		BodyType: m.body.Type(),
 	}
+}
+
+// buildAuthFromPanel maps the UI Auth panel's selection to an HTTP
+// Authorization header value via httpx.BuildAuthHeader.
+func buildAuthFromPanel(a ui.Auth) string {
+	switch a.Type() {
+	case ui.AuthBearer:
+		return httpx.BuildAuthHeader(httpx.AuthBearer, a.Token(), "", "")
+	case ui.AuthBasic:
+		u, p := a.Credentials()
+		return httpx.BuildAuthHeader(httpx.AuthBasic, "", u, p)
+	}
+	return ""
 }
 
 func hasHeader(headers []history.Header, key string) bool {

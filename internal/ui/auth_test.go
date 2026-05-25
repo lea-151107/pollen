@@ -2,69 +2,37 @@ package ui
 
 import "testing"
 
-func TestAuth_HeaderValue_None(t *testing.T) {
+func TestAuth_Defaults(t *testing.T) {
 	a := NewAuth()
-	if got := a.HeaderValue(); got != "" {
-		t.Errorf("None should yield empty, got %q", got)
+	if a.Type() != AuthNone {
+		t.Errorf("default type should be AuthNone, got %v", a.Type())
+	}
+	if a.Token() != "" {
+		t.Errorf("default token should be empty, got %q", a.Token())
+	}
+	u, p := a.Credentials()
+	if u != "" || p != "" {
+		t.Errorf("default credentials should be empty, got %q/%q", u, p)
 	}
 }
 
-func TestAuth_HeaderValue_BearerEmpty(t *testing.T) {
-	a := NewAuth()
-	a.authType = AuthBearer
-	if got := a.HeaderValue(); got != "" {
-		t.Errorf("empty token should yield empty, got %q", got)
-	}
-}
-
-func TestAuth_HeaderValue_Bearer(t *testing.T) {
-	a := NewAuth()
-	a.authType = AuthBearer
-	a.token.SetValue("sk-abc123")
-	want := "Bearer sk-abc123"
-	if got := a.HeaderValue(); got != want {
-		t.Errorf("got %q want %q", got, want)
-	}
-}
-
-func TestAuth_HeaderValue_BearerTrimmed(t *testing.T) {
+func TestAuth_TokenTrim(t *testing.T) {
 	a := NewAuth()
 	a.authType = AuthBearer
 	a.token.SetValue("  tok  ")
-	want := "Bearer tok"
-	if got := a.HeaderValue(); got != want {
-		t.Errorf("got %q want %q", got, want)
+	if got := a.Token(); got != "tok" {
+		t.Errorf("Token should trim whitespace, got %q", got)
 	}
 }
 
-func TestAuth_HeaderValue_Basic(t *testing.T) {
+func TestAuth_Credentials(t *testing.T) {
 	a := NewAuth()
 	a.authType = AuthBasic
 	a.user.SetValue("alice")
 	a.pass.SetValue("secret")
-	// base64("alice:secret") = "YWxpY2U6c2VjcmV0"
-	want := "Basic YWxpY2U6c2VjcmV0"
-	if got := a.HeaderValue(); got != want {
-		t.Errorf("got %q want %q", got, want)
-	}
-}
-
-func TestAuth_HeaderValue_BasicEmpty(t *testing.T) {
-	a := NewAuth()
-	a.authType = AuthBasic
-	if got := a.HeaderValue(); got != "" {
-		t.Errorf("empty user+pass should yield empty, got %q", got)
-	}
-}
-
-func TestAuth_HeaderValue_BasicUserOnly(t *testing.T) {
-	a := NewAuth()
-	a.authType = AuthBasic
-	a.user.SetValue("alice")
-	// base64("alice:") = "YWxpY2U6"
-	want := "Basic YWxpY2U6"
-	if got := a.HeaderValue(); got != want {
-		t.Errorf("got %q want %q", got, want)
+	u, p := a.Credentials()
+	if u != "alice" || p != "secret" {
+		t.Errorf("got %q/%q want alice/secret", u, p)
 	}
 }
 
@@ -73,10 +41,10 @@ func TestAuth_Reset(t *testing.T) {
 	a.authType = AuthBearer
 	a.token.SetValue("tok")
 	a.Reset()
-	if a.authType != AuthNone {
+	if a.Type() != AuthNone {
 		t.Errorf("type not reset")
 	}
-	if a.token.Value() != "" {
+	if a.Token() != "" {
 		t.Errorf("token not cleared")
 	}
 }

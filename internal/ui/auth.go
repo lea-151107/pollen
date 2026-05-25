@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"encoding/base64"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -69,25 +68,14 @@ func NewAuth() Auth {
 // Type returns the current auth scheme.
 func (a Auth) Type() AuthType { return a.authType }
 
-// HeaderValue returns the Authorization header value for the current type,
-// or "" when no auth is configured (None, or required fields empty).
-func (a Auth) HeaderValue() string {
-	switch a.authType {
-	case AuthBearer:
-		tok := strings.TrimSpace(a.token.Value())
-		if tok == "" {
-			return ""
-		}
-		return "Bearer " + tok
-	case AuthBasic:
-		u := a.user.Value()
-		p := a.pass.Value()
-		if u == "" && p == "" {
-			return ""
-		}
-		return "Basic " + base64.StdEncoding.EncodeToString([]byte(u+":"+p))
-	}
-	return ""
+// Token returns the Bearer token raw input (trimmed of surrounding whitespace).
+// Meaningful only when Type() == AuthBearer.
+func (a Auth) Token() string { return strings.TrimSpace(a.token.Value()) }
+
+// Credentials returns the Basic auth username/password raw inputs.
+// Meaningful only when Type() == AuthBasic.
+func (a Auth) Credentials() (user, pass string) {
+	return a.user.Value(), a.pass.Value()
 }
 
 // Reset clears state, called when a history entry is loaded so the previous
