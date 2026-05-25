@@ -59,6 +59,12 @@ func (m Model) View() string {
 	if m.envSwitcherOpen {
 		return envSwitcherView(m.env.Names(), m.envSwitcherCursor, m.env.Current, m.width, m.height)
 	}
+	if m.renamingColl {
+		return renameCollectionView(m.renameInput.View(), m.width, m.height)
+	}
+	if m.collUpdatePromptOpen {
+		return collUpdatePromptView(m.collUpdateTargetName, m.width, m.height)
+	}
 	if m.savingToCollection {
 		return saveCollectionView(m.saveCollInput.View(), m.width, m.height)
 	}
@@ -258,6 +264,30 @@ func envSwitcherView(names []string, cursor int, current string, w, h int) strin
 func importFileView(inputView string, w, h int) string {
 	body := "Import from file\n\nOpenAPI 3.x (JSON/YAML)  ·  Postman v2.1 (JSON)\n\n  " +
 		inputView + "\n\n  Enter: import  ·  Esc: cancel"
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(body)
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+}
+
+func renameCollectionView(inputView string, w, h int) string {
+	body := "Rename collection entry\n\n  " + inputView + "\n\n  Enter: rename  ·  Esc: cancel"
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(body)
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+}
+
+func collUpdatePromptView(name string, w, h int) string {
+	body := "Update collection entry?\n\n  " + name + "\n\n  Enter: update in-place  ·  n: save as new  ·  Esc: cancel"
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("205")).

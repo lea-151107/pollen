@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/userconfig"
 )
 
@@ -55,6 +56,27 @@ func (s *Store) DeleteAt(i int) bool {
 		return false
 	}
 	s.entries = append(s.entries[:i], s.entries[i+1:]...)
+	return true
+}
+
+// Rename updates the Name of the entry with the given ID. Returns false if not found.
+func (s *Store) Rename(id, name string) bool {
+	idx := s.IndexOf(id)
+	if idx < 0 {
+		return false
+	}
+	s.entries[idx].Name = name
+	return true
+}
+
+// UpdateRequest replaces the Request of the entry with the given ID.
+// Returns false if not found.
+func (s *Store) UpdateRequest(id string, req history.Request) bool {
+	idx := s.IndexOf(id)
+	if idx < 0 {
+		return false
+	}
+	s.entries[idx].Request = req
 	return true
 }
 
