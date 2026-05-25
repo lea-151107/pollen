@@ -110,6 +110,9 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 			if r.resp == nil || r.prevResp == nil {
 				return r, nil
 			}
+			if r.resp.IsBinary || r.prevResp.IsBinary {
+				return r, nil
+			}
 			r.diffMode = !r.diffMode
 			if r.diffMode {
 				r.diffBody = r.computeDiff()
