@@ -7,6 +7,7 @@ import (
 
 	"github.com/lea/pollen/internal/env"
 	"github.com/lea/pollen/internal/history"
+	"github.com/lea/pollen/internal/httpx"
 	"github.com/lea/pollen/internal/ui"
 )
 
@@ -50,6 +51,10 @@ type Model struct {
 	helpOpen          bool
 	envSwitcherOpen   bool
 	envSwitcherCursor int // selected index in env switcher menu
+
+	// tlsInsecure mirrors httpx.SkipTLSVerify so the view layer doesn't have
+	// to reach into the http package's globals just to draw a badge.
+	tlsInsecure bool
 
 	statusMsg  string // transient toast: copy result / save result / error
 	statusKind statusKind
@@ -100,6 +105,8 @@ func New(store *history.Store, e *env.Env) Model {
 		showHistory: true,
 	}
 	m.history.SetEntries(store.Entries())
+	// Seed view-visible TLS state from the httpx global (loaded by main.go).
+	m.tlsInsecure = httpx.SkipTLSVerify.Load()
 	m.applyFocus()
 	return m
 }

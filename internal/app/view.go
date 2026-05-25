@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/lea/pollen/internal/httpx"
 )
 
 func (m Model) View() string {
@@ -119,7 +117,7 @@ func (m Model) renderStatusBar() string {
 		right += lipgloss.NewStyle().Foreground(lipgloss.Color("44")).Bold(true).
 			Render("[env: " + name + "]")
 	}
-	if httpx.SkipTLSVerify.Load() {
+	if m.tlsInsecure {
 		if right != "" {
 			right += " "
 		}
