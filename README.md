@@ -47,9 +47,24 @@ Press `?` inside the app for the full list at any time.
 
 - **History**: `↑/↓` move · `Enter` load entry · `d` delete
 - **Method**: `↑/↓` cycle methods
+- **Query**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row
 - **Headers**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row · `Tab` accept suggestion
 - **Body**: `←/→` switch tab · `Enter` enter editor · `Tab` indent (2 spaces) · `Esc` leave editor
 - **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file
+
+## Query parameters
+
+The **Query** panel between the URL bar and Headers is a dedicated editor
+for URL query parameters. Use it instead of typing `?key=val&key2=val2`
+into the URL bar:
+
+- Keys and values are URL-encoded automatically when the request is sent
+- If the URL bar already contains a `?...` portion, the panel's entries are
+  **merged** with it (existing keys are kept; panel additions are appended)
+- When the URL contains `{{var}}` tokens (un-parseable), the parameters are
+  concatenated as a string with `?` / `&` separators
+- Reloading an entry from history splits its full URL — the parameters land
+  back in the Query panel, the URL bar shows only the base URL
 
 ## Configuration
 

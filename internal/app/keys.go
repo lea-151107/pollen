@@ -68,6 +68,11 @@ func (k KeyMap) HelpSections() []HelpSection {
 		{Title: "Method", Items: []HelpItem{
 			{Keys: "↑/↓", Desc: "Cycle methods"},
 		}},
+		{Title: "Query", Items: []HelpItem{
+			{Keys: "↑/↓ ←/→", Desc: "Navigate rows / fields"},
+			{Keys: "Enter", Desc: "New row"},
+			{Keys: "Ctrl+D", Desc: "Delete row"},
+		}},
 		{Title: "Headers", Items: []HelpItem{
 			{Keys: "↑/↓ ←/→", Desc: "Navigate rows / fields"},
 			{Keys: "Enter", Desc: "New row"},

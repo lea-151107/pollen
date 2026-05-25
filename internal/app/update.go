@@ -2,7 +2,10 @@ package app
 
 import (
 	"fmt"
+	"net/url"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -20,7 +23,7 @@ import (
 // treated as ordinary input instead of triggering a global action).
 func isTextEditingFocus(f focusArea, bodyInEditor bool) bool {
 	switch f {
-	case focusURL, focusHeaders:
+	case focusURL, focusQuery, focusHeaders:
 		return true
 	case focusBody:
 		return bodyInEditor
@@ -232,6 +235,8 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.method, cmd = m.method.Update(km)
 	case focusURL:
 		m.urlBar, cmd = m.urlBar.Update(km)
+	case focusQuery:
+		m.query, cmd = m.query.Update(km)
 	case focusHeaders:
 		m.headers, cmd = m.headers.Update(km)
 	case focusBody:
@@ -297,16 +302,55 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) currentRequest() history.Request {
 	return history.Request{
 		Method:   m.method.Value(),
-		URL:      m.urlBar.Value(),
+		URL:      composeURL(m.urlBar.Value(), m.query.Values()),
 		Headers:  m.headers.Values(),
 		Body:     m.body.Value(),
 		BodyType: m.body.Type(),
 	}
 }
 
+// composeURL merges the query parameters from the Query panel into the URL.
+// Uses net/url when the URL is parseable; falls back to plain concatenation
+// when the URL contains `{{var}}` tokens (env expansion happens later).
+func composeURL(rawURL string, params []ui.Param) string {
+	if len(params) == 0 {
+		return rawURL
+	}
+	if !strings.Contains(rawURL, "{{") {
+		if u, err := url.Parse(rawURL); err == nil {
+			q := u.Query()
+			for _, p := range params {
+				q.Add(p.Key, p.Value)
+			}
+			u.RawQuery = q.Encode()
+			return u.String()
+		}
+	}
+	// Fallback: simple concat with proper escaping. {{...}} tokens stay intact.
+	var b strings.Builder
+	b.WriteString(rawURL)
+	sep := "?"
+	if strings.Contains(rawURL, "?") {
+		sep = "&"
+	}
+	for i, p := range params {
+		if i == 0 {
+			b.WriteString(sep)
+		} else {
+			b.WriteString("&")
+		}
+		b.WriteString(url.QueryEscape(p.Key))
+		b.WriteString("=")
+		b.WriteString(url.QueryEscape(p.Value))
+	}
+	return b.String()
+}
+
 func (m *Model) applyEntry(e history.Entry) {
 	m.method.Set(e.Request.Method)
-	m.urlBar.SetValue(e.Request.URL)
+	urlOnly, params := splitURL(e.Request.URL)
+	m.urlBar.SetValue(urlOnly)
+	m.query.Set(params)
 	m.headers.Set(e.Request.Headers)
 	m.body.Set(e.Request.BodyType, e.Request.Body)
 	if e.Response != nil {
@@ -314,6 +358,34 @@ func (m *Model) applyEntry(e history.Entry) {
 	} else if e.Error != "" {
 		m.response.SetError(e.Error)
 	}
+}
+
+// splitURL separates a full URL into the URL-without-query and a slice of
+// query parameters, sorted by key for stable display order. If the URL can't
+// be parsed (e.g. it contains {{var}} tokens) the full URL is returned as-is
+// and no params are extracted.
+func splitURL(rawURL string) (string, []ui.Param) {
+	if strings.Contains(rawURL, "{{") {
+		return rawURL, nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.RawQuery == "" {
+		return rawURL, nil
+	}
+	values := u.Query()
+	keys := make([]string, 0, len(values))
+	for k := range values {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var params []ui.Param
+	for _, k := range keys {
+		for _, v := range values[k] {
+			params = append(params, ui.Param{Key: k, Value: v})
+		}
+	}
+	u.RawQuery = ""
+	return u.String(), params
 }
 
 // deliverCopy puts `content` on the clipboard, or on disk if clipboard fails,

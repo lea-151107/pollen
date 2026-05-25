@@ -67,10 +67,11 @@ func (m Model) renderMain(width, height int) string {
 	urlView := m.urlBar.View(width - methodW - 1)
 	requestLine := lipgloss.JoinHorizontal(lipgloss.Top, methodView, " ", urlView)
 
+	queryView := m.query.View(width)
 	headersView := m.headers.View(width)
 
 	// Compute remaining space: split between body and response.
-	used := lipgloss.Height(requestLine) + lipgloss.Height(headersView)
+	used := lipgloss.Height(requestLine) + lipgloss.Height(queryView) + lipgloss.Height(headersView)
 	remaining := height - used
 	if remaining < 6 {
 		remaining = 6
@@ -87,7 +88,7 @@ func (m Model) renderMain(width, height int) string {
 	bodyView := m.body.View(width, bodyH)
 	respView := m.response.View(width, respH)
 
-	return lipgloss.JoinVertical(lipgloss.Left, requestLine, headersView, bodyView, respView)
+	return lipgloss.JoinVertical(lipgloss.Left, requestLine, queryView, headersView, bodyView, respView)
 }
 
 func (m Model) renderStatusBar() string {
