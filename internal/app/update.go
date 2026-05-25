@@ -244,7 +244,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.showHistory {
 			m.showCollections = false
 		}
+		// Reset focus if the focused panel just became hidden.
 		if !m.showHistory && m.focus == focusHistory {
+			m.focus = focusURL
+			m.applyFocus()
+		} else if m.showHistory && m.focus == focusCollections {
 			m.focus = focusURL
 			m.applyFocus()
 		}
@@ -255,7 +259,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.showCollections {
 			m.showHistory = false
 		}
+		// Reset focus if the focused panel just became hidden.
 		if !m.showCollections && m.focus == focusCollections {
+			m.focus = focusURL
+			m.applyFocus()
+		} else if m.showCollections && m.focus == focusHistory {
 			m.focus = focusURL
 			m.applyFocus()
 		}

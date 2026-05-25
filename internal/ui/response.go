@@ -313,7 +313,7 @@ func (r Response) View(width, height int) string {
 	r.vp.Width = inner - 2 // -2 for padding
 	filterBarH := 0
 	if r.filterActive || r.filteredBody != "" {
-		filterBarH = 1
+		filterBarH = 2 // "\n" + one line of filter bar
 	}
 	vpH := innerH - lipgloss.Height(statusLine) - 1 - filterBarH
 	if vpH < 1 {
