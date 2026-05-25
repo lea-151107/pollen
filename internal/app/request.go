@@ -22,12 +22,20 @@ type sendResultMsg struct {
 }
 
 // currentRequest snapshots all input panels into a single history.Request.
-// Authorization is built from the Auth panel unless an explicit Authorization
-// header already exists in Headers (user-supplied entries win).
+// When the Auth panel is set to Bearer or Basic it always takes precedence,
+// removing any existing Authorization header (which may have been restored
+// from history). When the Auth panel is None, any Authorization header
+// already in the Headers component is preserved unchanged.
 func (m Model) currentRequest() history.Request {
 	headers := m.headers.Values()
-	if authVal := buildAuthFromPanel(m.auth); authVal != "" && !hasHeader(headers, "Authorization") {
-		headers = append(headers, history.Header{Key: "Authorization", Value: authVal})
+	if authVal := buildAuthFromPanel(m.auth); authVal != "" {
+		filtered := make([]history.Header, 0, len(headers))
+		for _, h := range headers {
+			if !strings.EqualFold(h.Key, "Authorization") {
+				filtered = append(filtered, h)
+			}
+		}
+		headers = append(filtered, history.Header{Key: "Authorization", Value: authVal})
 	}
 	return history.Request{
 		Method:   m.method.Value(),
