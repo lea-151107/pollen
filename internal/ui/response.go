@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/itchyny/gojq"
+	"github.com/sergi/go-diff/diffmatchpatch"
 
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
@@ -20,7 +21,8 @@ import (
 type Response struct {
 	vp           viewport.Model
 	resp         *history.Response
-	reqURL       string // URL of the request that produced resp
+	prevResp     *history.Response // response before the most recent SetResponse call
+	reqURL       string            // URL of the request that produced resp
 	err          string
 	loading      bool
 	focused      bool
@@ -28,6 +30,8 @@ type Response struct {
 	filterActive bool   // filter input bar is visible
 	filterErr    string // last jq evaluation error
 	filteredBody string // non-empty when a filter is applied
+	diffMode     bool   // showing diff against prevResp
+	diffBody     string // rendered diff (cached)
 }
 
 func NewResponse() Response {
@@ -39,12 +43,19 @@ func NewResponse() Response {
 }
 
 func (r *Response) SetResponse(resp *history.Response, reqURL string) {
+	r.prevResp = r.resp // capture before replacing
 	r.resp = resp
 	r.reqURL = reqURL
 	r.err = ""
 	r.loading = false
 	r.resetFilter()
-	r.vp.SetContent(r.formatBody())
+	if r.diffMode && r.prevResp != nil {
+		r.diffBody = r.computeDiff()
+		r.vp.SetContent(r.diffBody)
+	} else {
+		r.diffMode = false
+		r.vp.SetContent(r.formatBody())
+	}
 	r.vp.GotoTop()
 }
 
@@ -93,6 +104,20 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 				r.filterActive = true
 				return r, r.filterInput.Focus()
 			}
+			return r, nil
+
+		case !r.filterActive && km.String() == "D":
+			if r.resp == nil || r.prevResp == nil {
+				return r, nil
+			}
+			r.diffMode = !r.diffMode
+			if r.diffMode {
+				r.diffBody = r.computeDiff()
+				r.vp.SetContent(r.diffBody)
+			} else {
+				r.vp.SetContent(r.formatBody())
+			}
+			r.vp.GotoTop()
 			return r, nil
 
 		case r.filterActive:
@@ -174,6 +199,29 @@ func (r *Response) resetFilter() {
 		r.vp.SetContent(r.formatBody())
 		r.vp.GotoTop()
 	}
+}
+
+// computeDiff produces a coloured character-level diff of prevResp.Body vs
+// resp.Body. Insertions are green, deletions are red strikethrough.
+func (r *Response) computeDiff() string {
+	if r.prevResp == nil || r.resp == nil {
+		return ""
+	}
+	dmp := diffmatchpatch.New()
+	diffs := dmp.DiffMain(r.prevResp.Body, r.resp.Body, true)
+	dmp.DiffCleanupSemantic(diffs)
+	var sb strings.Builder
+	for _, d := range diffs {
+		switch d.Type {
+		case diffmatchpatch.DiffInsert:
+			sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(d.Text))
+		case diffmatchpatch.DiffDelete:
+			sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Strikethrough(true).Render(d.Text))
+		default:
+			sb.WriteString(d.Text)
+		}
+	}
+	return sb.String()
 }
 
 // TextPreviewLimit caps how much of a text body the viewport renders. Bodies
@@ -302,6 +350,9 @@ func (r Response) View(width, height int) string {
 		if r.resp.Truncated {
 			statusLine += lipgloss.NewStyle().Foreground(lipgloss.Color("214")).
 				Render(fmt.Sprintf("   (truncated at %s)", formatSize(httpx.MaxResponseBytes)))
+		}
+		if r.diffMode {
+			statusLine += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("[diff]")
 		}
 		if hdrs := formatHeaders(r.resp.Headers); hdrs != "" {
 			statusLine += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hdrs)
