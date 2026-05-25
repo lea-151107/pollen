@@ -360,6 +360,31 @@ func formatRelative(t time.Time) string {
 	}
 }
 
+// highlightMatchColored applies color to each segment (before/match/after) of
+// text individually, so the base color is never lost due to ANSI nesting. The
+// match segment additionally gets Bold+Underline. The result is padded to padW
+// visible columns using rune count.
+func highlightMatchColored(text string, padW int, needle string, color lipgloss.Color) string {
+	base := lipgloss.NewStyle().Foreground(color)
+	textRunes := len([]rune(text))
+	pad := ""
+	if padW > textRunes {
+		pad = strings.Repeat(" ", padW-textRunes)
+	}
+	if needle == "" {
+		return base.Render(text + pad)
+	}
+	lower := strings.ToLower(text)
+	idx := strings.Index(lower, strings.ToLower(needle))
+	if idx < 0 {
+		return base.Render(text + pad)
+	}
+	before := text[:idx]
+	match := text[idx : idx+len(needle)]
+	after := text[idx+len(needle):]
+	return base.Render(before) + base.Bold(true).Underline(true).Render(match) + base.Render(after+pad)
+}
+
 // highlightMatch wraps the first case-insensitive occurrence of needle in bold
 // underline. Returns text unchanged when needle is empty or not found.
 func highlightMatch(text, needle string) string {

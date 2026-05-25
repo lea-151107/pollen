@@ -114,6 +114,8 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 			if r.diffMode {
 				r.diffBody = r.computeDiff()
 				r.vp.SetContent(r.diffBody)
+			} else if r.filteredBody != "" {
+				r.vp.SetContent(r.filteredBody)
 			} else {
 				r.vp.SetContent(r.formatBody())
 			}

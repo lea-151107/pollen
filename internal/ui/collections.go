@@ -244,7 +244,7 @@ func renderCollectionRow(e collections.Entry, width int, selected bool, filter s
 	if selected {
 		return selectedStyle().Render(padRight(raw, width))
 	}
-	nameStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("44")).Render(padRightANSI(highlightMatch(nameTrunc, filter), nameW))
+	nameStyled := highlightMatchColored(nameTrunc, nameW, filter, lipgloss.Color("44"))
 	methStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(padRight(method, methW))
 	return nameStyled + " " + methStyled + " " + highlightMatch(urlTrunc, filter)
 }

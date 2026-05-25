@@ -251,6 +251,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.savingToCollection = false
 			m.saveCollInput.SetValue("")
 			m.saveCollInput.Blur()
+			m.lastLoadedCollID = ""
 			m.setStatus(statusOK, fmt.Sprintf("saved to collection: %s", name))
 			return m, m.statusTick(2 * time.Second)
 		default:
