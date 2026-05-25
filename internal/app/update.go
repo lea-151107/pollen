@@ -189,6 +189,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "n":
 			m.collUpdatePromptOpen = false
 			m.savingToCollection = true
+			m.saveCollInput.SetValue("")
 			return m, m.saveCollInput.Focus()
 		case "esc":
 			m.collUpdatePromptOpen = false
