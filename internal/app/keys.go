@@ -3,16 +3,19 @@ package app
 import "github.com/charmbracelet/bubbles/key"
 
 type KeyMap struct {
-	Quit       key.Binding
-	NextFocus  key.Binding
-	PrevFocus  key.Binding
-	Send       key.Binding
-	Copy       key.Binding
-	ToggleHist key.Binding
-	ToggleTLS  key.Binding
-	SwitchEnv  key.Binding
-	Help       key.Binding
-	Cancel     key.Binding
+	Quit        key.Binding
+	NextFocus   key.Binding
+	PrevFocus   key.Binding
+	Send        key.Binding
+	Copy        key.Binding
+	ToggleHist  key.Binding
+	ToggleColl  key.Binding
+	SaveToColl  key.Binding
+	ImportFile  key.Binding
+	ToggleTLS   key.Binding
+	SwitchEnv   key.Binding
+	Help        key.Binding
+	Cancel      key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -23,6 +26,9 @@ func DefaultKeyMap() KeyMap {
 		Send:       key.NewBinding(key.WithKeys("ctrl+s")),
 		Copy:       key.NewBinding(key.WithKeys("ctrl+y")),
 		ToggleHist: key.NewBinding(key.WithKeys("ctrl+h")),
+		ToggleColl: key.NewBinding(key.WithKeys("ctrl+k")),
+		SaveToColl: key.NewBinding(key.WithKeys("ctrl+b")),
+		ImportFile: key.NewBinding(key.WithKeys("ctrl+i")),
 		ToggleTLS:  key.NewBinding(key.WithKeys("ctrl+t")),
 		SwitchEnv:  key.NewBinding(key.WithKeys("ctrl+e")),
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
@@ -58,6 +64,9 @@ func (k KeyMap) HelpSections() []HelpSection {
 				{Keys: bindingKeys(k.Send), Desc: "Send request"},
 				{Keys: bindingKeys(k.Copy), Desc: "Copy as cURL / fetch"},
 				{Keys: bindingKeys(k.ToggleHist), Desc: "Toggle history panel"},
+				{Keys: bindingKeys(k.ToggleColl), Desc: "Toggle collections panel"},
+				{Keys: bindingKeys(k.SaveToColl), Desc: "Save request to collection"},
+				{Keys: bindingKeys(k.ImportFile), Desc: "Import OpenAPI / Postman file"},
 				{Keys: bindingKeys(k.ToggleTLS), Desc: "Toggle TLS verification skip"},
 				{Keys: bindingKeys(k.SwitchEnv), Desc: "Switch variable environment"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
@@ -66,6 +75,12 @@ func (k KeyMap) HelpSections() []HelpSection {
 			},
 		},
 		{Title: "History", Items: []HelpItem{
+			{Keys: "↑/↓", Desc: "Move"},
+			{Keys: "Enter", Desc: "Load entry"},
+			{Keys: "d", Desc: "Delete entry"},
+			{Keys: "/", Desc: "Filter (Esc clears)"},
+		}},
+		{Title: "Collections", Items: []HelpItem{
 			{Keys: "↑/↓", Desc: "Move"},
 			{Keys: "Enter", Desc: "Load entry"},
 			{Keys: "d", Desc: "Delete entry"},
@@ -99,6 +114,12 @@ func (k KeyMap) HelpSections() []HelpSection {
 		{Title: "Response", Items: []HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
 			{Keys: "s", Desc: "Save response"},
+			{Keys: "/", Desc: "jq filter"},
+		}},
+		{Title: "Chaining", Items: []HelpItem{
+			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},
+			{Keys: "{{response.headers.<n>}}", Desc: "Response header value"},
+			{Keys: "{{response.status}}", Desc: "HTTP status code"},
 		}},
 	}
 }
