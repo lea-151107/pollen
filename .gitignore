@@ -47,3 +47,6 @@ Thumbs.db
 
 # Local plans / scratch
 /.claude/
+
+# Release notes scratch
+/tmp/
