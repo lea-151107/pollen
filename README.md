@@ -28,7 +28,7 @@ as a fallback.
 
 ## Keybindings
 
-Press `?` inside the app for the full list at any time.
+Press `Ctrl+/` inside the app for the full list at any time.
 
 ### Global
 
@@ -40,7 +40,7 @@ Press `?` inside the app for the full list at any time.
 | `Ctrl+H` | Toggle history panel |
 | `Ctrl+T` | Toggle TLS verification skip (persists) |
 | `Ctrl+C` | Quit |
-| `?` | Show help overlay |
+| `Ctrl+/` | Show help overlay |
 | `u` | Undo last history delete (within 5 s) |
 
 ### Panel-specific

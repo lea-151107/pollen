@@ -128,8 +128,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCopyMenu(km)
 
 	case m.helpOpen:
-		switch km.String() {
-		case "?", "esc", "q":
+		if key.Matches(km, m.keys.Help) || km.String() == "esc" || km.String() == "q" {
 			m.helpOpen = false
 		}
 		return m, nil
@@ -137,7 +136,9 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case m.envSwitcherOpen:
 		return m.handleEnvSwitcher(km)
 
-	case km.String() == "?" && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode()):
+	case key.Matches(km, m.keys.Help):
+		// Ctrl+/ is a non-printing key, so it doesn't conflict with text
+		// input — no isTextEditingFocus guard needed.
 		m.helpOpen = true
 		return m, nil
 

@@ -11,6 +11,7 @@ type KeyMap struct {
 	ToggleHist key.Binding
 	ToggleTLS  key.Binding
 	SwitchEnv  key.Binding
+	Help       key.Binding
 	Cancel     key.Binding
 }
 
@@ -24,7 +25,11 @@ func DefaultKeyMap() KeyMap {
 		ToggleHist: key.NewBinding(key.WithKeys("ctrl+h")),
 		ToggleTLS:  key.NewBinding(key.WithKeys("ctrl+t")),
 		SwitchEnv:  key.NewBinding(key.WithKeys("ctrl+e")),
-		Cancel:     key.NewBinding(key.WithKeys("esc")),
+		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
+		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
+		// the CSI-u protocol — bind both so either works.
+		Help:   key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
+		Cancel: key.NewBinding(key.WithKeys("esc")),
 	}
 }
 
@@ -56,7 +61,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 				{Keys: bindingKeys(k.ToggleTLS), Desc: "Toggle TLS verification skip"},
 				{Keys: bindingKeys(k.SwitchEnv), Desc: "Switch variable environment"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
-				{Keys: "?", Desc: "This help"},
+				{Keys: bindingKeys(k.Help), Desc: "This help"},
 				{Keys: "u", Desc: "Undo last history delete"},
 			},
 		},

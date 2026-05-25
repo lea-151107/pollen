@@ -110,7 +110,7 @@ func (m Model) renderStatusBar() string {
 			parts = append(parts, "s: save")
 		}
 	}
-	parts = append(parts, "?: help")
+	parts = append(parts, "Ctrl+/: help")
 	left := strings.Join(parts, "  ·  ")
 
 	// Right side: env name, optional TLS warning, then transient status message.
@@ -203,7 +203,7 @@ func buildHelpBody(sections []HelpSection, termWidth int) string {
 		}
 	}
 
-	sb.WriteString("\nPress ? or Esc to close")
+	sb.WriteString("\nPress Ctrl+/ or Esc to close")
 	return sb.String()
 }
 
