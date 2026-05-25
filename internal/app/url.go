@@ -17,7 +17,8 @@ func composeURL(rawURL string, params []ui.Param) string {
 	}
 	if !strings.Contains(rawURL, "{{") {
 		if u, err := url.Parse(rawURL); err == nil {
-			q := u.Query()
+			u.RawQuery = ""
+			q := url.Values{}
 			for _, p := range params {
 				q.Add(p.Key, p.Value)
 			}
@@ -26,15 +27,16 @@ func composeURL(rawURL string, params []ui.Param) string {
 		}
 	}
 	// Fallback: simple concat with proper escaping. {{...}} tokens stay intact.
-	var b strings.Builder
-	b.WriteString(rawURL)
-	sep := "?"
-	if strings.Contains(rawURL, "?") {
-		sep = "&"
+	// Strip any existing query string so component params are the sole source.
+	base := rawURL
+	if idx := strings.Index(rawURL, "?"); idx >= 0 {
+		base = rawURL[:idx]
 	}
+	var b strings.Builder
+	b.WriteString(base)
 	for i, p := range params {
 		if i == 0 {
-			b.WriteString(sep)
+			b.WriteString("?")
 		} else {
 			b.WriteString("&")
 		}
