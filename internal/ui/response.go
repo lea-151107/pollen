@@ -201,7 +201,11 @@ func (r *Response) resetFilter() {
 	r.filterErr = ""
 	r.filteredBody = ""
 	if r.resp != nil {
-		r.vp.SetContent(r.formatBody())
+		if r.diffMode && r.diffBody != "" {
+			r.vp.SetContent(r.diffBody)
+		} else {
+			r.vp.SetContent(r.formatBody())
+		}
 		r.vp.GotoTop()
 	}
 }
