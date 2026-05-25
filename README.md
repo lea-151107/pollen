@@ -12,6 +12,10 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
 - **jq filter** in the response panel — press `/` to filter JSON in real time
 - **Request chaining**: `{{response.body.<path>}}` / `{{response.headers.<n>}}` / `{{response.status}}` expand from the last response
 - **Import** OpenAPI 3.x (JSON/YAML) or Postman Collection v2.1 (`Ctrl+I`) into collections
+- **Filter highlighting**: matching text in History/Collections filter is shown bold+underline
+- **Collection editing**: rename entries (`e`), update in-place after loading (`Ctrl+B`)
+- **Response diff** (`D`): character-level diff vs the previous response (green/red)
+- **CLI flags**: `--env`, `--config`, `--collection` for scripted or project-specific startup
 - Copy any request as a POSIX `curl` command or JavaScript `fetch()` call
 - Binary response detection with hex dump preview and `s`-to-save
 - Optional TLS verification skip for self-signed dev/staging certs
@@ -53,13 +57,13 @@ Press `Ctrl+/` inside the app for the full list at any time.
 ### Panel-specific
 
 - **History**: `↑/↓` move · `Enter` load entry · `d` delete · `/` filter (Esc clears)
-- **Collections**: `↑/↓` move · `Enter` load entry · `d` delete · `/` filter (Esc clears)
+- **Collections**: `↑/↓` move · `Enter` load · `e` rename · `d` delete · `/` filter (Esc clears)
 - **Method**: `↑/↓` cycle methods
 - **Query**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row
 - **Auth**: `←/→` switch type (None/Bearer/Basic) · `Enter/↓` edit fields · `Esc/↑` back
 - **Headers**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row · `Tab` accept suggestion
 - **Body**: `←/→` switch tab · `Enter` enter editor · `Tab` indent (2 spaces) · `Esc` leave editor
-- **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file · `/` jq filter · `Esc` clear filter
+- **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file · `/` jq filter · `Esc` clear filter · `D` diff vs prev
 
 ## Authentication
 
@@ -93,6 +97,26 @@ into the URL bar:
   concatenated as a string with `?` / `&` separators
 - Reloading an entry from history splits its full URL — the parameters land
   back in the Query panel, the URL bar shows only the base URL
+
+## CLI startup flags
+
+```sh
+pollen [--env <name>] [--config <dir>] [--collection <name>]
+```
+
+| Flag | Effect |
+|------|--------|
+| `--config <dir>` | Use `<dir>` as the config directory instead of `~/.config/pollen` |
+| `--env <name>` | Activate the named environment at startup (warning to stderr if unknown) |
+| `--collection <name>` | Open the Collections sidebar pre-filtered by this name |
+
+Examples:
+
+```sh
+pollen --env staging                  # start in staging environment
+pollen --config ./myproject/.pollen   # project-local config
+pollen --collection "User API"        # open with "User API" pre-selected
+```
 
 ## Configuration
 
@@ -190,6 +214,15 @@ Press `Ctrl+K` to toggle the Collections sidebar. Like the History panel, it sup
 
 `Ctrl+H` (History) and `Ctrl+K` (Collections) are mutually exclusive — showing one
 closes the other.
+
+### Editing saved requests
+
+- Press **`e`** on a selected entry to rename it — a dialog pre-fills the current name.
+- Load an entry with `Enter`, then modify the request and press **`Ctrl+B`** to choose:
+  - **Enter** — update the loaded entry in-place
+  - **n** — save as a new entry (original is unchanged)
+
+### Importing from a spec
 
 You can also populate collections from an existing API spec:
 
