@@ -14,10 +14,21 @@ import (
 
 const appDirName = "pollen"
 
+var dirOverride string
+
+// SetOverride replaces the default config directory for this process lifetime.
+// Call before opening any stores (e.g. from main, before history.Open).
+func SetOverride(path string) {
+	dirOverride = filepath.Clean(path)
+}
+
 // Dir returns the absolute path of the pollen config directory. It does NOT
 // create the directory; callers that need to write should MkdirAll themselves
 // (or use the JSON helpers in this package, which do it for them).
 func Dir() (string, error) {
+	if dirOverride != "" {
+		return dirOverride, nil
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
