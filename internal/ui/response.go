@@ -104,7 +104,7 @@ func (r Response) formatBody() string {
 		return header + "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("244")).
 			Render("(body not preserved in history)")
 	}
-	return header + "\n\n" + httpx.HexDump(r.resp.BodyBytes, httpx.DefaultHexDumpLimit)
+	return header + "\n\n" + HexDump(r.resp.BodyBytes, DefaultHexDumpLimit)
 }
 
 func (r Response) binaryHeader() string {

@@ -1,4 +1,4 @@
-package httpx
+package ui
 
 import (
 	"fmt"
@@ -10,6 +10,9 @@ const DefaultHexDumpLimit = 4096
 // HexDump renders a byte slice as a xxd-style dump, truncating to maxBytes
 // (passing <= 0 uses DefaultHexDumpLimit). If the input is longer, a trailing
 // "... (truncated, showing N of M bytes)" line is appended.
+//
+// Lives in the ui package because it's a presentation concern; the dump
+// format doesn't depend on HTTP at all.
 func HexDump(b []byte, maxBytes int) string {
 	if maxBytes <= 0 {
 		maxBytes = DefaultHexDumpLimit

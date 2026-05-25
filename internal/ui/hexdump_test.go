@@ -1,4 +1,4 @@
-package httpx
+package ui
 
 import (
 	"strings"
