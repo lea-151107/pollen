@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-05-25
+
+### Fixed
+
+- **Response diff + jq filter**: opening the jq filter (`/`) while diff mode was
+  active and then pressing `Esc` left the `[diff]` badge visible but the viewport
+  showing the plain body. `resetFilter` now restores the diff view when diff mode
+  is on
+- **Binary diff**: pressing `D` when either the current or previous response is
+  binary no longer produces a meaningless diff — the key press is silently ignored
+- **Save-as-new pre-fill**: pressing `n` in the update-in-place prompt (Ctrl+B)
+  could open the save dialog with leftover text from a previous session; the input
+  is now cleared before focusing
+- **`SetFilter` defensive**: `SetFilter()` (used by `--collection` startup flag)
+  now explicitly resets `filterMode` to false
+
+[0.4.1]: https://github.com/lea-151107/pollen/releases/tag/v0.4.1
+
 ## [0.4.0] - 2026-05-25
 
 ### Added

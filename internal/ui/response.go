@@ -110,6 +110,9 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 			if r.resp == nil || r.prevResp == nil {
 				return r, nil
 			}
+			if r.resp.IsBinary || r.prevResp.IsBinary {
+				return r, nil
+			}
 			r.diffMode = !r.diffMode
 			if r.diffMode {
 				r.diffBody = r.computeDiff()
@@ -198,7 +201,11 @@ func (r *Response) resetFilter() {
 	r.filterErr = ""
 	r.filteredBody = ""
 	if r.resp != nil {
-		r.vp.SetContent(r.formatBody())
+		if r.diffMode && r.diffBody != "" {
+			r.vp.SetContent(r.diffBody)
+		} else {
+			r.vp.SetContent(r.formatBody())
+		}
 		r.vp.GotoTop()
 	}
 }
