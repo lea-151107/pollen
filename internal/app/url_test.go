@@ -25,11 +25,13 @@ func TestComposeURL_AppendsWhenNoExistingQuery(t *testing.T) {
 	}
 }
 
-func TestComposeURL_MergesWithExistingQuery(t *testing.T) {
+func TestComposeURL_StripsURLQueryWhenComponentHasParams(t *testing.T) {
+	// When the query component has params, it is the authoritative source.
+	// Any query string already in the URL bar is discarded to prevent doubling.
 	got := composeURL("https://example.com/api?page=1", []ui.Param{
 		{Key: "limit", Value: "10"},
 	})
-	want := "https://example.com/api?limit=10&page=1"
+	want := "https://example.com/api?limit=10"
 	if got != want {
 		t.Errorf("got %q want %q", got, want)
 	}
@@ -56,11 +58,12 @@ func TestComposeURL_FallbackForTemplateURL(t *testing.T) {
 	}
 }
 
-func TestComposeURL_FallbackTemplateURLWithExistingQuery(t *testing.T) {
+func TestComposeURL_FallbackStripsURLQueryWhenComponentHasParams(t *testing.T) {
+	// Same stripping behaviour for the {{var}} fallback path.
 	got := composeURL("{{baseUrl}}/users?page=1", []ui.Param{
 		{Key: "limit", Value: "10"},
 	})
-	want := "{{baseUrl}}/users?page=1&limit=10"
+	want := "{{baseUrl}}/users?limit=10"
 	if got != want {
 		t.Errorf("got %q want %q", got, want)
 	}

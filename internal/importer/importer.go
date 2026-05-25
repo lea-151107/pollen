@@ -231,7 +231,11 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 
 	name := item.Name
 	if name == "" {
-		name = method + " " + req.URL.Raw
+		rawURL := req.URL.Raw
+		if rawURL == "" {
+			rawURL = "(no URL)"
+		}
+		name = method + " " + rawURL
 	}
 	return collections.Entry{
 		ID:   uuid.NewString(),

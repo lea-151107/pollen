@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-05-25
+
+### Fixed
+
+- **Query parameter doubling**: when the query component had params and the
+  URL bar also contained a query string, both were merged causing the same
+  key to appear twice. The query component is now the authoritative source
+  when non-empty; any existing query string in the URL bar is discarded
+- **Auth panel blocked by history-restored header**: loading a request from
+  history restored the `Authorization` header into the Headers component,
+  preventing the Auth panel from overriding it on subsequent sends. The Auth
+  panel (Bearer/Basic) now always takes precedence and removes any existing
+  `Authorization` header before adding its own value
+- **Postman import empty URL fallback**: when a Postman item had no name and
+  no URL, the generated name was `"GET "` (with trailing space); now falls
+  back to `"GET (no URL)"`
+
+[0.4.3]: https://github.com/lea-151107/pollen/releases/tag/v0.4.3
+
 ## [0.4.2] - 2026-05-25
 
 ### Fixed
