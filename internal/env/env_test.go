@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 func withTempConfig(t *testing.T) {
@@ -153,7 +155,7 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 
 func TestLoad_MigratesLegacyVarsFormat(t *testing.T) {
 	withTempConfig(t)
-	path, _ := defaultPath()
+	path, _ := userconfig.Path("env.json")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	legacy := `{"vars": {"baseUrl": "https://legacy.example.com", "token": "old"}}`
 	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
@@ -177,7 +179,7 @@ func TestLoad_MigratesLegacyVarsFormat(t *testing.T) {
 
 func TestLoad_CurrentEmptyButHasEnvsPicksFirst(t *testing.T) {
 	withTempConfig(t)
-	path, _ := defaultPath()
+	path, _ := userconfig.Path("env.json")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	data := `{"environments": {"zeta": {"a":"1"}, "alpha": {"a":"2"}}}`
 	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
@@ -191,7 +193,7 @@ func TestLoad_CurrentEmptyButHasEnvsPicksFirst(t *testing.T) {
 
 func TestLoad_CorruptFileReturnsEmpty(t *testing.T) {
 	withTempConfig(t)
-	path, _ := defaultPath()
+	path, _ := userconfig.Path("env.json")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	_ = os.WriteFile(path, []byte("not json"), 0o644)
 

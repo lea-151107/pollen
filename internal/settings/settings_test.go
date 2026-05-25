@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 // withTempConfig redirects XDG_CONFIG_HOME for the duration of the test.
@@ -42,7 +44,7 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 
 func TestLoad_CorruptFileReturnsDefault(t *testing.T) {
 	withTempConfig(t)
-	path, _ := defaultPath()
+	path, _ := userconfig.Path("settings.json")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	_ = os.WriteFile(path, []byte("not json"), 0o644)
 

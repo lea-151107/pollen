@@ -10,17 +10,15 @@
 package env
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 
 	"github.com/lea/pollen/internal/userconfig"
 )
+
+const fileName = "env.json"
 
 const defaultEnvName = "default"
 
@@ -41,19 +39,8 @@ func New() *Env {
 // Load reads env from disk. Missing or corrupt files yield an empty Env.
 // v0.1.0 "vars" payloads are migrated into a "default" environment.
 func Load() (*Env, error) {
-	path, err := defaultPath()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return New(), nil
-		}
-		return nil, err
-	}
-	var e Env
-	if err := json.Unmarshal(data, &e); err != nil {
+	e := New()
+	if _, err := userconfig.LoadJSON(fileName, e); err != nil {
 		// Corrupt file shouldn't brick startup — fall back to empty.
 		return New(), nil
 	}
@@ -71,27 +58,12 @@ func Load() (*Env, error) {
 	if e.Current == "" && len(e.Environments) > 0 {
 		e.Current = e.Names()[0]
 	}
-	return &e, nil
+	return e, nil
 }
 
 // Save writes env atomically.
 func (e *Env) Save() error {
-	path, err := defaultPath()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(e, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return userconfig.SaveJSON(fileName, e)
 }
 
 var varRe = regexp.MustCompile(`\{\{(\w+)\}\}`)
@@ -152,14 +124,4 @@ func (e *Env) SetCurrent(name string) error {
 	}
 	e.Current = name
 	return nil
-}
-
-// Path returns the on-disk location of env.json.
-func Path() string {
-	p, _ := defaultPath()
-	return p
-}
-
-func defaultPath() (string, error) {
-	return userconfig.Path("env.json")
 }
