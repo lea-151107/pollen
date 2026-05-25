@@ -19,17 +19,18 @@ func (m Model) View() string {
 		contentH = 5
 	}
 
-	historyW := 0
-	if m.showHistory {
-		historyW = m.width / 4
-		if historyW < 20 {
-			historyW = 20
+	sidebarW := 0
+	showSidebar := m.showHistory || m.showCollections
+	if showSidebar {
+		sidebarW = m.width / 4
+		if sidebarW < 20 {
+			sidebarW = 20
 		}
-		if historyW > 40 {
-			historyW = 40
+		if sidebarW > 40 {
+			sidebarW = 40
 		}
 	}
-	mainW := m.width - historyW
+	mainW := m.width - sidebarW
 	if mainW < 30 {
 		mainW = 30
 	}
@@ -38,8 +39,11 @@ func (m Model) View() string {
 
 	var top string
 	if m.showHistory {
-		hist := m.history.View(historyW, contentH)
+		hist := m.history.View(sidebarW, contentH)
 		top = lipgloss.JoinHorizontal(lipgloss.Top, hist, main)
+	} else if m.showCollections {
+		coll := m.collUI.View(sidebarW, contentH)
+		top = lipgloss.JoinHorizontal(lipgloss.Top, coll, main)
 	} else {
 		top = main
 	}
@@ -54,6 +58,12 @@ func (m Model) View() string {
 	}
 	if m.envSwitcherOpen {
 		return envSwitcherView(m.env.Names(), m.envSwitcherCursor, m.env.Current, m.width, m.height)
+	}
+	if m.savingToCollection {
+		return saveCollectionView(m.saveCollInput.View(), m.width, m.height)
+	}
+	if m.importingFile {
+		return importFileView(m.importInput.View(), m.width, m.height)
 	}
 
 	return view
@@ -98,6 +108,9 @@ func (m Model) renderStatusBar() string {
 		"Ctrl+S: send",
 		"Ctrl+Y: copy",
 		"Ctrl+H: history",
+		"Ctrl+K: collections",
+		"Ctrl+B: save",
+		"Ctrl+I: import",
 		"Ctrl+C: quit",
 	}
 	switch m.focus {
@@ -239,6 +252,31 @@ func envSwitcherView(names []string, cursor int, current string, w, h int) strin
 		Background(lipgloss.Color("236")).
 		Foreground(lipgloss.Color("230")).
 		Render(sb.String())
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+}
+
+func importFileView(inputView string, w, h int) string {
+	body := "Import from file\n\nOpenAPI 3.x (JSON/YAML)  ·  Postman v2.1 (JSON)\n\n  " +
+		inputView + "\n\n  Enter: import  ·  Esc: cancel"
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(body)
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+}
+
+func saveCollectionView(inputView string, w, h int) string {
+	body := "Save request to collection\n\n  " + inputView + "\n\n  Enter: save  ·  Esc: cancel"
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(body)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 

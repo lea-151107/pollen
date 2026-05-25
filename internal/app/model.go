@@ -3,8 +3,10 @@ package app
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lea/pollen/internal/collections"
 	"github.com/lea/pollen/internal/env"
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
@@ -15,6 +17,7 @@ type focusArea int
 
 const (
 	focusHistory focusArea = iota
+	focusCollections
 	focusMethod
 	focusURL
 	focusQuery
@@ -25,32 +28,41 @@ const (
 )
 
 var focusOrder = []focusArea{
-	focusHistory, focusMethod, focusURL, focusQuery, focusAuth, focusHeaders, focusBody, focusResponse,
+	focusHistory, focusCollections, focusMethod, focusURL, focusQuery, focusAuth, focusHeaders, focusBody, focusResponse,
 }
 
 type Model struct {
-	keys  KeyMap
-	store *history.Store
-	env   *env.Env
+	keys        KeyMap
+	store       *history.Store
+	collStore   *collections.Store
+	env         *env.Env
 
-	method   ui.Method
-	urlBar   ui.URLBar
-	query    ui.Query
-	auth     ui.Auth
-	headers  ui.Headers
-	body     ui.Body
-	response ui.Response
-	history  ui.History
+	method      ui.Method
+	urlBar      ui.URLBar
+	query       ui.Query
+	auth        ui.Auth
+	headers     ui.Headers
+	body        ui.Body
+	response    ui.Response
+	history     ui.History
+	collUI      ui.Collections
 
-	focus       focusArea
-	width       int
-	height      int
-	showHistory bool
+	focus           focusArea
+	width           int
+	height          int
+	showHistory     bool
+	showCollections bool
 
 	copyMenuOpen      bool
 	helpOpen          bool
 	envSwitcherOpen   bool
 	envSwitcherCursor int // selected index in env switcher menu
+
+	savingToCollection bool
+	saveCollInput      textinput.Model
+
+	importingFile bool
+	importInput   textinput.Model
 
 	// tlsInsecure mirrors httpx.SkipTLSVerify so the view layer doesn't have
 	// to reach into the http package's globals just to draw a badge.
@@ -85,13 +97,20 @@ const (
 	statusError
 )
 
-func New(store *history.Store, e *env.Env) Model {
+func New(store *history.Store, collStore *collections.Store, e *env.Env) Model {
 	if e == nil {
 		e = env.New()
 	}
+	saveInput := textinput.New()
+	saveInput.Placeholder = "collection name"
+	saveInput.CharLimit = 80
+	importInput := textinput.New()
+	importInput.Placeholder = "~/projects/api/openapi.yaml"
+	importInput.CharLimit = 512
 	m := Model{
 		keys:        DefaultKeyMap(),
 		store:       store,
+		collStore:   collStore,
 		env:         e,
 		method:      ui.NewMethod(),
 		urlBar:      ui.NewURLBar(),
@@ -101,10 +120,14 @@ func New(store *history.Store, e *env.Env) Model {
 		body:        ui.NewBody(),
 		response:    ui.NewResponse(),
 		history:     ui.NewHistory(),
+		collUI:      ui.NewCollections(),
 		focus:       focusURL,
 		showHistory: true,
+		saveCollInput: saveInput,
+		importInput:   importInput,
 	}
 	m.history.SetEntries(store.Entries())
+	m.collUI.SetEntries(collStore.Entries())
 	// Seed view-visible TLS state from the httpx global (loaded by main.go).
 	m.tlsInsecure = httpx.SkipTLSVerify.Load()
 	m.applyFocus()
@@ -117,6 +140,7 @@ func (m Model) Init() tea.Cmd {
 
 func (m *Model) applyFocus() {
 	m.history.Blur()
+	m.collUI.Blur()
 	m.method.Blur()
 	m.urlBar.Blur()
 	m.query.Blur()
@@ -128,6 +152,8 @@ func (m *Model) applyFocus() {
 	switch m.focus {
 	case focusHistory:
 		m.history.Focus()
+	case focusCollections:
+		m.collUI.Focus()
 	case focusMethod:
 		m.method.Focus()
 	case focusURL:
@@ -185,6 +211,9 @@ func (m *Model) cycleFocus(forward bool) {
 		cur = (cur + step + len(focusOrder)) % len(focusOrder)
 		next := focusOrder[cur]
 		if next == focusHistory && !m.showHistory {
+			continue
+		}
+		if next == focusCollections && !m.showCollections {
 			continue
 		}
 		m.focus = next

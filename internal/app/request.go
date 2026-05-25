@@ -87,10 +87,14 @@ func (m *Model) sendRequest() tea.Cmd {
 	// and the history entry use the expanded form so the user always sees
 	// "what we sent" verbatim. (Trade-off: secrets stored in env leak to
 	// history.json — documented in README.)
-	req.URL = m.env.Expand(req.URL)
-	req.Body = m.env.Expand(req.Body)
+	lastResp := m.response.CurrentResponse()
+	expand := func(s string) string {
+		return expandResponseVars(m.env.Expand(s), lastResp)
+	}
+	req.URL = expand(req.URL)
+	req.Body = expand(req.Body)
 	for i := range req.Headers {
-		req.Headers[i].Value = m.env.Expand(req.Headers[i].Value)
+		req.Headers[i].Value = expand(req.Headers[i].Value)
 	}
 	if req.URL == "" {
 		m.response.SetError("URL is empty")

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-25
+
+### Added
+
+- **jq filter** (Response panel, `/`): filter a JSON response with a jq expression
+  in real time. `Enter` locks the filter and re-enables scrolling; `Esc` restores
+  the original body
+- **Collections**: save the current request with a name (`Ctrl+B`), then browse,
+  load, and delete entries from a sidebar (`Ctrl+K`). Stored in
+  `~/.config/pollen/collections.json`. Supports `/` filter and is mutually exclusive
+  with the History panel
+- **Request chaining**: reference the last response in the next request via
+  `{{response.body.<jq-path>}}`, `{{response.headers.<name>}}`, and
+  `{{response.status}}` tokens — evaluated after env-variable expansion
+- **Import** (`Ctrl+I`): load endpoints from an OpenAPI 3.x spec (JSON or YAML) or
+  a Postman Collection v2.1 (JSON) directly into collections
+
+### Fixed
+
+- Response panel overflowed by one line while the jq filter bar was visible
+  (height calculation subtracted 1 instead of 2 for the bar)
+- Toggling one sidebar with `Ctrl+H`/`Ctrl+K` while the other sidebar was focused
+  left focus on the now-hidden panel, causing keystrokes to be swallowed silently
+
+[0.3.0]: https://github.com/lea-151107/pollen/releases/tag/v0.3.0
+
 ## [0.2.0] - 2026-05-25
 
 Quality-of-life release focused on environment management, request

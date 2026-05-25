@@ -1,0 +1,243 @@
+package importer
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/google/uuid"
+	"github.com/lea/pollen/internal/collections"
+	"github.com/lea/pollen/internal/history"
+)
+
+// Import reads path, detects the format (OpenAPI 3.x or Postman v2.1), and
+// returns one Entry per endpoint. Returns an error if the file can't be read
+// or the format is unrecognised.
+func Import(path string) ([]collections.Entry, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".yaml", ".yml":
+		return parseOpenAPIYAML(data)
+	default:
+		return parseJSON(data)
+	}
+}
+
+// parseJSON detects whether data is a Postman collection or OpenAPI JSON doc.
+func parseJSON(data []byte) ([]collections.Entry, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w", err)
+	}
+	if _, hasItem := raw["item"]; hasItem {
+		return parsePostmanJSON(data)
+	}
+	if _, hasPaths := raw["paths"]; hasPaths {
+		return parseOpenAPIJSON(data)
+	}
+	return nil, fmt.Errorf("unrecognised format: expected OpenAPI (paths) or Postman (item)")
+}
+
+// ── OpenAPI 3.x ─────────────────────────────────────────────────────────────
+
+type openAPIDoc struct {
+	OpenAPI string                              `json:"openapi" yaml:"openapi"`
+	Info    struct{ Title string }              `json:"info"    yaml:"info"`
+	Servers []struct{ URL string }              `json:"servers" yaml:"servers"`
+	Paths   map[string]map[string]openAPIOpRaw  `json:"paths"   yaml:"paths"`
+}
+
+type openAPIOpRaw struct {
+	OperationID string           `json:"operationId" yaml:"operationId"`
+	Summary     string           `json:"summary"     yaml:"summary"`
+	Parameters  []openAPIParam   `json:"parameters"  yaml:"parameters"`
+}
+
+type openAPIParam struct {
+	Name     string `json:"name"     yaml:"name"`
+	In       string `json:"in"       yaml:"in"`
+	Required bool   `json:"required" yaml:"required"`
+}
+
+var httpMethods = map[string]bool{
+	"get": true, "post": true, "put": true, "patch": true,
+	"delete": true, "head": true, "options": true, "trace": true,
+}
+
+func openAPIToEntries(doc openAPIDoc) []collections.Entry {
+	baseURL := ""
+	if len(doc.Servers) > 0 {
+		baseURL = strings.TrimRight(doc.Servers[0].URL, "/")
+	}
+
+	// Sort paths for deterministic output.
+	paths := make([]string, 0, len(doc.Paths))
+	for p := range doc.Paths {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	var entries []collections.Entry
+	for _, path := range paths {
+		ops := doc.Paths[path]
+		// Sort methods too.
+		methods := make([]string, 0, len(ops))
+		for m := range ops {
+			methods = append(methods, m)
+		}
+		sort.Strings(methods)
+
+		for _, method := range methods {
+			if !httpMethods[strings.ToLower(method)] {
+				continue
+			}
+			op := ops[method]
+			name := op.Summary
+			if name == "" {
+				name = op.OperationID
+			}
+			if name == "" {
+				name = strings.ToUpper(method) + " " + path
+			}
+
+			url := baseURL + path
+			// Append required query params as placeholders.
+			var qp []string
+			for _, p := range op.Parameters {
+				if strings.ToLower(p.In) == "query" && p.Required {
+					qp = append(qp, p.Name+"=")
+				}
+			}
+			if len(qp) > 0 {
+				url += "?" + strings.Join(qp, "&")
+			}
+
+			entries = append(entries, collections.Entry{
+				ID:   uuid.NewString(),
+				Name: name,
+				Request: history.Request{
+					Method: strings.ToUpper(method),
+					URL:    url,
+				},
+			})
+		}
+	}
+	return entries
+}
+
+func parseOpenAPIJSON(data []byte) ([]collections.Entry, error) {
+	var doc openAPIDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("OpenAPI JSON parse error: %w", err)
+	}
+	if !strings.HasPrefix(doc.OpenAPI, "3") {
+		return nil, fmt.Errorf("only OpenAPI 3.x is supported (got %q)", doc.OpenAPI)
+	}
+	return openAPIToEntries(doc), nil
+}
+
+func parseOpenAPIYAML(data []byte) ([]collections.Entry, error) {
+	var doc openAPIDoc
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("OpenAPI YAML parse error: %w", err)
+	}
+	if !strings.HasPrefix(doc.OpenAPI, "3") {
+		return nil, fmt.Errorf("only OpenAPI 3.x is supported (got %q)", doc.OpenAPI)
+	}
+	return openAPIToEntries(doc), nil
+}
+
+// ── Postman v2.1 ────────────────────────────────────────────────────────────
+
+type postmanCollection struct {
+	Info struct {
+		Name string `json:"name"`
+	} `json:"info"`
+	Item []postmanItem `json:"item"`
+}
+
+type postmanItem struct {
+	Name    string         `json:"name"`
+	Request *postmanReq    `json:"request"`
+	Item    []postmanItem  `json:"item"`
+}
+
+type postmanReq struct {
+	Method string `json:"method"`
+	URL    struct {
+		Raw string `json:"raw"`
+	} `json:"url"`
+	Header []struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	} `json:"header"`
+	Body *struct {
+		Mode string `json:"mode"`
+		Raw  string `json:"raw"`
+	} `json:"body"`
+}
+
+func parsePostmanJSON(data []byte) ([]collections.Entry, error) {
+	var col postmanCollection
+	if err := json.Unmarshal(data, &col); err != nil {
+		return nil, fmt.Errorf("Postman JSON parse error: %w", err)
+	}
+	var entries []collections.Entry
+	walkPostman(col.Item, &entries)
+	return entries, nil
+}
+
+func walkPostman(items []postmanItem, out *[]collections.Entry) {
+	for _, item := range items {
+		if item.Request != nil {
+			*out = append(*out, postmanItemToEntry(item))
+		}
+		if len(item.Item) > 0 {
+			walkPostman(item.Item, out)
+		}
+	}
+}
+
+func postmanItemToEntry(item postmanItem) collections.Entry {
+	req := item.Request
+	method := strings.ToUpper(req.Method)
+	if method == "" {
+		method = "GET"
+	}
+
+	var headers []history.Header
+	for _, h := range req.Header {
+		if h.Key != "" {
+			headers = append(headers, history.Header{Key: h.Key, Value: h.Value})
+		}
+	}
+
+	var body string
+	var bodyType history.BodyType
+	if req.Body != nil && req.Body.Mode == "raw" {
+		body = req.Body.Raw
+		bodyType = history.BodyRaw
+	}
+
+	return collections.Entry{
+		ID:   uuid.NewString(),
+		Name: item.Name,
+		Request: history.Request{
+			Method:   method,
+			URL:      req.URL.Raw,
+			Headers:  headers,
+			Body:     body,
+			BodyType: bodyType,
+		},
+	}
+}

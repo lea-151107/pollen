@@ -8,6 +8,10 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
 - Send HTTP requests with method, headers, and body (JSON / form-urlencoded / raw)
 - Header name autocomplete from a list of common HTTP headers
 - Request history (JSON file) with one-key restore and undo-delete
+- **Collections**: save named requests (`Ctrl+B`), browse and reload from a sidebar (`Ctrl+K`)
+- **jq filter** in the response panel — press `/` to filter JSON in real time
+- **Request chaining**: `{{response.body.<path>}}` / `{{response.headers.<n>}}` / `{{response.status}}` expand from the last response
+- **Import** OpenAPI 3.x (JSON/YAML) or Postman Collection v2.1 (`Ctrl+I`) into collections
 - Copy any request as a POSIX `curl` command or JavaScript `fetch()` call
 - Binary response detection with hex dump preview and `s`-to-save
 - Optional TLS verification skip for self-signed dev/staging certs
@@ -38,6 +42,9 @@ Press `Ctrl+/` inside the app for the full list at any time.
 | `Ctrl+S` | Send request |
 | `Ctrl+Y` → `c` / `f` | Copy as cURL / fetch |
 | `Ctrl+H` | Toggle history panel |
+| `Ctrl+K` | Toggle collections panel |
+| `Ctrl+B` | Save current request to collection |
+| `Ctrl+I` | Import OpenAPI / Postman file into collections |
 | `Ctrl+T` | Toggle TLS verification skip (persists) |
 | `Ctrl+C` | Quit |
 | `Ctrl+/` | Show help overlay |
@@ -46,12 +53,13 @@ Press `Ctrl+/` inside the app for the full list at any time.
 ### Panel-specific
 
 - **History**: `↑/↓` move · `Enter` load entry · `d` delete · `/` filter (Esc clears)
+- **Collections**: `↑/↓` move · `Enter` load entry · `d` delete · `/` filter (Esc clears)
 - **Method**: `↑/↓` cycle methods
 - **Query**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row
 - **Auth**: `←/→` switch type (None/Bearer/Basic) · `Enter/↓` edit fields · `Esc/↑` back
 - **Headers**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row · `Tab` accept suggestion
 - **Body**: `←/→` switch tab · `Enter` enter editor · `Tab` indent (2 spaces) · `Esc` leave editor
-- **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file
+- **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file · `/` jq filter · `Esc` clear filter
 
 ## Authentication
 
@@ -91,6 +99,7 @@ into the URL bar:
 | File | Purpose |
 |------|---------|
 | `~/.config/pollen/history.json` | Request/response history (most-recent first, cap 200) |
+| `~/.config/pollen/collections.json` | Named saved requests |
 | `~/.config/pollen/settings.json` | Persistent toggles (TLS skip) |
 | `~/.config/pollen/env.json` | User-defined variables for `{{name}}` expansion |
 | `~/.config/pollen/clipboard.txt` | Clipboard fallback if `xclip`/`wl-clipboard` missing |
@@ -145,6 +154,53 @@ Notes:
 - **History stores the expanded form**, so secrets in `env.json` end up in
   `history.json` once sent. Treat `history.json` with the same care as any
   file containing credentials
+
+### Request chaining
+
+After receiving a response, reference its values in the next request using
+`{{response.*}}` tokens. These are evaluated *after* env-variable tokens:
+
+| Token | Value |
+|-------|-------|
+| `{{response.body.<path>}}` | jq path applied to the last JSON response body |
+| `{{response.body}}` | whole response body as a string |
+| `{{response.headers.<name>}}` | response header value (case-insensitive name) |
+| `{{response.status}}` | HTTP status code as a string, e.g. `"200"` |
+
+Example — log in, then use the token in the next request:
+
+1. `POST {{baseUrl}}/auth/login` with credentials in the body
+2. Next request: header `Authorization: Bearer {{response.body.token}}`
+
+If no previous response exists, or the jq path produces no match, the token is
+left untouched.
+
+## Collections
+
+Press `Ctrl+B` to save the current request with a name — a dialog prompts for the
+name (blank defaults to "Untitled"). Saved entries are stored in
+`~/.config/pollen/collections.json`.
+
+Press `Ctrl+K` to toggle the Collections sidebar. Like the History panel, it supports:
+
+- `↑/↓` to move between entries
+- `Enter` to load the request into the editor
+- `d` to delete the entry
+- `/` to filter by name, method, or URL
+
+`Ctrl+H` (History) and `Ctrl+K` (Collections) are mutually exclusive — showing one
+closes the other.
+
+You can also populate collections from an existing API spec:
+
+- **OpenAPI 3.x** (`.json` or `.yaml`): each path × method pair becomes one entry.
+  Entry names come from `summary` → `operationId` → `METHOD /path`, in that order.
+  The first server URL is used as the base. Required query parameters are appended as
+  empty placeholders.
+- **Postman Collection v2.1** (`.json`): each request item (including nested folders)
+  becomes one entry, preserving name, method, URL, headers, and raw body.
+
+Press `Ctrl+I`, enter the file path (supports `~`), and press `Enter` to import.
 
 ## License
 

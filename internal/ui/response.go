@@ -7,26 +7,35 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/itchyny/gojq"
 
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
 )
 
 type Response struct {
-	vp      viewport.Model
-	resp    *history.Response
-	reqURL  string // URL of the request that produced resp
-	err     string
-	loading bool
-	focused bool
+	vp           viewport.Model
+	resp         *history.Response
+	reqURL       string // URL of the request that produced resp
+	err          string
+	loading      bool
+	focused      bool
+	filterInput  textinput.Model
+	filterActive bool   // filter input bar is visible
+	filterErr    string // last jq evaluation error
+	filteredBody string // non-empty when a filter is applied
 }
 
 func NewResponse() Response {
 	vp := viewport.New(80, 10)
-	return Response{vp: vp}
+	fi := textinput.New()
+	fi.Placeholder = "jq filter  e.g. .items[0].name"
+	fi.CharLimit = 256
+	return Response{vp: vp, filterInput: fi}
 }
 
 func (r *Response) SetResponse(resp *history.Response, reqURL string) {
@@ -34,6 +43,7 @@ func (r *Response) SetResponse(resp *history.Response, reqURL string) {
 	r.reqURL = reqURL
 	r.err = ""
 	r.loading = false
+	r.resetFilter()
 	r.vp.SetContent(r.formatBody())
 	r.vp.GotoTop()
 }
@@ -57,17 +67,113 @@ func (r *Response) SetLoading(loading bool) {
 	}
 }
 
-func (r *Response) Focus()       { r.focused = true }
-func (r *Response) Blur()        { r.focused = false }
-func (r Response) Focused() bool { return r.focused }
+func (r *Response) Focus()            { r.focused = true }
+func (r *Response) Blur()             { r.focused = false }
+func (r Response) Focused() bool      { return r.focused }
+func (r Response) FilterActive() bool { return r.filterActive }
 
 func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 	if !r.focused {
 		return r, nil
 	}
+
+	if km, ok := msg.(tea.KeyMsg); ok {
+		switch {
+		case r.filterActive && km.String() == "esc":
+			r.resetFilter()
+			return r, nil
+
+		case r.filterActive && km.String() == "enter":
+			r.filterActive = false
+			r.filterInput.Blur()
+			return r, nil
+
+		case !r.filterActive && km.String() == "/":
+			if r.resp != nil && !r.resp.IsBinary {
+				r.filterActive = true
+				return r, r.filterInput.Focus()
+			}
+			return r, nil
+
+		case r.filterActive:
+			var cmd tea.Cmd
+			r.filterInput, cmd = r.filterInput.Update(msg)
+			r.applyFilter()
+			return r, cmd
+		}
+	}
+
 	var cmd tea.Cmd
 	r.vp, cmd = r.vp.Update(msg)
 	return r, cmd
+}
+
+func (r *Response) applyFilter() {
+	expr := strings.TrimSpace(r.filterInput.Value())
+	if expr == "" {
+		r.filterErr = ""
+		r.filteredBody = ""
+		r.vp.SetContent(r.formatBody())
+		r.vp.GotoTop()
+		return
+	}
+
+	if r.resp == nil || !isJSONContentType(r.resp.ContentType) {
+		r.filterErr = "not a JSON response"
+		r.filteredBody = ""
+		r.vp.SetContent(r.formatBody())
+		return
+	}
+
+	query, err := gojq.Parse(expr)
+	if err != nil {
+		r.filterErr = err.Error()
+		r.filteredBody = ""
+		r.vp.SetContent(r.formatBody())
+		return
+	}
+
+	var input any
+	if err := json.Unmarshal([]byte(r.resp.Body), &input); err != nil {
+		r.filterErr = "invalid JSON body"
+		r.filteredBody = ""
+		r.vp.SetContent(r.formatBody())
+		return
+	}
+
+	iter := query.Run(input)
+	var results []string
+	for {
+		v, ok := iter.Next()
+		if !ok {
+			break
+		}
+		if err, ok := v.(error); ok {
+			r.filterErr = err.Error()
+			r.filteredBody = ""
+			r.vp.SetContent(r.formatBody())
+			return
+		}
+		out, _ := json.MarshalIndent(v, "", "  ")
+		results = append(results, string(out))
+	}
+
+	r.filterErr = ""
+	r.filteredBody = strings.Join(results, "\n")
+	r.vp.SetContent(r.filteredBody)
+	r.vp.GotoTop()
+}
+
+func (r *Response) resetFilter() {
+	r.filterActive = false
+	r.filterInput.SetValue("")
+	r.filterInput.Blur()
+	r.filterErr = ""
+	r.filteredBody = ""
+	if r.resp != nil {
+		r.vp.SetContent(r.formatBody())
+		r.vp.GotoTop()
+	}
 }
 
 // TextPreviewLimit caps how much of a text body the viewport renders. Bodies
@@ -205,13 +311,35 @@ func (r Response) View(width, height int) string {
 	}
 
 	r.vp.Width = inner - 2 // -2 for padding
-	vpH := innerH - lipgloss.Height(statusLine) - 1
+	filterBarH := 0
+	if r.filterActive || r.filteredBody != "" {
+		filterBarH = 2 // "\n" + one line of filter bar
+	}
+	vpH := innerH - lipgloss.Height(statusLine) - 1 - filterBarH
 	if vpH < 1 {
 		vpH = 1
 	}
 	r.vp.Height = vpH
 
-	return border.Render(statusLine + "\n" + r.vp.View())
+	body := statusLine + "\n" + r.vp.View()
+	if r.filterActive || r.filteredBody != "" {
+		body += "\n" + r.renderFilterBar(inner-2)
+	}
+	return border.Render(body)
+}
+
+func (r Response) renderFilterBar(width int) string {
+	prefix := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("/")
+	input := r.filterInput.View()
+
+	var errPart string
+	if r.filterErr != "" {
+		errPart = "  " + lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(r.filterErr)
+	}
+
+	bar := prefix + " " + input + errPart
+	_ = width // viewport handles wrapping; bar is one logical line
+	return bar
 }
 
 func formatSize(n int) string {

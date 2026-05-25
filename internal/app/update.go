@@ -2,12 +2,19 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 
+	"github.com/lea/pollen/internal/collections"
+	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
+	"github.com/lea/pollen/internal/importer"
 	"github.com/lea/pollen/internal/settings"
 	"github.com/lea/pollen/internal/ui"
 )
@@ -20,7 +27,7 @@ type clearStatusMsg struct{ gen int }
 // isTextEditingFocus reports whether the currently focused panel is actively
 // accepting character input. Used to gate single-letter global shortcuts
 // (currently `u` for undo) so they don't swallow real input.
-func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode bool) bool {
+func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode, collFilterMode bool) bool {
 	switch f {
 	case focusURL, focusQuery, focusAuth, focusHeaders:
 		return true
@@ -28,6 +35,8 @@ func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode bool) bool 
 		return bodyInEditor
 	case focusHistory:
 		return historyFilterMode
+	case focusCollections:
+		return collFilterMode
 	}
 	return false
 }
@@ -67,6 +76,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFocus()
 		return m, nil
 
+	case ui.CollectionSelectMsg:
+		m.applyEntry(history.Entry{Request: msg.Entry.Request})
+		m.focus = focusURL
+		m.applyFocus()
+		return m, nil
+
+	case ui.CollectionDeleteMsg:
+		idx := m.collStore.IndexOf(msg.ID)
+		if idx < 0 {
+			return m, nil
+		}
+		if !m.collStore.DeleteAt(idx) {
+			return m, nil
+		}
+		_ = m.collStore.Save()
+		m.collUI.SetEntries(m.collStore.Entries())
+		m.setStatus(statusOK, "collection entry deleted")
+		return m, m.statusTick(2 * time.Second)
+
 	case ui.HistoryDeleteMsg:
 		// Look up by ID so the operation works regardless of any active
 		// history filter (the filter shifts UI indices but not store indices).
@@ -102,6 +130,71 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Import-file dialog intercepts all input before other overlays.
+	if m.importingFile {
+		switch km.String() {
+		case "esc":
+			m.importingFile = false
+			m.importInput.SetValue("")
+			m.importInput.Blur()
+		case "enter":
+			path := expandHome(m.importInput.Value())
+			m.importingFile = false
+			m.importInput.SetValue("")
+			m.importInput.Blur()
+			entries, err := importer.Import(path)
+			if err != nil {
+				m.setStatus(statusError, fmt.Sprintf("import failed: %v", err))
+				return m, m.statusTick(4 * time.Second)
+			}
+			for _, e := range entries {
+				m.collStore.Add(e)
+			}
+			_ = m.collStore.Save()
+			m.collUI.SetEntries(m.collStore.Entries())
+			m.setStatus(statusOK, fmt.Sprintf("imported %d entries", len(entries)))
+			return m, m.statusTick(3 * time.Second)
+		default:
+			var cmd tea.Cmd
+			m.importInput, cmd = m.importInput.Update(km)
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	// Save-to-collection dialog intercepts all input first.
+	if m.savingToCollection {
+		switch km.String() {
+		case "esc":
+			m.savingToCollection = false
+			m.saveCollInput.SetValue("")
+			m.saveCollInput.Blur()
+		case "enter":
+			name := m.saveCollInput.Value()
+			if name == "" {
+				name = "Untitled"
+			}
+			req := m.currentRequest()
+			m.collStore.Add(collections.Entry{
+				ID:      uuid.NewString(),
+				Name:    name,
+				Request: req,
+			})
+			_ = m.collStore.Save()
+			m.collUI.SetEntries(m.collStore.Entries())
+			m.savingToCollection = false
+			m.saveCollInput.SetValue("")
+			m.saveCollInput.Blur()
+			m.setStatus(statusOK, fmt.Sprintf("saved to collection: %s", name))
+			return m, m.statusTick(2 * time.Second)
+		default:
+			var cmd tea.Cmd
+			m.saveCollInput, cmd = m.saveCollInput.Update(km)
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	// Global keys take precedence except where noted.
 	switch {
 	case key.Matches(km, m.keys.Quit):
@@ -125,7 +218,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpOpen = true
 		return m, nil
 
-	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode()):
+	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode()):
 		u := m.pendingUndo
 		m.store.InsertAt(u.index, u.entry)
 		_ = m.store.Save()
@@ -148,11 +241,41 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(km, m.keys.ToggleHist):
 		m.showHistory = !m.showHistory
+		if m.showHistory {
+			m.showCollections = false
+		}
+		// Reset focus if the focused panel just became hidden.
 		if !m.showHistory && m.focus == focusHistory {
+			m.focus = focusURL
+			m.applyFocus()
+		} else if m.showHistory && m.focus == focusCollections {
 			m.focus = focusURL
 			m.applyFocus()
 		}
 		return m, nil
+
+	case key.Matches(km, m.keys.ToggleColl):
+		m.showCollections = !m.showCollections
+		if m.showCollections {
+			m.showHistory = false
+		}
+		// Reset focus if the focused panel just became hidden.
+		if !m.showCollections && m.focus == focusCollections {
+			m.focus = focusURL
+			m.applyFocus()
+		} else if m.showCollections && m.focus == focusHistory {
+			m.focus = focusURL
+			m.applyFocus()
+		}
+		return m, nil
+
+	case key.Matches(km, m.keys.SaveToColl):
+		m.savingToCollection = true
+		return m, m.saveCollInput.Focus()
+
+	case key.Matches(km, m.keys.ImportFile):
+		m.importingFile = true
+		return m, m.importInput.Focus()
 
 	case key.Matches(km, m.keys.SwitchEnv):
 		names := m.env.Names()
@@ -188,6 +311,12 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.statusTick(2 * time.Second)
 
+	case m.focus == focusResponse && m.response.FilterActive() && km.String() == "esc":
+		// Let response handle Esc to close the filter bar rather than quitting.
+		var cmd tea.Cmd
+		m.response, cmd = m.response.Update(km)
+		return m, cmd
+
 	case m.focus == focusResponse && km.String() == "s":
 		// See note above on sendRequest — avoid relying on undefined eval order.
 		cmd := m.saveResponse()
@@ -219,6 +348,8 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusHistory:
 		m.history, cmd = m.history.Update(km)
+	case focusCollections:
+		m.collUI, cmd = m.collUI.Update(km)
 	case focusMethod:
 		m.method, cmd = m.method.Update(km)
 	case focusURL:
@@ -235,4 +366,15 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.response, cmd = m.response.Update(km)
 	}
 	return m, cmd
+}
+
+func expandHome(path string) string {
+	if !strings.HasPrefix(path, "~") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[1:])
 }
