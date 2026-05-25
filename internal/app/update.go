@@ -2,25 +2,24 @@ package app
 
 import (
 	"fmt"
-	"net/url"
-	"runtime"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/google/uuid"
 
-	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
 	"github.com/lea/pollen/internal/settings"
 	"github.com/lea/pollen/internal/ui"
 )
 
+// clearStatusMsg fires when a transient toast should be cleared. The gen
+// field is checked against Model.statusGen so a stale tick (scheduled before
+// a newer setStatus) doesn't wipe the newer message.
+type clearStatusMsg struct{ gen int }
+
 // isTextEditingFocus reports whether the currently focused panel is actively
-// accepting character input (so global single-key shortcuts like `?` should be
-// treated as ordinary input instead of triggering a global action).
+// accepting character input. Used to gate single-letter global shortcuts
+// (currently `u` for undo) so they don't swallow real input.
 func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode bool) bool {
 	switch f {
 	case focusURL, focusQuery, focusAuth, focusHeaders:
@@ -32,22 +31,6 @@ func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode bool) bool 
 	}
 	return false
 }
-
-// clipboardHint returns a platform-specific install suggestion to append to a
-// failed-copy message. atotto/clipboard shells out to xclip/wl-copy on Linux.
-func clipboardHint() string {
-	if runtime.GOOS == "linux" {
-		return " (install xclip or wl-clipboard)"
-	}
-	return ""
-}
-
-type sendResultMsg struct {
-	entry history.Entry
-	gen   int // matches Model.requestGen at the time of dispatch
-}
-
-type clearStatusMsg struct{ gen int }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -252,246 +235,4 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.response, cmd = m.response.Update(km)
 	}
 	return m, cmd
-}
-
-func (m Model) handleEnvSwitcher(km tea.KeyMsg) (tea.Model, tea.Cmd) {
-	names := m.env.Names()
-	switch km.String() {
-	case "up", "k":
-		if m.envSwitcherCursor > 0 {
-			m.envSwitcherCursor--
-		}
-		return m, nil
-	case "down", "j":
-		if m.envSwitcherCursor < len(names)-1 {
-			m.envSwitcherCursor++
-		}
-		return m, nil
-	case "enter":
-		if m.envSwitcherCursor >= 0 && m.envSwitcherCursor < len(names) {
-			chosen := names[m.envSwitcherCursor]
-			if err := m.env.SetCurrent(chosen); err == nil {
-				// Persist the selection so it survives a restart.
-				_ = m.env.Save()
-				m.setStatus(statusOK, "switched to env: "+chosen)
-				m.envSwitcherOpen = false
-				return m, m.statusTick(2 * time.Second)
-			}
-		}
-		m.envSwitcherOpen = false
-		return m, nil
-	case "esc", "q":
-		m.envSwitcherOpen = false
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
-	req := m.currentRequest()
-	switch km.String() {
-	case "c", "C":
-		m.deliverCopy(httpx.ToCurl(req), "cURL")
-	case "f", "F":
-		m.deliverCopy(httpx.ToFetch(req), "fetch")
-	case "esc", "q":
-		// just close
-	default:
-		return m, nil
-	}
-	m.copyMenuOpen = false
-	if m.statusMsg == "" {
-		return m, nil
-	}
-	return m, m.statusTick(2 * time.Second)
-}
-
-func (m Model) currentRequest() history.Request {
-	headers := m.headers.Values()
-	// Build the Authorization header from the Auth panel's raw inputs.
-	// Explicit Headers entries take precedence — we don't override what the
-	// user wrote manually.
-	if authVal := buildAuthFromPanel(m.auth); authVal != "" && !hasHeader(headers, "Authorization") {
-		headers = append(headers, history.Header{Key: "Authorization", Value: authVal})
-	}
-	return history.Request{
-		Method:   m.method.Value(),
-		URL:      composeURL(m.urlBar.Value(), m.query.Values()),
-		Headers:  headers,
-		Body:     m.body.Value(),
-		BodyType: m.body.Type(),
-	}
-}
-
-// buildAuthFromPanel maps the UI Auth panel's selection to an HTTP
-// Authorization header value via httpx.BuildAuthHeader.
-func buildAuthFromPanel(a ui.Auth) string {
-	switch a.Type() {
-	case ui.AuthBearer:
-		return httpx.BuildAuthHeader(httpx.AuthBearer, a.Token(), "", "")
-	case ui.AuthBasic:
-		u, p := a.Credentials()
-		return httpx.BuildAuthHeader(httpx.AuthBasic, "", u, p)
-	}
-	return ""
-}
-
-func hasHeader(headers []history.Header, key string) bool {
-	for _, h := range headers {
-		if strings.EqualFold(h.Key, key) {
-			return true
-		}
-	}
-	return false
-}
-
-// composeURL merges the query parameters from the Query panel into the URL.
-// Uses net/url when the URL is parseable; falls back to plain concatenation
-// when the URL contains `{{var}}` tokens (env expansion happens later).
-func composeURL(rawURL string, params []ui.Param) string {
-	if len(params) == 0 {
-		return rawURL
-	}
-	if !strings.Contains(rawURL, "{{") {
-		if u, err := url.Parse(rawURL); err == nil {
-			q := u.Query()
-			for _, p := range params {
-				q.Add(p.Key, p.Value)
-			}
-			u.RawQuery = q.Encode()
-			return u.String()
-		}
-	}
-	// Fallback: simple concat with proper escaping. {{...}} tokens stay intact.
-	var b strings.Builder
-	b.WriteString(rawURL)
-	sep := "?"
-	if strings.Contains(rawURL, "?") {
-		sep = "&"
-	}
-	for i, p := range params {
-		if i == 0 {
-			b.WriteString(sep)
-		} else {
-			b.WriteString("&")
-		}
-		b.WriteString(url.QueryEscape(p.Key))
-		b.WriteString("=")
-		b.WriteString(url.QueryEscape(p.Value))
-	}
-	return b.String()
-}
-
-func (m *Model) applyEntry(e history.Entry) {
-	m.method.Set(e.Request.Method)
-	urlOnly, params := splitURL(e.Request.URL)
-	m.urlBar.SetValue(urlOnly)
-	m.query.Set(params)
-	// Restored entries already carry Authorization in Headers; reset the Auth
-	// panel so it doesn't double-inject a different value next time.
-	m.auth.Reset()
-	m.headers.Set(e.Request.Headers)
-	m.body.Set(e.Request.BodyType, e.Request.Body)
-	if e.Response != nil {
-		m.response.SetResponse(e.Response, e.Request.URL)
-	} else if e.Error != "" {
-		m.response.SetError(e.Error)
-	}
-}
-
-// splitURL separates a full URL into the URL-without-query and a slice of
-// query parameters, sorted by key for stable display order. If the URL can't
-// be parsed (e.g. it contains {{var}} tokens) the full URL is returned as-is
-// and no params are extracted.
-func splitURL(rawURL string) (string, []ui.Param) {
-	if strings.Contains(rawURL, "{{") {
-		return rawURL, nil
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil || u.RawQuery == "" {
-		return rawURL, nil
-	}
-	values := u.Query()
-	keys := make([]string, 0, len(values))
-	for k := range values {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var params []ui.Param
-	for _, k := range keys {
-		for _, v := range values[k] {
-			params = append(params, ui.Param{Key: k, Value: v})
-		}
-	}
-	u.RawQuery = ""
-	return u.String(), params
-}
-
-// deliverCopy puts `content` on the clipboard, or on disk if clipboard fails,
-// and reports the outcome through statusMsg with appropriate kind.
-func (m *Model) deliverCopy(content, label string) {
-	mode, path, err := copyOrFallback(content)
-	switch {
-	case err != nil:
-		// err means BOTH the system clipboard AND the file fallback failed.
-		// The xclip-install hint isn't useful here — the real problem is
-		// likely disk/permission, so spell that out instead.
-		m.setStatus(statusError, "copy failed (clipboard and file fallback): "+err.Error())
-	case mode == copyClipboard:
-		m.setStatus(statusOK, "copied as "+label)
-	case mode == copyFile:
-		m.setStatus(statusWarn, "clipboard unavailable - wrote "+label+" to "+path+clipboardHint())
-	}
-}
-
-func (m *Model) saveResponse() tea.Cmd {
-	bytes := m.response.CurrentBytes()
-	resp := m.response.CurrentResponse()
-	if len(bytes) == 0 {
-		m.setStatus(statusError, "no body to save")
-		return m.statusTick(2 * time.Second)
-	}
-	// Use the URL of the request that produced this response, NOT m.urlBar
-	// which the user may have edited since the response arrived.
-	dest, err := saveResponseBytes(bytes, resp, m.response.RequestURL())
-	if err != nil {
-		m.setStatus(statusError, "save failed: "+err.Error())
-	} else {
-		m.setStatus(statusOK, "saved to "+dest)
-	}
-	return m.statusTick(2 * time.Second)
-}
-
-func (m *Model) sendRequest() tea.Cmd {
-	req := m.currentRequest()
-	// Expand {{varName}} tokens before sending. Both the actual HTTP request
-	// and the history entry use the expanded form so the user always sees
-	// "what we sent" verbatim. (Trade-off: secrets stored in env leak to
-	// history.json — documented in README.)
-	req.URL = m.env.Expand(req.URL)
-	req.Body = m.env.Expand(req.Body)
-	for i := range req.Headers {
-		req.Headers[i].Value = m.env.Expand(req.Headers[i].Value)
-	}
-	if req.URL == "" {
-		m.response.SetError("URL is empty")
-		return nil
-	}
-	m.response.SetLoading(true)
-	m.requestGen++
-	gen := m.requestGen
-	return func() tea.Msg {
-		entry := history.Entry{
-			ID:        uuid.NewString(),
-			Timestamp: time.Now().UTC(),
-			Request:   req,
-		}
-		resp, err := httpx.Do(req)
-		if err != nil {
-			entry.Error = err.Error()
-		} else {
-			entry.Response = resp
-		}
-		return sendResultMsg{entry: entry, gen: gen}
-	}
 }

@@ -10,9 +10,32 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lea/pollen/internal/history"
 )
+
+// saveResponse writes the current response body to a file in the cwd and
+// reports the outcome through statusMsg.
+func (m *Model) saveResponse() tea.Cmd {
+	bytes := m.response.CurrentBytes()
+	resp := m.response.CurrentResponse()
+	if len(bytes) == 0 {
+		m.setStatus(statusError, "no body to save")
+		return m.statusTick(2 * time.Second)
+	}
+	// Use the URL of the request that produced this response, NOT m.urlBar
+	// which the user may have edited since the response arrived.
+	dest, err := saveResponseBytes(bytes, resp, m.response.RequestURL())
+	if err != nil {
+		m.setStatus(statusError, "save failed: "+err.Error())
+	} else {
+		m.setStatus(statusOK, "saved to "+dest)
+	}
+	return m.statusTick(2 * time.Second)
+}
 
 // saveResponseBytes writes b to a file in the current working directory,
 // picking a name from Content-Disposition / URL / fallback. Returns the path
