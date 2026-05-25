@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -79,6 +81,13 @@ func (r Response) formatBody() string {
 	}
 	if !r.resp.IsBinary {
 		body := r.resp.Body
+		// Pretty-print JSON responses for display only — `s` still saves the
+		// original bytes verbatim (BodyBytes is untouched).
+		if isJSONContentType(r.resp.ContentType) {
+			if pretty, ok := tryPrettyJSON(body); ok {
+				body = pretty
+			}
+		}
 		if len(body) > TextPreviewLimit {
 			// Put the notice at the TOP so the user sees it immediately
 			// rather than after scrolling through ~100KB of preview.
@@ -111,6 +120,22 @@ func (r Response) binaryHeader() string {
 	line2 := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).
 		Render("  press 's' to save to file")
 	return line1 + "\n" + line2
+}
+
+// tryPrettyJSON returns a 2-space-indented re-rendering of s, or (s,false) if
+// the input isn't valid JSON.
+func tryPrettyJSON(s string) (string, bool) {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, []byte(s), "", "  "); err != nil {
+		return s, false
+	}
+	return buf.String(), true
+}
+
+// isJSONContentType matches `application/json` and any subtype with a
+// `+json` structured-syntax suffix (RFC 6839), e.g. `application/vnd.api+json`.
+func isJSONContentType(ct string) bool {
+	return ct == "application/json" || strings.HasSuffix(ct, "+json")
 }
 
 // CurrentBytes returns the raw response body for the currently displayed
