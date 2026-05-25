@@ -10,6 +10,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 type Settings struct {
@@ -58,9 +60,5 @@ func (s *Settings) Save() error {
 }
 
 func defaultPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "pollen", "settings.json"), nil
+	return userconfig.Path("settings.json")
 }

@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 const (
@@ -46,11 +48,7 @@ func Open() (*Store, error) {
 }
 
 func defaultPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "pollen", "history.json"), nil
+	return userconfig.Path("history.json")
 }
 
 func (s *Store) Entries() []Entry {

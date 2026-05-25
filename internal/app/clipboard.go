@@ -2,9 +2,10 @@ package app
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/atotto/clipboard"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 // CopyMode reports how content was delivered to the user.
@@ -26,15 +27,17 @@ func copyOrFallback(content string) (mode copyMode, path string, err error) {
 		_ = cbErr
 	}
 
-	dir, err := os.UserConfigDir()
+	fallback, err := userconfig.Path("clipboard.txt")
 	if err != nil {
 		return 0, "", err
 	}
-	fallbackDir := filepath.Join(dir, "pollen")
-	if err := os.MkdirAll(fallbackDir, 0o755); err != nil {
+	dir, err := userconfig.Dir()
+	if err != nil {
 		return 0, "", err
 	}
-	fallback := filepath.Join(fallbackDir, "clipboard.txt")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return 0, "", err
+	}
 	if err := os.WriteFile(fallback, []byte(content), 0o644); err != nil {
 		return 0, "", err
 	}

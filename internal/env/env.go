@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 const defaultEnvName = "default"
@@ -159,9 +161,5 @@ func Path() string {
 }
 
 func defaultPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "pollen", "env.json"), nil
+	return userconfig.Path("env.json")
 }
