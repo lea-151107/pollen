@@ -61,6 +61,20 @@ type Model struct {
 	savingToCollection bool
 	saveCollInput      textinput.Model
 
+	// collUpdatePromptOpen is true when the user pressed Ctrl+B after loading
+	// a collection entry — prompts to update in-place or save as new.
+	collUpdatePromptOpen bool
+	collUpdateTargetID   string
+	collUpdateTargetName string
+
+	// lastLoadedCollID tracks the last collection entry that was loaded into the
+	// editor via Enter. Used to offer update-in-place when Ctrl+B is pressed.
+	lastLoadedCollID string
+
+	renamingColl   bool
+	renameInput    textinput.Model
+	renameTargetID string
+
 	importingFile bool
 	importInput   textinput.Model
 
@@ -97,37 +111,62 @@ const (
 	statusError
 )
 
-func New(store *history.Store, collStore *collections.Store, e *env.Env) Model {
+// Options carries optional startup configuration passed from main.
+type Options struct {
+	// StartCollection opens the collections sidebar at startup and pre-filters
+	// it by this name (mirrors the --collection CLI flag).
+	StartCollection string
+}
+
+func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Options) Model {
 	if e == nil {
 		e = env.New()
 	}
 	saveInput := textinput.New()
 	saveInput.Placeholder = "collection name"
 	saveInput.CharLimit = 80
+	renameInput := textinput.New()
+	renameInput.Placeholder = "new name"
+	renameInput.CharLimit = 80
 	importInput := textinput.New()
 	importInput.Placeholder = "~/projects/api/openapi.yaml"
 	importInput.CharLimit = 512
+
+	showHistory := true
+	showCollections := false
+	focus := focusURL
+	if opts.StartCollection != "" {
+		showHistory = false
+		showCollections = true
+		focus = focusCollections
+	}
+
 	m := Model{
-		keys:        DefaultKeyMap(),
-		store:       store,
-		collStore:   collStore,
-		env:         e,
-		method:      ui.NewMethod(),
-		urlBar:      ui.NewURLBar(),
-		query:       ui.NewQuery(),
-		auth:        ui.NewAuth(),
-		headers:     ui.NewHeaders(),
-		body:        ui.NewBody(),
-		response:    ui.NewResponse(),
-		history:     ui.NewHistory(),
-		collUI:      ui.NewCollections(),
-		focus:       focusURL,
-		showHistory: true,
-		saveCollInput: saveInput,
-		importInput:   importInput,
+		keys:            DefaultKeyMap(),
+		store:           store,
+		collStore:       collStore,
+		env:             e,
+		method:          ui.NewMethod(),
+		urlBar:          ui.NewURLBar(),
+		query:           ui.NewQuery(),
+		auth:            ui.NewAuth(),
+		headers:         ui.NewHeaders(),
+		body:            ui.NewBody(),
+		response:        ui.NewResponse(),
+		history:         ui.NewHistory(),
+		collUI:          ui.NewCollections(),
+		focus:           focus,
+		showHistory:     showHistory,
+		showCollections: showCollections,
+		saveCollInput:   saveInput,
+		renameInput:     renameInput,
+		importInput:     importInput,
 	}
 	m.history.SetEntries(store.Entries())
 	m.collUI.SetEntries(collStore.Entries())
+	if opts.StartCollection != "" {
+		m.collUI.SetFilter(opts.StartCollection)
+	}
 	// Seed view-visible TLS state from the httpx global (loaded by main.go).
 	m.tlsInsecure = httpx.SkipTLSVerify.Load()
 	m.applyFocus()

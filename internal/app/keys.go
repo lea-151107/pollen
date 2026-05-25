@@ -83,6 +83,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 		{Title: "Collections", Items: []HelpItem{
 			{Keys: "↑/↓", Desc: "Move"},
 			{Keys: "Enter", Desc: "Load entry"},
+			{Keys: "e", Desc: "Rename entry"},
 			{Keys: "d", Desc: "Delete entry"},
 			{Keys: "/", Desc: "Filter (Esc clears)"},
 		}},
@@ -115,6 +116,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
 			{Keys: "s", Desc: "Save response"},
 			{Keys: "/", Desc: "jq filter"},
+			{Keys: "D", Desc: "Toggle diff vs previous"},
 		}},
 		{Title: "Chaining", Items: []HelpItem{
 			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},

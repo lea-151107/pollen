@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-25
+
+### Added
+
+- **Filter match highlighting**: History and Collections panels now bold+underline
+  the matching substring in each filtered row, making it easy to spot why an entry
+  was included
+- **Collection rename** (`e` key in Collections panel): opens a dialog pre-filled
+  with the current name; Enter saves, Esc cancels
+- **Collection update-in-place** (Ctrl+B after loading an entry): prompts to update
+  the loaded entry with the current request (Enter) or save as a new entry (n)
+- **Response diff** (`D` in Response panel): toggles a character-level diff of the
+  previous response body against the current one — additions in green, deletions in
+  red strikethrough. Stays active across successive sends. Requires 2+ responses
+- **CLI startup flags**:
+  - `--config <dir>` — use an alternate config directory instead of `~/.config/pollen`
+  - `--env <name>` — activate the named environment at startup
+  - `--collection <name>` — open the Collections sidebar pre-filtered by name
+
+### Fixed
+
+- Toggling response diff OFF while a jq filter was locked now correctly restores
+  the filtered view instead of showing the full body
+- Collection name column color no longer resets after a highlighted filter match
+  (was caused by ANSI nesting; fixed by per-segment styling)
+- `lastLoadedCollID` is now cleared after "save as new", preventing a stale update
+  prompt on the next Ctrl+B press
+
+[0.4.0]: https://github.com/lea-151107/pollen/releases/tag/v0.4.0
+
 ## [0.3.0] - 2026-05-25
 
 ### Added

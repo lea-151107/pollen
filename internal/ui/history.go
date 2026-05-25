@@ -228,7 +228,7 @@ func (h History) View(width, height int) string {
 	innerWidth := inner - 2 // -2 padding
 	for i := start; i < end; i++ {
 		selected := h.focused && i == h.selected
-		lines = append(lines, renderHistoryRow(entries[i], innerWidth, selected))
+		lines = append(lines, renderHistoryRow(entries[i], innerWidth, selected, h.filter))
 	}
 	return border.Render(joinLines(lines))
 }
@@ -248,7 +248,9 @@ func renderFilterLine(filter string, editing bool) string {
 
 // renderHistoryRow lays out "STAT METH URL ... TIME" within width chars.
 // Sections drop in order time → status when space gets tight.
-func renderHistoryRow(e history.Entry, width int, selected bool) string {
+// When filter is non-empty and the row is not selected, the matching substring
+// is highlighted in the URL column.
+func renderHistoryRow(e history.Entry, width int, selected bool, filter string) string {
 	if width <= 0 {
 		return ""
 	}
@@ -261,14 +263,11 @@ func renderHistoryRow(e history.Entry, width int, selected bool) string {
 	timeStr := formatRelative(e.Timestamp)
 
 	// Try full layout: "STA METH   URL...   TIME"
-	// "STA" (3) + " " + "METH" (left-padded to 6) + " " + URL... + " " + TIME
-	const sep = "  "
 	statW := 3
 	methW := 6
 	timeW := len(timeStr)
 
 	const minURLW = 8
-	// All sections fit?
 	full := statW + 1 + methW + 1 + minURLW + 1 + timeW
 	noTime := statW + 1 + methW + 1 + minURLW
 	noStatus := methW + 1 + minURLW
@@ -276,32 +275,34 @@ func renderHistoryRow(e history.Entry, width int, selected bool) string {
 	switch {
 	case width >= full:
 		urlSpace := width - statW - 1 - methW - 1 - timeW - 1
-		urlPadded := padRight(truncate(url, urlSpace), urlSpace)
-		raw := fmt.Sprintf("%s %-6s %s %s", status, method, urlPadded, timeStr)
+		urlTrunc := truncate(url, urlSpace)
+		raw := fmt.Sprintf("%s %-6s %s %s", status, method, padRight(urlTrunc, urlSpace), timeStr)
 		if selected {
 			return selectedStyle().Render(raw)
 		}
-		// Colorize only the status badge; rest is default.
 		statusStyled := lipgloss.NewStyle().Foreground(statusColor).Render(status)
 		timeStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(timeStr)
-		return fmt.Sprintf("%s %-6s %s %s", statusStyled, method, urlPadded, timeStyled)
+		urlPart := padRightANSI(highlightMatch(urlTrunc, filter), urlSpace)
+		return fmt.Sprintf("%s %-6s %s %s", statusStyled, method, urlPart, timeStyled)
 
 	case width >= noTime:
 		urlSpace := width - statW - 1 - methW - 1
-		raw := fmt.Sprintf("%s %-6s %s", status, method, truncate(url, urlSpace))
+		urlTrunc := truncate(url, urlSpace)
+		raw := fmt.Sprintf("%s %-6s %s", status, method, urlTrunc)
 		if selected {
 			return selectedStyle().Render(padRight(raw, width))
 		}
 		statusStyled := lipgloss.NewStyle().Foreground(statusColor).Render(status)
-		return fmt.Sprintf("%s %-6s %s", statusStyled, method, truncate(url, urlSpace))
+		return fmt.Sprintf("%s %-6s %s", statusStyled, method, highlightMatch(urlTrunc, filter))
 
 	case width >= noStatus:
 		urlSpace := width - methW - 1
-		raw := fmt.Sprintf("%-6s %s", method, truncate(url, urlSpace))
+		urlTrunc := truncate(url, urlSpace)
+		raw := fmt.Sprintf("%-6s %s", method, urlTrunc)
 		if selected {
 			return selectedStyle().Render(padRight(raw, width))
 		}
-		return raw
+		return fmt.Sprintf("%-6s %s", method, highlightMatch(urlTrunc, filter))
 
 	default:
 		raw := truncate(method+" "+url, width)
@@ -357,6 +358,58 @@ func formatRelative(t time.Time) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
+}
+
+// highlightMatchColored applies color to each segment (before/match/after) of
+// text individually, so the base color is never lost due to ANSI nesting. The
+// match segment additionally gets Bold+Underline. The result is padded to padW
+// visible columns using rune count.
+func highlightMatchColored(text string, padW int, needle string, color lipgloss.Color) string {
+	base := lipgloss.NewStyle().Foreground(color)
+	textRunes := len([]rune(text))
+	pad := ""
+	if padW > textRunes {
+		pad = strings.Repeat(" ", padW-textRunes)
+	}
+	if needle == "" {
+		return base.Render(text + pad)
+	}
+	lower := strings.ToLower(text)
+	idx := strings.Index(lower, strings.ToLower(needle))
+	if idx < 0 {
+		return base.Render(text + pad)
+	}
+	before := text[:idx]
+	match := text[idx : idx+len(needle)]
+	after := text[idx+len(needle):]
+	return base.Render(before) + base.Bold(true).Underline(true).Render(match) + base.Render(after+pad)
+}
+
+// highlightMatch wraps the first case-insensitive occurrence of needle in bold
+// underline. Returns text unchanged when needle is empty or not found.
+func highlightMatch(text, needle string) string {
+	if needle == "" {
+		return text
+	}
+	lower := strings.ToLower(text)
+	idx := strings.Index(lower, strings.ToLower(needle))
+	if idx < 0 {
+		return text
+	}
+	before := text[:idx]
+	match := text[idx : idx+len(needle)]
+	after := text[idx+len(needle):]
+	return before + lipgloss.NewStyle().Bold(true).Underline(true).Render(match) + after
+}
+
+// padRightANSI pads s to at least w visible columns, using lipgloss.Width to
+// measure correctly even when s contains ANSI escape codes.
+func padRightANSI(s string, w int) string {
+	vis := lipgloss.Width(s)
+	if vis >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-vis)
 }
 
 func padRight(s string, w int) string {

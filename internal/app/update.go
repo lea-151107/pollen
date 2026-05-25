@@ -78,9 +78,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ui.CollectionSelectMsg:
 		m.applyEntry(history.Entry{Request: msg.Entry.Request})
+		m.lastLoadedCollID = msg.Entry.ID
 		m.focus = focusURL
 		m.applyFocus()
 		return m, nil
+
+	case ui.CollectionRenameMsg:
+		idx := m.collStore.IndexOf(msg.ID)
+		if idx < 0 {
+			return m, nil
+		}
+		m.renameTargetID = msg.ID
+		m.renameInput.SetValue(m.collStore.Entries()[idx].Name)
+		m.renamingColl = true
+		return m, m.renameInput.Focus()
 
 	case ui.CollectionDeleteMsg:
 		idx := m.collStore.IndexOf(msg.ID)
@@ -130,6 +141,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Rename-collection dialog.
+	if m.renamingColl {
+		switch km.String() {
+		case "esc":
+			m.renamingColl = false
+			m.renameInput.SetValue("")
+			m.renameInput.Blur()
+			m.renameTargetID = ""
+		case "enter":
+			name := m.renameInput.Value()
+			if name == "" {
+				name = "Untitled"
+			}
+			if m.collStore.Rename(m.renameTargetID, name) {
+				_ = m.collStore.Save()
+				m.collUI.SetEntries(m.collStore.Entries())
+				m.setStatus(statusOK, fmt.Sprintf("renamed to: %s", name))
+			}
+			m.renamingColl = false
+			m.renameInput.SetValue("")
+			m.renameInput.Blur()
+			m.renameTargetID = ""
+			return m, m.statusTick(2 * time.Second)
+		default:
+			var cmd tea.Cmd
+			m.renameInput, cmd = m.renameInput.Update(km)
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	// Update-collection prompt (shown when Ctrl+B is pressed after loading a
+	// collection entry).
+	if m.collUpdatePromptOpen {
+		switch km.String() {
+		case "enter":
+			req := m.currentRequest()
+			if m.collStore.UpdateRequest(m.collUpdateTargetID, req) {
+				_ = m.collStore.Save()
+				m.collUI.SetEntries(m.collStore.Entries())
+				m.setStatus(statusOK, fmt.Sprintf("updated: %s", m.collUpdateTargetName))
+			}
+			m.collUpdatePromptOpen = false
+			m.lastLoadedCollID = ""
+			return m, m.statusTick(2 * time.Second)
+		case "n":
+			m.collUpdatePromptOpen = false
+			m.savingToCollection = true
+			return m, m.saveCollInput.Focus()
+		case "esc":
+			m.collUpdatePromptOpen = false
+		}
+		return m, nil
+	}
+
 	// Import-file dialog intercepts all input before other overlays.
 	if m.importingFile {
 		switch km.String() {
@@ -185,6 +251,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.savingToCollection = false
 			m.saveCollInput.SetValue("")
 			m.saveCollInput.Blur()
+			m.lastLoadedCollID = ""
 			m.setStatus(statusOK, fmt.Sprintf("saved to collection: %s", name))
 			return m, m.statusTick(2 * time.Second)
 		default:
@@ -270,6 +337,15 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(km, m.keys.SaveToColl):
+		if m.lastLoadedCollID != "" {
+			idx := m.collStore.IndexOf(m.lastLoadedCollID)
+			if idx >= 0 {
+				m.collUpdateTargetID = m.lastLoadedCollID
+				m.collUpdateTargetName = m.collStore.Entries()[idx].Name
+				m.collUpdatePromptOpen = true
+				return m, nil
+			}
+		}
 		m.savingToCollection = true
 		return m, m.saveCollInput.Focus()
 
