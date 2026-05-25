@@ -49,7 +49,7 @@ func (r *Response) SetResponse(resp *history.Response, reqURL string) {
 	r.err = ""
 	r.loading = false
 	r.resetFilter()
-	if r.diffMode && r.prevResp != nil {
+	if r.diffMode && r.prevResp != nil && !r.resp.IsBinary && !r.prevResp.IsBinary {
 		r.diffBody = r.computeDiff()
 		r.vp.SetContent(r.diffBody)
 	} else {

@@ -229,9 +229,13 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 		bodyType = history.BodyRaw
 	}
 
+	name := item.Name
+	if name == "" {
+		name = method + " " + req.URL.Raw
+	}
 	return collections.Entry{
 		ID:   uuid.NewString(),
-		Name: item.Name,
+		Name: name,
 		Request: history.Request{
 			Method:   method,
 			URL:      req.URL.Raw,

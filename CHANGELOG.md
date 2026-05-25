@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-05-25
+
+### Fixed
+
+- **Response diff auto-exit on binary**: diff mode now turns off when a
+  binary response arrives, instead of showing a spurious "everything deleted"
+  diff with the `[diff]` badge still visible
+- **Postman import unnamed entries**: items with an empty `name` field now
+  fall back to `"METHOD URL"`, matching the OpenAPI importer's behaviour
+- **Store atomic write**: `history.json` and `collections.json` now clean up
+  the `.tmp` file when `os.Rename` fails, preventing temp file accumulation
+
+[0.4.2]: https://github.com/lea-151107/pollen/releases/tag/v0.4.2
+
 ## [0.4.1] - 2026-05-25
 
 ### Fixed
