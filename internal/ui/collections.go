@@ -56,6 +56,12 @@ func (c Collections) Selected() *collections.Entry {
 	return &fe[c.selected]
 }
 
+// SetFilter pre-sets the filter text (used at startup for --collection flag).
+func (c *Collections) SetFilter(f string) {
+	c.filter = f
+	c.selected = 0
+}
+
 func (c *Collections) Focus() { c.focused = true }
 func (c *Collections) Blur() {
 	c.focused = false
@@ -66,6 +72,7 @@ func (c Collections) InFilterMode() bool { return c.filterMode }
 
 type CollectionSelectMsg struct{ Entry collections.Entry }
 type CollectionDeleteMsg struct{ ID string }
+type CollectionRenameMsg struct{ ID string }
 
 func (c Collections) Update(msg tea.Msg) (Collections, tea.Cmd) {
 	if !c.focused {
@@ -122,6 +129,11 @@ func (c Collections) Update(msg tea.Msg) (Collections, tea.Cmd) {
 		if e := c.Selected(); e != nil {
 			id := e.ID
 			return c, func() tea.Msg { return CollectionDeleteMsg{ID: id} }
+		}
+	case km.String() == "e":
+		if e := c.Selected(); e != nil {
+			id := e.ID
+			return c, func() tea.Msg { return CollectionRenameMsg{ID: id} }
 		}
 	}
 	return c, nil
@@ -194,12 +206,15 @@ func (c Collections) View(width, height int) string {
 	innerWidth := inner - 2
 	for i := start; i < end; i++ {
 		selected := c.focused && i == c.selected
-		lines = append(lines, renderCollectionRow(entries[i], innerWidth, selected))
+		lines = append(lines, renderCollectionRow(entries[i], innerWidth, selected, c.filter))
 	}
 	return border.Render(joinLines(lines))
 }
 
-func renderCollectionRow(e collections.Entry, width int, selected bool) string {
+// renderCollectionRow lays out "NAME  METH  URL..." within width chars.
+// When filter is non-empty and the row is not selected, matching substrings are
+// highlighted in the name and URL columns.
+func renderCollectionRow(e collections.Entry, width int, selected bool, filter string) string {
 	if width <= 0 {
 		return ""
 	}
@@ -210,7 +225,6 @@ func renderCollectionRow(e collections.Entry, width int, selected bool) string {
 	}
 	url := e.Request.URL
 
-	// Layout: "NAME  METH  URL..."
 	const minNameW = 6
 	methW := 6
 
@@ -223,15 +237,14 @@ func renderCollectionRow(e collections.Entry, width int, selected bool) string {
 		urlSpace = 4
 	}
 
-	namePart := truncate(name, nameW)
-	namePadded := padRight(namePart, nameW)
-	urlPart := truncate(url, urlSpace)
+	nameTrunc := truncate(name, nameW)
+	urlTrunc := truncate(url, urlSpace)
 
-	raw := namePadded + " " + padRight(method, methW) + " " + urlPart
+	raw := padRight(nameTrunc, nameW) + " " + padRight(method, methW) + " " + urlTrunc
 	if selected {
 		return selectedStyle().Render(padRight(raw, width))
 	}
-	nameStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("44")).Render(namePadded)
+	nameStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("44")).Render(padRightANSI(highlightMatch(nameTrunc, filter), nameW))
 	methStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(padRight(method, methW))
-	return nameStyled + " " + methStyled + " " + urlPart
+	return nameStyled + " " + methStyled + " " + highlightMatch(urlTrunc, filter)
 }
