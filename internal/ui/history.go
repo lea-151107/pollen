@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -12,9 +13,11 @@ import (
 )
 
 type History struct {
-	entries  []history.Entry
-	selected int
-	focused  bool
+	entries    []history.Entry
+	selected   int // index in the filtered view
+	focused    bool
+	filter     string // empty = no filter
+	filterMode bool   // true while the user is typing in the filter
 }
 
 func NewHistory() History {
@@ -23,23 +26,43 @@ func NewHistory() History {
 
 func (h *History) SetEntries(entries []history.Entry) {
 	h.entries = entries
+	fe := h.filtered()
 	switch {
-	case len(entries) == 0:
+	case len(fe) == 0:
 		h.selected = 0
-	case h.selected >= len(entries):
+	case h.selected >= len(fe):
 		// Cursor was on the last row that just got deleted — keep it on the
 		// new last row instead of jumping to the top.
-		h.selected = len(entries) - 1
+		h.selected = len(fe) - 1
 	case h.selected < 0:
 		h.selected = 0
 	}
 }
 
+// filtered returns the entries matching the current filter (or all entries
+// when the filter is empty). Matching is case-insensitive against
+// "METHOD URL".
+func (h History) filtered() []history.Entry {
+	if h.filter == "" {
+		return h.entries
+	}
+	needle := strings.ToLower(h.filter)
+	var out []history.Entry
+	for _, e := range h.entries {
+		hay := strings.ToLower(e.Request.Method + " " + e.Request.URL)
+		if strings.Contains(hay, needle) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func (h History) Selected() *history.Entry {
-	if h.selected < 0 || h.selected >= len(h.entries) {
+	fe := h.filtered()
+	if h.selected < 0 || h.selected >= len(fe) {
 		return nil
 	}
-	return &h.entries[h.selected]
+	return &fe[h.selected]
 }
 
 func (h History) SelectedIndex() int { return h.selected }
@@ -54,12 +77,21 @@ func (h *History) Shift(delta int) {
 	}
 }
 
-func (h *History) Focus()       { h.focused = true }
-func (h *History) Blur()        { h.focused = false }
+func (h *History) Focus() { h.focused = true }
+func (h *History) Blur() {
+	h.focused = false
+	h.filterMode = false
+	// Note: keep `filter` so the same view comes back when the user returns.
+}
 func (h History) Focused() bool { return h.focused }
 
+// InFilterMode reports whether the user is currently typing a filter. Used
+// by the parent model so the global `?` shortcut treats characters like
+// "?" as filter input instead of opening help.
+func (h History) InFilterMode() bool { return h.filterMode }
+
 type HistorySelectMsg struct{ Entry history.Entry }
-type HistoryDeleteMsg struct{ Index int }
+type HistoryDeleteMsg struct{ ID string }
 
 func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 	if !h.focused {
@@ -69,13 +101,48 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 	if !ok {
 		return h, nil
 	}
+
+	if h.filterMode {
+		switch km.String() {
+		case "esc":
+			// Esc: drop the filter entirely and exit filter mode.
+			h.filterMode = false
+			h.filter = ""
+			h.selected = 0
+		case "enter":
+			// Enter: keep the filter, leave editing mode.
+			h.filterMode = false
+		case "backspace", "ctrl+h":
+			if len(h.filter) > 0 {
+				h.filter = h.filter[:len(h.filter)-1]
+				h.selected = 0
+			}
+		default:
+			// Append printable ASCII (plus utf-8 runes via km.String()).
+			s := km.String()
+			if len(s) >= 1 && s[0] >= ' ' && s != "tab" {
+				h.filter += s
+				h.selected = 0
+			}
+		}
+		return h, nil
+	}
+
 	switch {
+	case km.String() == "/":
+		h.filterMode = true
+		return h, nil
+	case km.String() == "esc" && h.filter != "":
+		// Outside filter mode, Esc still clears an active filter.
+		h.filter = ""
+		h.selected = 0
+		return h, nil
 	case key.Matches(km, key.NewBinding(key.WithKeys("up", "k"))):
 		if h.selected > 0 {
 			h.selected--
 		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("down", "j"))):
-		if h.selected < len(h.entries)-1 {
+		if h.selected < len(h.filtered())-1 {
 			h.selected++
 		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("enter"))):
@@ -84,9 +151,9 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 			return h, func() tea.Msg { return HistorySelectMsg{Entry: entry} }
 		}
 	case km.String() == "d":
-		if h.Selected() != nil {
-			idx := h.selected
-			return h, func() tea.Msg { return HistoryDeleteMsg{Index: idx} }
+		if e := h.Selected(); e != nil {
+			id := e.ID
+			return h, func() tea.Msg { return HistoryDeleteMsg{ID: id} }
 		}
 	}
 	return h, nil
@@ -113,12 +180,33 @@ func (h History) View(width, height int) string {
 	}
 
 	title := lipgloss.NewStyle().Bold(true).Render("History")
-	if len(h.entries) == 0 {
-		empty := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("(no entries)")
-		return border.Render(title + "\n" + empty)
+
+	// Optional filter line right under the title.
+	filterLine := ""
+	titleH := 1
+	if h.filterMode || h.filter != "" {
+		filterLine = renderFilterLine(h.filter, h.filterMode)
+		titleH = 2
 	}
 
-	maxRows := innerH - 1 // -1 for title
+	entries := h.filtered()
+	if len(entries) == 0 {
+		var msg string
+		if h.filter != "" {
+			msg = "(no matches)"
+		} else {
+			msg = "(no entries)"
+		}
+		empty := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(msg)
+		out := title
+		if filterLine != "" {
+			out += "\n" + filterLine
+		}
+		out += "\n" + empty
+		return border.Render(out)
+	}
+
+	maxRows := innerH - titleH
 	if maxRows < 1 {
 		maxRows = 1
 	}
@@ -128,18 +216,34 @@ func (h History) View(width, height int) string {
 		start = h.selected - maxRows + 1
 	}
 	end := start + maxRows
-	if end > len(h.entries) {
-		end = len(h.entries)
+	if end > len(entries) {
+		end = len(entries)
 	}
 
 	var lines []string
 	lines = append(lines, title)
+	if filterLine != "" {
+		lines = append(lines, filterLine)
+	}
 	innerWidth := inner - 2 // -2 padding
 	for i := start; i < end; i++ {
 		selected := h.focused && i == h.selected
-		lines = append(lines, renderHistoryRow(h.entries[i], innerWidth, selected))
+		lines = append(lines, renderHistoryRow(entries[i], innerWidth, selected))
 	}
 	return border.Render(joinLines(lines))
+}
+
+func renderFilterLine(filter string, editing bool) string {
+	prefix := "/"
+	color := lipgloss.Color("244")
+	if editing {
+		color = lipgloss.Color("205")
+	}
+	cursor := ""
+	if editing {
+		cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("█")
+	}
+	return lipgloss.NewStyle().Foreground(color).Render(prefix+filter) + cursor
 }
 
 // renderHistoryRow lays out "STAT METH URL ... TIME" within width chars.

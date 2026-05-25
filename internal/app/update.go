@@ -21,12 +21,14 @@ import (
 // isTextEditingFocus reports whether the currently focused panel is actively
 // accepting character input (so global single-key shortcuts like `?` should be
 // treated as ordinary input instead of triggering a global action).
-func isTextEditingFocus(f focusArea, bodyInEditor bool) bool {
+func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode bool) bool {
 	switch f {
 	case focusURL, focusQuery, focusAuth, focusHeaders:
 		return true
 	case focusBody:
 		return bodyInEditor
+	case focusHistory:
+		return historyFilterMode
 	}
 	return false
 }
@@ -83,19 +85,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ui.HistoryDeleteMsg:
-		entries := m.store.Entries()
-		if msg.Index < 0 || msg.Index >= len(entries) {
+		// Look up by ID so the operation works regardless of any active
+		// history filter (the filter shifts UI indices but not store indices).
+		idx := m.store.IndexOf(msg.ID)
+		if idx < 0 {
 			return m, nil
 		}
-		// Snapshot before delete so `u` can restore it.
-		snapshot := entries[msg.Index]
-		if !m.store.DeleteAt(msg.Index) {
+		snapshot := m.store.Entries()[idx]
+		if !m.store.DeleteAt(idx) {
 			return m, nil
 		}
 		_ = m.store.Save()
 		m.history.SetEntries(m.store.Entries())
 		m.setStatus(statusOK, "deleted (u to undo)")
-		m.pendingUndo = &pendingUndo{entry: snapshot, index: msg.Index, gen: m.statusGen}
+		m.pendingUndo = &pendingUndo{entry: snapshot, index: idx, gen: m.statusGen}
 		return m, m.statusTick(5 * time.Second)
 
 	case clearStatusMsg:
@@ -134,11 +137,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case m.envSwitcherOpen:
 		return m.handleEnvSwitcher(km)
 
-	case km.String() == "?" && !isTextEditingFocus(m.focus, m.body.InEditorMode()):
+	case km.String() == "?" && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode()):
 		m.helpOpen = true
 		return m, nil
 
-	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode()):
+	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode()):
 		u := m.pendingUndo
 		m.store.InsertAt(u.index, u.entry)
 		_ = m.store.Save()

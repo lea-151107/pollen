@@ -64,6 +64,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "↑/↓", Desc: "Move"},
 			{Keys: "Enter", Desc: "Load entry"},
 			{Keys: "d", Desc: "Delete entry"},
+			{Keys: "/", Desc: "Filter (Esc clears)"},
 		}},
 		{Title: "Method", Items: []HelpItem{
 			{Keys: "↑/↓", Desc: "Cycle methods"},

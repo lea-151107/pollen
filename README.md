@@ -45,7 +45,7 @@ Press `?` inside the app for the full list at any time.
 
 ### Panel-specific
 
-- **History**: `↑/↓` move · `Enter` load entry · `d` delete
+- **History**: `↑/↓` move · `Enter` load entry · `d` delete · `/` filter (Esc clears)
 - **Method**: `↑/↓` cycle methods
 - **Query**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row
 - **Auth**: `←/→` switch type (None/Bearer/Basic) · `Enter/↓` edit fields · `Esc/↑` back

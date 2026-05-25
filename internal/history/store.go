@@ -75,6 +75,16 @@ func (s *Store) DeleteAt(i int) bool {
 	return true
 }
 
+// IndexOf returns the index of the entry with the given ID, or -1 if not found.
+func (s *Store) IndexOf(id string) int {
+	for i, e := range s.entries {
+		if e.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // InsertAt inserts e at position i. Indices outside [0,len] are clamped so an
 // out-of-range insert appends instead of erroring.
 func (s *Store) InsertAt(i int, e Entry) {
