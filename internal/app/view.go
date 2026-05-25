@@ -68,10 +68,12 @@ func (m Model) renderMain(width, height int) string {
 	requestLine := lipgloss.JoinHorizontal(lipgloss.Top, methodView, " ", urlView)
 
 	queryView := m.query.View(width)
+	authView := m.auth.View(width)
 	headersView := m.headers.View(width)
 
 	// Compute remaining space: split between body and response.
-	used := lipgloss.Height(requestLine) + lipgloss.Height(queryView) + lipgloss.Height(headersView)
+	used := lipgloss.Height(requestLine) + lipgloss.Height(queryView) +
+		lipgloss.Height(authView) + lipgloss.Height(headersView)
 	remaining := height - used
 	if remaining < 6 {
 		remaining = 6
@@ -88,7 +90,7 @@ func (m Model) renderMain(width, height int) string {
 	bodyView := m.body.View(width, bodyH)
 	respView := m.response.View(width, respH)
 
-	return lipgloss.JoinVertical(lipgloss.Left, requestLine, queryView, headersView, bodyView, respView)
+	return lipgloss.JoinVertical(lipgloss.Left, requestLine, queryView, authView, headersView, bodyView, respView)
 }
 
 func (m Model) renderStatusBar() string {

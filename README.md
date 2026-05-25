@@ -48,9 +48,29 @@ Press `?` inside the app for the full list at any time.
 - **History**: `↑/↓` move · `Enter` load entry · `d` delete
 - **Method**: `↑/↓` cycle methods
 - **Query**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row
+- **Auth**: `←/→` switch type (None/Bearer/Basic) · `Enter/↓` edit fields · `Esc/↑` back
 - **Headers**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row · `Tab` accept suggestion
 - **Body**: `←/→` switch tab · `Enter` enter editor · `Tab` indent (2 spaces) · `Esc` leave editor
 - **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file
+
+## Authentication
+
+The **Auth** panel between Query and Headers offers three modes:
+
+- **None**: no Authorization header is added
+- **Bearer**: enter a token; the request gets `Authorization: Bearer <token>`
+- **Basic**: enter username/password; the request gets
+  `Authorization: Basic <base64(user:pass)>` (password input is masked)
+
+Use `←/→` on the type-selector row to switch modes, then `Enter`/`↓` to drop
+into the fields. `Esc` or `↑` returns to the type selector.
+
+If the **Headers** panel already contains an explicit `Authorization` entry,
+the Auth panel does **not** override it — your manual value wins.
+
+Auth state is **session-only**: it's not stored in `~/.config/pollen/`, and
+loading a history entry resets the panel to None (Authorization remains in
+the restored Headers, so the request still works).
 
 ## Query parameters
 

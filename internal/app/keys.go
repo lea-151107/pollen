@@ -73,6 +73,11 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Enter", Desc: "New row"},
 			{Keys: "Ctrl+D", Desc: "Delete row"},
 		}},
+		{Title: "Auth", Items: []HelpItem{
+			{Keys: "←/→", Desc: "Select type (None/Bearer/Basic)"},
+			{Keys: "Enter/↓", Desc: "Edit fields"},
+			{Keys: "Esc/↑", Desc: "Back to type selector"},
+		}},
 		{Title: "Headers", Items: []HelpItem{
 			{Keys: "↑/↓ ←/→", Desc: "Navigate rows / fields"},
 			{Keys: "Enter", Desc: "New row"},

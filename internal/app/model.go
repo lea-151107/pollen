@@ -17,13 +17,14 @@ const (
 	focusMethod
 	focusURL
 	focusQuery
+	focusAuth
 	focusHeaders
 	focusBody
 	focusResponse
 )
 
 var focusOrder = []focusArea{
-	focusHistory, focusMethod, focusURL, focusQuery, focusHeaders, focusBody, focusResponse,
+	focusHistory, focusMethod, focusURL, focusQuery, focusAuth, focusHeaders, focusBody, focusResponse,
 }
 
 type Model struct {
@@ -34,6 +35,7 @@ type Model struct {
 	method   ui.Method
 	urlBar   ui.URLBar
 	query    ui.Query
+	auth     ui.Auth
 	headers  ui.Headers
 	body     ui.Body
 	response ui.Response
@@ -89,6 +91,7 @@ func New(store *history.Store, e *env.Env) Model {
 		method:      ui.NewMethod(),
 		urlBar:      ui.NewURLBar(),
 		query:       ui.NewQuery(),
+		auth:        ui.NewAuth(),
 		headers:     ui.NewHeaders(),
 		body:        ui.NewBody(),
 		response:    ui.NewResponse(),
@@ -110,6 +113,7 @@ func (m *Model) applyFocus() {
 	m.method.Blur()
 	m.urlBar.Blur()
 	m.query.Blur()
+	m.auth.Blur()
 	m.headers.Blur()
 	m.body.Blur()
 	m.response.Blur()
@@ -123,6 +127,8 @@ func (m *Model) applyFocus() {
 		m.urlBar.Focus()
 	case focusQuery:
 		m.query.Focus()
+	case focusAuth:
+		m.auth.Focus()
 	case focusHeaders:
 		m.headers.Focus()
 	case focusBody:

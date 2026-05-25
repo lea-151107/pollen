@@ -23,7 +23,7 @@ import (
 // treated as ordinary input instead of triggering a global action).
 func isTextEditingFocus(f focusArea, bodyInEditor bool) bool {
 	switch f {
-	case focusURL, focusQuery, focusHeaders:
+	case focusURL, focusQuery, focusAuth, focusHeaders:
 		return true
 	case focusBody:
 		return bodyInEditor
@@ -237,6 +237,8 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.urlBar, cmd = m.urlBar.Update(km)
 	case focusQuery:
 		m.query, cmd = m.query.Update(km)
+	case focusAuth:
+		m.auth, cmd = m.auth.Update(km)
 	case focusHeaders:
 		m.headers, cmd = m.headers.Update(km)
 	case focusBody:
@@ -300,13 +302,28 @@ func (m Model) handleCopyMenu(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) currentRequest() history.Request {
+	headers := m.headers.Values()
+	// Inject Authorization from the Auth panel unless the user already wrote
+	// one in Headers — explicit Headers entries take precedence.
+	if authVal := m.auth.HeaderValue(); authVal != "" && !hasHeader(headers, "Authorization") {
+		headers = append(headers, history.Header{Key: "Authorization", Value: authVal})
+	}
 	return history.Request{
 		Method:   m.method.Value(),
 		URL:      composeURL(m.urlBar.Value(), m.query.Values()),
-		Headers:  m.headers.Values(),
+		Headers:  headers,
 		Body:     m.body.Value(),
 		BodyType: m.body.Type(),
 	}
+}
+
+func hasHeader(headers []history.Header, key string) bool {
+	for _, h := range headers {
+		if strings.EqualFold(h.Key, key) {
+			return true
+		}
+	}
+	return false
 }
 
 // composeURL merges the query parameters from the Query panel into the URL.
@@ -351,6 +368,9 @@ func (m *Model) applyEntry(e history.Entry) {
 	urlOnly, params := splitURL(e.Request.URL)
 	m.urlBar.SetValue(urlOnly)
 	m.query.Set(params)
+	// Restored entries already carry Authorization in Headers; reset the Auth
+	// panel so it doesn't double-inject a different value next time.
+	m.auth.Reset()
 	m.headers.Set(e.Request.Headers)
 	m.body.Set(e.Request.BodyType, e.Request.Body)
 	if e.Response != nil {
