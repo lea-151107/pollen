@@ -59,6 +59,7 @@ func (c Collections) Selected() *collections.Entry {
 // SetFilter pre-sets the filter text (used at startup for --collection flag).
 func (c *Collections) SetFilter(f string) {
 	c.filter = f
+	c.filterMode = false
 	c.selected = 0
 }
 
