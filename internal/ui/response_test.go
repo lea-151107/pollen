@@ -109,6 +109,135 @@ func TestResponse_SearchActiveAccessor(t *testing.T) {
 	}
 }
 
+// ---- currentDisplayBody composition (Bug H regression) ----
+
+func TestCurrentDisplayBody_PlainNoSearch(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{Body: "hello world"}
+	if got := r.currentDisplayBody(); got != "hello world" {
+		t.Errorf("plain body: got %q", got)
+	}
+}
+
+func TestCurrentDisplayBody_FilterOnly(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{Body: `{"users":["a","b"]}`}
+	r.filteredBody = `["a","b"]`
+	if got := r.currentDisplayBody(); got != `["a","b"]` {
+		t.Errorf("filter base should win, got %q", got)
+	}
+}
+
+func TestCurrentDisplayBody_SearchOnly(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{Body: "Hello World"}
+	r.searchQuery = "world"
+	got := r.currentDisplayBody()
+	plain := stripANSI(got)
+	if plain != "Hello World" {
+		t.Errorf("plain text should match body, got %q", plain)
+	}
+}
+
+// TestCurrentDisplayBody_FilterAndSearchCompose locks the bug-H semantics:
+// when a jq filter is locked AND a search query is active, the search must
+// highlight WITHIN the filtered text, NOT replace it with the raw body.
+func TestCurrentDisplayBody_FilterAndSearchCompose(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{Body: `{"users":["alice"],"servers":["s1"]}`}
+	r.filteredBody = `["alice"]`
+	r.searchQuery = "alice"
+	got := r.currentDisplayBody()
+	plain := stripANSI(got)
+	if plain != `["alice"]` {
+		t.Errorf("base should be filtered, got %q", plain)
+	}
+	// Searching for a string that exists only in the RAW body (not in the
+	// filtered base) must not match — proving search runs on filter, not raw.
+	r2 := NewResponse()
+	r2.resp = &history.Response{Body: `{"users":["alice"],"servers":["s1"]}`}
+	r2.filteredBody = `["alice"]`
+	r2.searchQuery = "servers"
+	if strings.Contains(r2.currentDisplayBody(), "\x1b[") {
+		// Heuristic: a match would inject ANSI styling. None expected here.
+		t.Errorf("search of raw-only term should not match in filtered base, got styled output: %q", r2.currentDisplayBody())
+	}
+}
+
+func TestCurrentDisplayBody_DiffAndSearchCompose(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{Body: "world"}
+	r.prevResp = &history.Response{Body: "hello"}
+	r.diffMode = true
+	r.diffBody = "diff-content-with-world"
+	r.searchQuery = "world"
+	got := r.currentDisplayBody()
+	plain := stripANSI(got)
+	if plain != "diff-content-with-world" {
+		t.Errorf("base should be diff content, got %q", plain)
+	}
+}
+
+// ---- sanitizeTerminalControl (Minor 1 regression) ----
+
+func TestSanitizeTerminalControl_PreservesNormalText(t *testing.T) {
+	in := "hello world\nline2\ttabbed"
+	if got := sanitizeTerminalControl(in); got != in {
+		t.Errorf("normal text should pass through unchanged, got %q", got)
+	}
+}
+
+func TestSanitizeTerminalControl_EscapesANSI(t *testing.T) {
+	in := "before\x1b[2Jafter"
+	got := sanitizeTerminalControl(in)
+	if strings.ContainsRune(got, 0x1b) {
+		t.Errorf("output must not contain raw ESC, got %q", got)
+	}
+	if !strings.Contains(got, "\\x1b") {
+		t.Errorf("escape sequence should be visualised, got %q", got)
+	}
+	if !strings.HasPrefix(got, "before") || !strings.HasSuffix(got, "after") {
+		t.Errorf("surrounding text should be preserved, got %q", got)
+	}
+}
+
+func TestSanitizeTerminalControl_PreservesTabNewline(t *testing.T) {
+	in := "\t\n\r"
+	if got := sanitizeTerminalControl(in); got != in {
+		t.Errorf("whitespace should be preserved, got %q", got)
+	}
+}
+
+// ---- CurrentBytes fallback (Minor 2 companion) ----
+
+func TestCurrentBytes_FallsBackToBodyForText(t *testing.T) {
+	r := NewResponse()
+	// BodyBytes nil but Body present: e.g. older history entry whose bytes
+	// were dropped by the Prepend trimmer.
+	r.resp = &history.Response{Body: "hello", IsBinary: false}
+	got := r.CurrentBytes()
+	if string(got) != "hello" {
+		t.Errorf("text fallback to Body: got %q want %q", string(got), "hello")
+	}
+}
+
+func TestCurrentBytes_BinaryNoFallback(t *testing.T) {
+	r := NewResponse()
+	// Binary entry past the keep window: Body is "" by design, BodyBytes nil.
+	r.resp = &history.Response{Body: "", IsBinary: true}
+	if got := r.CurrentBytes(); got != nil {
+		t.Errorf("binary without bytes should not fall back, got %v", got)
+	}
+}
+
+func TestCurrentBytes_PrefersBodyBytes(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{Body: "text", BodyBytes: []byte("raw")}
+	if got := string(r.CurrentBytes()); got != "raw" {
+		t.Errorf("BodyBytes should be preferred over Body fallback, got %q", got)
+	}
+}
+
 func TestIsJSONContentType(t *testing.T) {
 	cases := map[string]bool{
 		"application/json":         true,

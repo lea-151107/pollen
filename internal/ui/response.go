@@ -39,7 +39,6 @@ type Response struct {
 	searchActive bool
 	searchInput  textinput.Model
 	searchQuery  string
-	searchBody   string // highlight-applied body (cached)
 }
 
 func NewResponse() Response {
@@ -124,7 +123,6 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 		case r.searchActive && km.String() == "esc":
 			r.searchActive = false
 			r.searchQuery = ""
-			r.searchBody = ""
 			r.searchInput.SetValue("")
 			r.searchInput.Blur()
 			r.vp.SetContent(r.currentDisplayBody())
@@ -139,8 +137,7 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 		case r.searchActive:
 			r.searchInput, cmd = r.searchInput.Update(msg)
 			r.searchQuery = r.searchInput.Value()
-			r.searchBody = r.buildSearchBody()
-			r.vp.SetContent(r.searchBody)
+			r.vp.SetContent(r.currentDisplayBody())
 			return r, cmd
 
 		case !r.filterActive && !r.searchActive && km.String() == "/":
@@ -275,12 +272,9 @@ func (r Response) copyableText() string {
 	return ""
 }
 
-// currentDisplayBody returns the body string to show in the viewport,
-// accounting for search > filter > diff > plain priority.
-func (r Response) currentDisplayBody() string {
-	if r.searchQuery != "" {
-		return r.buildSearchBody()
-	}
+// baseDisplayBody returns the body content without search highlighting,
+// resolving the content-determining priority: filter > diff > plain.
+func (r Response) baseDisplayBody() string {
 	if r.filteredBody != "" {
 		return r.filteredBody
 	}
@@ -290,16 +284,28 @@ func (r Response) currentDisplayBody() string {
 	return r.formatBody()
 }
 
-// buildSearchBody applies case-insensitive highlight to each line of the
-// formatted body for the current searchQuery.
-func (r Response) buildSearchBody() string {
-	if r.resp == nil || r.searchQuery == "" {
-		return r.formatBody()
+// currentDisplayBody returns what the viewport should render right now: the
+// base content (filter > diff > plain) with search highlights composed on top
+// when a query is present. This composes rather than masks, so a locked jq
+// filter is preserved while the user searches inside it.
+func (r Response) currentDisplayBody() string {
+	base := r.baseDisplayBody()
+	if r.searchQuery != "" {
+		return applyLineHighlight(base, r.searchQuery)
 	}
-	base := r.formatBody()
-	lines := strings.Split(base, "\n")
+	return base
+}
+
+// applyLineHighlight wraps the first case-insensitive occurrence of needle in
+// each line with bold+underline. Operates line-by-line so highlights don't
+// span multi-line content.
+func applyLineHighlight(body, needle string) string {
+	if needle == "" || body == "" {
+		return body
+	}
+	lines := strings.Split(body, "\n")
 	for i, line := range lines {
-		lines[i] = highlightMatch(line, r.searchQuery)
+		lines[i] = highlightMatch(line, needle)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -310,8 +316,11 @@ func (r *Response) computeDiff() string {
 	if r.prevResp == nil || r.resp == nil {
 		return ""
 	}
+	// Sanitize inputs so the diff output (which preserves equal segments
+	// verbatim with lipgloss colors layered on insertions/deletions) can't
+	// contain raw terminal-control sequences from a hostile body.
 	dmp := diffmatchpatch.New()
-	diffs := dmp.DiffMain(r.prevResp.Body, r.resp.Body, true)
+	diffs := dmp.DiffMain(sanitizeTerminalControl(r.prevResp.Body), sanitizeTerminalControl(r.resp.Body), true)
 	dmp.DiffCleanupSemantic(diffs)
 	var sb strings.Builder
 	for _, d := range diffs {
@@ -345,6 +354,9 @@ func (r Response) formatBody() string {
 				body = pretty
 			}
 		}
+		// Strip terminal-control bytes so a malicious or buggy server can't
+		// clear the screen / move the cursor via ANSI escapes in the body.
+		body = sanitizeTerminalControl(body)
 		if len(body) > TextPreviewLimit {
 			// Put the notice at the TOP so the user sees it immediately
 			// rather than after scrolling through ~100KB of preview.
@@ -395,13 +407,61 @@ func isJSONContentType(ct string) bool {
 	return ct == "application/json" || strings.HasSuffix(ct, "+json")
 }
 
+// sanitizeTerminalControl replaces C0 (except \t, \n, \r), DEL, and C1
+// control bytes with visible `\xHH` placeholders so a malicious or buggy
+// server response can't smuggle ANSI escape sequences (e.g. `\x1b[2J`) into
+// the terminal. Display-only — saved/exported bytes and jq input are untouched.
+// Fast path: returns s unchanged if no control bytes are present, so the
+// overhead for typical bodies is one pass.
+func sanitizeTerminalControl(s string) string {
+	if !containsTerminalControl(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '\t' || r == '\n' || r == '\r':
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, "\\x%02x", r)
+		case r >= 0x80 && r < 0xa0:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func containsTerminalControl(s string) bool {
+	for _, r := range s {
+		switch {
+		case r == '\t' || r == '\n' || r == '\r':
+			// allowed whitespace
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0):
+			return true
+		}
+	}
+	return false
+}
+
 // CurrentBytes returns the raw response body for the currently displayed
-// response, or nil if no body is available (text response or reloaded from history).
+// response, or nil if no body is available (binary entries past the
+// keep-bytes window in history, or freshly reloaded from disk). For text
+// bodies it falls back to Body when BodyBytes was dropped to bound memory
+// growth — the bytes are byte-identical to the original for valid UTF-8.
 func (r Response) CurrentBytes() []byte {
 	if r.resp == nil {
 		return nil
 	}
-	return r.resp.BodyBytes
+	if len(r.resp.BodyBytes) > 0 {
+		return r.resp.BodyBytes
+	}
+	if !r.resp.IsBinary && r.resp.Body != "" {
+		return []byte(r.resp.Body)
+	}
+	return nil
 }
 
 // CurrentResponse returns the displayed response or nil.
@@ -454,7 +514,10 @@ func (r Response) View(width, height int) string {
 			statusLine += lipgloss.NewStyle().Foreground(lipgloss.Color("214")).
 				Render(fmt.Sprintf("   (truncated at %s)", formatSize(httpx.MaxResponseBytes)))
 		}
-		if r.diffMode {
+		// Show diff badge only when the diff view is actually what's displayed.
+		// When a jq filter is locked, baseDisplayBody returns the filter content
+		// (priority filter > diff > plain) so the badge would be misleading.
+		if r.diffMode && r.filteredBody == "" {
 			statusLine += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("[diff]")
 		}
 		if hdrs := formatHeaders(r.resp.Headers); hdrs != "" {
@@ -538,7 +601,7 @@ func formatHeaders(headers []history.Header) string {
 
 	var lines []string
 	for _, h := range sorted {
-		lines = append(lines, fmt.Sprintf("%s: %s", h.Key, h.Value))
+		lines = append(lines, fmt.Sprintf("%s: %s", h.Key, sanitizeTerminalControl(h.Value)))
 		if len(lines) >= 5 {
 			if len(sorted) > 5 {
 				lines = append(lines, fmt.Sprintf("(+ %d more headers)", len(sorted)-5))
