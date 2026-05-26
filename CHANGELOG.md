@@ -18,6 +18,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry; press `g g` (twice) to jump to the first. Matches vim-style navigation
 - **Ctrl+L**: force-redraws the terminal (useful after the screen is garbled
   by another program's output)
+- **Configurable settings** — six new fields in `settings.json`:
+  - `request_timeout_secs` (default 60): HTTP request timeout
+  - `max_response_mib` (default 32): maximum response body to buffer
+  - `history_limit` (default 200): maximum entries kept in `history.json`
+  - `text_preview_kib` (default 100): threshold above which bodies switch to hex view
+  - `sidebar_max_width` (default 40): maximum column width of the history / collections sidebar
+  - `hex_dump_kib` (default 4): bytes shown in the hex dump preview
+
+### Fixed
+
+- **Env variable expansion**: variable names containing hyphens (e.g. `{{API-KEY}}`) were silently skipped and sent verbatim; now expanded correctly
+- **TRACE method**: importing an OpenAPI or Postman collection with `TRACE` endpoints and then selecting them left the method picker on its previous value; `TRACE` is now a recognised method
+- **settings.json corruption**: if `settings.json` contained invalid JSON the app started with zero-valued settings (no timeout, 0-byte response limit). It now falls back to defaults in all error cases
+- **`fetch()` export — duplicate Content-Type**: when the user had a lowercase `content-type` header and a structured body, the generated `fetch()` snippet contained two conflicting `Content-Type` keys. The check is now case-insensitive, matching the existing `curl` export behaviour
+- **Basic auth whitespace**: leading/trailing spaces in the username or password fields of the Basic auth panel were included in the Base64-encoded credential; they are now trimmed
+- **Postman import — string URL form**: Postman v2.1 allows the `url` field as either a plain string or an object with a `raw` key; only the object form was previously handled, causing import failures for collections that use the string form
+- **URL bar minimum width**: setting the URL bar width to a negative value when the terminal was very narrow caused a panic in the underlying text input; now clamped to zero
+- **Filter backspace with multi-byte characters**: pressing Backspace in the history/collections filter while the filter contained CJK or emoji characters removed one byte instead of one character, producing invalid UTF-8; now uses rune-aware slicing
+- **Filter accepting named keys as text**: keys such as `↑`, `ctrl+a`, and function keys were appended to the filter string in filter mode; only single printable characters are now accepted
+- **pendingG reset on Blur and SetEntries**: a `g` keypress followed by losing focus or a list refresh could combine with the next `g` in the re-focused panel to trigger an accidental `gg` (jump-to-top); `pendingG` is now reset in all relevant transitions
+- **`.tmp` cleanup on rename failure**: `userconfig.SaveJSON` did not remove the `.tmp` file when `os.Rename` failed, leaving orphaned files in the config directory
+- **Collections update prompt — deleted entry**: selecting "update in-place" for a collection entry that had been deleted between save and confirm now shows an error status instead of silently doing nothing
 
 [0.5.0]: https://github.com/lea-151107/pollen/releases/tag/v0.5.0
 
