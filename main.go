@@ -24,14 +24,26 @@ func main() {
 		envName    string
 		configDir  string
 		collFilter string
+		initConfig bool
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
 	flag.StringVar(&collFilter, "collection", "", "open collections sidebar filtered by name")
+	flag.BoolVar(&initConfig, "init-config", false, "write default settings.json and exit")
 	flag.Parse()
 
 	if configDir != "" {
 		userconfig.SetOverride(configDir)
+	}
+
+	if initConfig {
+		path, err := settings.WriteDefaults()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("created", path)
+		os.Exit(0)
 	}
 
 	store, err := history.Open()

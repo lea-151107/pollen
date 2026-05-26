@@ -6,6 +6,9 @@
 package settings
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/lea/pollen/internal/userconfig"
 )
 
@@ -58,4 +61,21 @@ func Load() (*Settings, error) {
 // Save writes settings atomically.
 func (s *Settings) Save() error {
 	return userconfig.SaveJSON(fileName, s)
+}
+
+// WriteDefaults creates settings.json populated with all default values.
+// Returns the created file path. Errors if the file already exists.
+func WriteDefaults() (string, error) {
+	path, err := userconfig.Path(fileName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(path); err == nil {
+		return "", fmt.Errorf("settings.json already exists at %s (delete it to reset)", path)
+	}
+	s, _ := Load() // no file on disk → returns all defaults
+	if err := s.Save(); err != nil {
+		return "", fmt.Errorf("failed to write settings.json: %w", err)
+	}
+	return path, nil
 }
