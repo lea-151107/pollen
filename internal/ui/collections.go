@@ -104,7 +104,8 @@ func (c Collections) Update(msg tea.Msg) (Collections, tea.Cmd) {
 			}
 		default:
 			s := km.String()
-			if len(s) >= 1 && s[0] >= ' ' && s != "tab" {
+			rs := []rune(s)
+			if len(rs) == 1 && rs[0] >= ' ' {
 				c.filter += s
 				c.selected = 0
 			}

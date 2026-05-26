@@ -122,9 +122,11 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 				h.selected = 0
 			}
 		default:
-			// Append printable ASCII (plus utf-8 runes via km.String()).
+			// Accept only single-rune printable input. Named keys from Bubble Tea
+			// ("up", "ctrl+a", "f1", etc.) are multi-rune and are excluded here.
 			s := km.String()
-			if len(s) >= 1 && s[0] >= ' ' && s != "tab" {
+			rs := []rune(s)
+			if len(rs) == 1 && rs[0] >= ' ' {
 				h.filter += s
 				h.selected = 0
 			}
