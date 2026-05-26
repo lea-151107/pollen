@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-26
+
+### Added
+
+- **`--version` flag**: prints `pollen <version>` and exits. The version string
+  is embedded at build time via `-ldflags="-X github.com/lea/pollen/internal/version.Version=v0.6.0"`
+- **Proxy support** (`proxy_url` in `settings.json`): routes all requests through
+  the specified HTTP/HTTPS proxy (e.g. `"http://localhost:8080"` for mitmproxy)
+- **Redirect control** (`disable_redirects` in `settings.json`): when `true`,
+  the HTTP client returns the redirect response as-is instead of following it —
+  useful for inspecting OAuth 302s or POST-redirect sequences
+- **Custom CA certificate** (`ca_cert_file` in `settings.json`): path to a PEM
+  file containing trusted CA certificates; a safer alternative to `skip_tls_verify`
+  for self-signed or internal TLS endpoints
+- **Cookie jar** (`enable_cookies` in `settings.json`): when `true`, cookies set
+  by a response are stored and replayed in subsequent requests within the same session
+- **Copy response body** (`y` in Response panel): copies the current body to the
+  clipboard (jq-filtered body when a filter is active). Falls back to
+  `~/.config/pollen/clipboard.txt` when no clipboard tool is available
+- **In-body search** (`Ctrl+F` in Response panel): opens a search bar at the
+  bottom of the panel; matching text is bold+underlined as you type. `Enter`
+  locks the highlight; `Esc` clears it
+- **`--export-collections`**: exports all saved collections to a Postman
+  Collection v2.1 JSON file. Pass `-` to write to stdout.
+  Example: `pollen --export-collections /tmp/my-collection.json`
+
+[0.6.0]: https://github.com/lea-151107/pollen/releases/tag/v0.6.0
+
 ## [0.5.2] - 2026-05-26
 
 ### Fixed

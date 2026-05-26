@@ -7,6 +7,7 @@ package settings
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/lea/pollen/internal/userconfig"
@@ -23,6 +24,10 @@ type Settings struct {
 	TextPreviewKiB     int     `json:"text_preview_kib,omitempty"`
 	SidebarMaxWidth    int     `json:"sidebar_max_width,omitempty"`
 	HexDumpKiB         int     `json:"hex_dump_kib,omitempty"`
+	ProxyURL           string  `json:"proxy_url,omitempty"`
+	DisableRedirects   bool    `json:"disable_redirects,omitempty"`
+	CACertFile         string  `json:"ca_cert_file,omitempty"`
+	EnableCookies      bool    `json:"enable_cookies,omitempty"`
 }
 
 // Load reads settings from disk. Missing or corrupt files fall back to
@@ -54,6 +59,11 @@ func Load() (*Settings, error) {
 	}
 	if s.HexDumpKiB <= 0 || s.HexDumpKiB > 1024 {
 		s.HexDumpKiB = 4
+	}
+	if s.ProxyURL != "" {
+		if _, err := url.Parse(s.ProxyURL); err != nil {
+			s.ProxyURL = ""
+		}
 	}
 	return s, nil
 }

@@ -106,6 +106,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(statusOK, "collection entry deleted")
 		return m, m.statusTick(2 * time.Second)
 
+	case ui.ResponseCopyMsg:
+		m.deliverCopy(msg.Text, "response body")
+		return m, nil
+
 	case ui.HistoryDeleteMsg:
 		// Look up by ID so the operation works regardless of any active
 		// history filter (the filter shifts UI indices but not store indices).

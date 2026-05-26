@@ -18,6 +18,10 @@ import (
 	"github.com/lea/pollen/internal/httpx"
 )
 
+// ResponseCopyMsg is emitted when the user requests the response body be
+// copied to the clipboard.
+type ResponseCopyMsg struct{ Text string }
+
 type Response struct {
 	vp           viewport.Model
 	resp         *history.Response
@@ -32,6 +36,10 @@ type Response struct {
 	filteredBody string // non-empty when a filter is applied
 	diffMode     bool   // showing diff against prevResp
 	diffBody     string // rendered diff (cached)
+	searchActive bool
+	searchInput  textinput.Model
+	searchQuery  string
+	searchBody   string // highlight-applied body (cached)
 }
 
 func NewResponse() Response {
@@ -39,7 +47,10 @@ func NewResponse() Response {
 	fi := textinput.New()
 	fi.Placeholder = "jq filter  e.g. .items[0].name"
 	fi.CharLimit = 256
-	return Response{vp: vp, filterInput: fi}
+	si := textinput.New()
+	si.Placeholder = "search..."
+	si.CharLimit = 256
+	return Response{vp: vp, filterInput: fi, searchInput: si}
 }
 
 func (r *Response) SetResponse(resp *history.Response, reqURL string) {
@@ -89,6 +100,7 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 	}
 
 	if km, ok := msg.(tea.KeyMsg); ok {
+		var cmd tea.Cmd
 		switch {
 		case r.filterActive && km.String() == "esc":
 			r.resetFilter()
@@ -99,14 +111,55 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 			r.filterInput.Blur()
 			return r, nil
 
-		case !r.filterActive && km.String() == "/":
+		case r.filterActive:
+			r.filterInput, cmd = r.filterInput.Update(msg)
+			r.applyFilter()
+			return r, cmd
+
+		case r.searchActive && km.String() == "esc":
+			r.searchActive = false
+			r.searchQuery = ""
+			r.searchBody = ""
+			r.searchInput.SetValue("")
+			r.searchInput.Blur()
+			r.vp.SetContent(r.currentDisplayBody())
+			r.vp.GotoTop()
+			return r, nil
+
+		case r.searchActive && km.String() == "enter":
+			r.searchActive = false
+			r.searchInput.Blur()
+			return r, nil
+
+		case r.searchActive:
+			r.searchInput, cmd = r.searchInput.Update(msg)
+			r.searchQuery = r.searchInput.Value()
+			r.searchBody = r.buildSearchBody()
+			r.vp.SetContent(r.searchBody)
+			return r, cmd
+
+		case !r.filterActive && !r.searchActive && km.String() == "/":
 			if r.resp != nil && !r.resp.IsBinary {
 				r.filterActive = true
 				return r, r.filterInput.Focus()
 			}
 			return r, nil
 
-		case !r.filterActive && km.String() == "D":
+		case !r.filterActive && !r.searchActive && km.String() == "ctrl+f":
+			if r.resp != nil && !r.resp.IsBinary {
+				r.searchActive = true
+				return r, r.searchInput.Focus()
+			}
+			return r, nil
+
+		case !r.filterActive && !r.searchActive && km.String() == "y":
+			text := r.copyableText()
+			if text == "" {
+				return r, nil
+			}
+			return r, func() tea.Msg { return ResponseCopyMsg{Text: text} }
+
+		case !r.filterActive && !r.searchActive && km.String() == "D":
 			if r.resp == nil || r.prevResp == nil {
 				return r, nil
 			}
@@ -124,12 +177,6 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 			}
 			r.vp.GotoTop()
 			return r, nil
-
-		case r.filterActive:
-			var cmd tea.Cmd
-			r.filterInput, cmd = r.filterInput.Update(msg)
-			r.applyFilter()
-			return r, cmd
 		}
 	}
 
@@ -208,6 +255,47 @@ func (r *Response) resetFilter() {
 		}
 		r.vp.GotoTop()
 	}
+}
+
+// copyableText returns the text to copy to the clipboard: jq-filtered body
+// when a filter is applied, otherwise the raw body.
+func (r Response) copyableText() string {
+	if r.filteredBody != "" {
+		return r.filteredBody
+	}
+	if r.resp != nil {
+		return r.resp.Body
+	}
+	return ""
+}
+
+// currentDisplayBody returns the body string to show in the viewport,
+// accounting for search > filter > diff > plain priority.
+func (r Response) currentDisplayBody() string {
+	if r.searchQuery != "" {
+		return r.buildSearchBody()
+	}
+	if r.filteredBody != "" {
+		return r.filteredBody
+	}
+	if r.diffMode && r.diffBody != "" {
+		return r.diffBody
+	}
+	return r.formatBody()
+}
+
+// buildSearchBody applies case-insensitive highlight to each line of the
+// formatted body for the current searchQuery.
+func (r Response) buildSearchBody() string {
+	if r.resp == nil || r.searchQuery == "" {
+		return r.formatBody()
+	}
+	base := r.formatBody()
+	lines := strings.Split(base, "\n")
+	for i, line := range lines {
+		lines[i] = highlightMatch(line, r.searchQuery)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // computeDiff produces a coloured character-level diff of prevResp.Body vs
@@ -375,7 +463,11 @@ func (r Response) View(width, height int) string {
 	if r.filterActive || r.filteredBody != "" {
 		filterBarH = 2 // "\n" + one line of filter bar
 	}
-	vpH := innerH - lipgloss.Height(statusLine) - 1 - filterBarH
+	searchBarH := 0
+	if r.searchActive || r.searchQuery != "" {
+		searchBarH = 2
+	}
+	vpH := innerH - lipgloss.Height(statusLine) - 1 - filterBarH - searchBarH
 	if vpH < 1 {
 		vpH = 1
 	}
@@ -384,6 +476,9 @@ func (r Response) View(width, height int) string {
 	body := statusLine + "\n" + r.vp.View()
 	if r.filterActive || r.filteredBody != "" {
 		body += "\n" + r.renderFilterBar(inner-2)
+	}
+	if r.searchActive || r.searchQuery != "" {
+		body += "\n" + r.renderSearchBar(inner-2)
 	}
 	return border.Render(body)
 }
@@ -400,6 +495,20 @@ func (r Response) renderFilterBar(width int) string {
 	bar := prefix + " " + input + errPart
 	_ = width // viewport handles wrapping; bar is one logical line
 	return bar
+}
+
+func (r Response) renderSearchBar(width int) string {
+	_ = width
+	prefix := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("/")
+	color := lipgloss.Color("244")
+	if r.searchActive {
+		color = lipgloss.Color("214")
+	}
+	var cursor string
+	if r.searchActive {
+		cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("█")
+	}
+	return lipgloss.NewStyle().Foreground(color).Render(prefix+r.searchQuery) + cursor
 }
 
 func formatSize(n int) string {

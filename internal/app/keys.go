@@ -120,7 +120,9 @@ func (k KeyMap) HelpSections() []HelpSection {
 		{Title: "Response", Items: []HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
 			{Keys: "s", Desc: "Save response"},
+			{Keys: "y", Desc: "Copy body to clipboard"},
 			{Keys: "/", Desc: "jq filter"},
+			{Keys: "ctrl+f", Desc: "Search in body"},
 			{Keys: "D", Desc: "Toggle diff vs previous"},
 		}},
 		{Title: "Chaining", Items: []HelpItem{

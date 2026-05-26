@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net/http"
 	"net/url"
@@ -23,6 +24,18 @@ var MaxResponseBytes = 32 * 1024 * 1024 // 32 MiB
 
 // RequestTimeout is the HTTP client timeout applied to every request.
 var RequestTimeout = 60 * time.Second
+
+// ProxyURL, when non-empty, routes all requests through the given proxy.
+var ProxyURL string
+
+// CACertPool, when non-nil, is used as the trusted CA pool for TLS verification.
+var CACertPool *x509.CertPool
+
+// DisableRedirects, when true, prevents the HTTP client from following redirects.
+var DisableRedirects bool
+
+// CookieJar, when non-nil, stores and sends cookies across requests.
+var CookieJar http.CookieJar
 
 // Do executes the given request and returns a Response.
 func Do(req history.Request) (*history.Response, error) {
@@ -51,14 +64,27 @@ func Do(req history.Request) (*history.Response, error) {
 		httpReq.Header.Set("Content-Type", contentType)
 	}
 
-	client := &http.Client{Timeout: RequestTimeout}
+	// Always clone DefaultTransport so each request gets independent TLS/proxy
+	// config without mutating the shared default.
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tlsCfg := &tls.Config{}
 	if SkipTLSVerify.Load() {
-		// Clone DefaultTransport so we keep Proxy, keep-alive, HTTP/2, dial
-		// timeouts, and conn pooling defaults — only override the TLS config.
-		// We must NOT mutate DefaultTransport itself (it's shared).
-		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user-opt-in for self-signed testing
-		client.Transport = tr
+		tlsCfg.InsecureSkipVerify = true //nolint:gosec // user-opt-in for self-signed testing
+	}
+	if CACertPool != nil {
+		tlsCfg.RootCAs = CACertPool
+	}
+	tr.TLSClientConfig = tlsCfg
+	if ProxyURL != "" {
+		if u, err := url.Parse(ProxyURL); err == nil {
+			tr.Proxy = http.ProxyURL(u)
+		}
+	}
+	client := &http.Client{Timeout: RequestTimeout, Transport: tr, Jar: CookieJar}
+	if DisableRedirects {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
 	}
 	start := time.Now()
 	resp, err := client.Do(httpReq)

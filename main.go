@@ -7,9 +7,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"crypto/x509"
+	"net/http/cookiejar"
 	"time"
 
 	"github.com/lea/pollen/internal/app"
+	"github.com/lea/pollen/internal/exporter"
+	"github.com/lea/pollen/internal/version"
 	"github.com/lea/pollen/internal/collections"
 	"github.com/lea/pollen/internal/env"
 	"github.com/lea/pollen/internal/history"
@@ -21,15 +25,19 @@ import (
 
 func main() {
 	var (
-		envName    string
-		configDir  string
-		collFilter string
-		initConfig bool
+		envName     string
+		configDir   string
+		collFilter  string
+		initConfig  bool
+		showVersion bool
+		exportColls string
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
 	flag.StringVar(&collFilter, "collection", "", "open collections sidebar filtered by name")
 	flag.BoolVar(&initConfig, "init-config", false, "write default settings.json and exit")
+	flag.BoolVar(&showVersion, "version", false, "print version and exit")
+	flag.StringVar(&exportColls, "export-collections", "", "export collections to Postman v2.1 JSON (use - for stdout)")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintln(out, "Usage: pollen [--option ...]\n\nOptions:")
@@ -46,6 +54,11 @@ func main() {
 	}
 	flag.Parse()
 
+	if showVersion {
+		fmt.Println("pollen", version.Version)
+		os.Exit(0)
+	}
+
 	if configDir != "" {
 		userconfig.SetOverride(configDir)
 	}
@@ -57,6 +70,29 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("created", path)
+		os.Exit(0)
+	}
+
+	if exportColls != "" {
+		collStore, err := collections.Open()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: %v\n", err)
+			os.Exit(1)
+		}
+		data, err := exporter.ExportPostman(collStore.Entries(), "pollen")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+			os.Exit(1)
+		}
+		if exportColls == "-" {
+			fmt.Println(string(data))
+		} else {
+			if err := os.WriteFile(exportColls, data, 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("exported", len(collStore.Entries()), "entries to", exportColls)
+		}
 		os.Exit(0)
 	}
 
@@ -82,6 +118,26 @@ func main() {
 		store.SetMaxEntries(cfg.HistoryLimit)
 		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
 		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
+		httpx.ProxyURL = cfg.ProxyURL
+		httpx.DisableRedirects = cfg.DisableRedirects
+		if cfg.CACertFile != "" {
+			data, err := os.ReadFile(cfg.CACertFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: %v\n", err)
+			} else {
+				pool := x509.NewCertPool()
+				if !pool.AppendCertsFromPEM(data) {
+					fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: no valid PEM certificates\n")
+				} else {
+					httpx.CACertPool = pool
+				}
+			}
+		}
+		if cfg.EnableCookies {
+			if jar, err := cookiejar.New(nil); err == nil {
+				httpx.CookieJar = jar
+			}
+		}
 	}
 
 	// Variable environment (~/.config/pollen/env.json). Missing/corrupt → empty.
