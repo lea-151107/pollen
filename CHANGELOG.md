@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-05-26
+
+### Fixed
+
+- **Postman form body roundtrip**: exporting a collection containing form
+  bodies via `--export-collections` and re-importing the resulting JSON
+  produced empty bodies. The exporter now writes Postman v2.1's `urlencoded`
+  array (instead of stuffing the form pairs into `raw`), and the importer
+  accepts both `raw` and `urlencoded` modes
+- **Response headers panel — spurious "(+ 0 more headers)" row**: when the
+  response had exactly 5 headers, the truncation note appeared with a zero
+  count; it now only appears when there are genuinely additional headers to
+  hide
+- **`Response.SetResponse` nil safety**: the diff-mode branch dereferenced
+  the freshly-stored response without a nil check; callers all guarded
+  against nil, but the function itself now does too
+- **History/Collections filter highlight — Unicode case mapping**: characters
+  whose lowercase form has a different byte width (e.g. U+212A KELVIN SIGN
+  → `k`) misaligned the highlight slice on the original text, producing
+  garbled output. The matcher now operates rune-by-rune
+
+[0.6.1]: https://github.com/lea-151107/pollen/releases/tag/v0.6.1
+
 ## [0.6.0] - 2026-05-26
 
 ### Added
