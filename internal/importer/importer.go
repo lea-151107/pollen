@@ -172,11 +172,27 @@ type postmanItem struct {
 	Item    []postmanItem  `json:"item"`
 }
 
+type postmanURL struct{ Raw string }
+
+// UnmarshalJSON handles both the string form ("url": "https://...") and the
+// object form ("url": {"raw": "https://..."}) that Postman v2.1 allows.
+func (p *postmanURL) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		p.Raw = s
+		return nil
+	}
+	var obj struct{ Raw string }
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	p.Raw = obj.Raw
+	return nil
+}
+
 type postmanReq struct {
-	Method string `json:"method"`
-	URL    struct {
-		Raw string `json:"raw"`
-	} `json:"url"`
+	Method string     `json:"method"`
+	URL    postmanURL `json:"url"`
 	Header []struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`

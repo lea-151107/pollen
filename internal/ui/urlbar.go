@@ -50,6 +50,9 @@ func (u URLBar) View(width int) string {
 		inner = 1
 	}
 	u.input.Width = inner - 2
+	if u.input.Width < 0 {
+		u.input.Width = 0
+	}
 	style := lipgloss.NewStyle().
 		Padding(0, 1).
 		Border(lipgloss.NormalBorder()).
