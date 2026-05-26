@@ -37,12 +37,16 @@ func (m Model) View() string {
 	if responseW < 30 {
 		responseW = 30
 	}
-	if responseW > available-20 {
-		responseW = available - 20
+	maxResponseW := available - 20
+	if maxResponseW < 1 {
+		maxResponseW = 1
+	}
+	if responseW > maxResponseW {
+		responseW = maxResponseW
 	}
 	requestW := available - responseW
-	if requestW < 20 {
-		requestW = 20
+	if requestW < 1 {
+		requestW = 1
 	}
 
 	reqPanel := m.renderRequest(requestW, contentH)

@@ -380,7 +380,9 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tlsInsecure = newVal
 		// Persist; surface persistence failures so the user knows the
 		// preference won't survive a restart.
-		saveErr := (&settings.Settings{SkipTLSVerify: newVal}).Save()
+		s, _ := settings.Load()
+		s.SkipTLSVerify = newVal
+		saveErr := s.Save()
 		switch {
 		case saveErr != nil:
 			m.setStatus(statusWarn, fmt.Sprintf("TLS toggled (settings save failed: %v)", saveErr))
