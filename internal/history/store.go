@@ -70,11 +70,26 @@ func (s *Store) cap() int {
 	return s.maxEntries
 }
 
-// Prepend adds a new entry at the front and trims to the effective cap.
+// keepBodyBytes is the number of most-recent entries whose Response.BodyBytes
+// are retained in memory for `s` (save raw bytes). Older entries have their
+// BodyBytes dropped to bound session memory use — text bodies can still be
+// re-saved from the Body string via Response.CurrentBytes' fallback; binary
+// bodies past this window can no longer be saved.
+const keepBodyBytes = 10
+
+// Prepend adds a new entry at the front and trims to the effective cap. It
+// also drops Response.BodyBytes from entries past keepBodyBytes so that long
+// sessions with large responses don't accumulate up to
+// max_response_mib × history_limit (≈ 6.4 GiB at defaults) in memory.
 func (s *Store) Prepend(e Entry) {
 	s.entries = append([]Entry{e}, s.entries...)
 	if n := s.cap(); len(s.entries) > n {
 		s.entries = s.entries[:n]
+	}
+	for i := keepBodyBytes; i < len(s.entries); i++ {
+		if s.entries[i].Response != nil {
+			s.entries[i].Response.BodyBytes = nil
+		}
 	}
 }
 

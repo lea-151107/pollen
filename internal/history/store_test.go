@@ -162,6 +162,34 @@ func TestStore_PrependLimit(t *testing.T) {
 	}
 }
 
+// TestPrepend_TrimsBodyBytesFromOldEntries locks the bound on session memory
+// growth: only the keepBodyBytes most recent entries retain Response.BodyBytes;
+// older ones get nil'd so a long session with large responses doesn't
+// accumulate up to max_response_mib × history_limit (≈ 6.4 GiB at defaults).
+func TestPrepend_TrimsBodyBytesFromOldEntries(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i < keepBodyBytes+5; i++ {
+		s.Prepend(Entry{
+			ID:       string(rune('a' + i)),
+			Response: &Response{Body: "x", BodyBytes: []byte("payload")},
+		})
+	}
+	entries := s.Entries()
+	if len(entries) != keepBodyBytes+5 {
+		t.Fatalf("want %d entries, got %d", keepBodyBytes+5, len(entries))
+	}
+	for i := 0; i < keepBodyBytes; i++ {
+		if entries[i].Response == nil || entries[i].Response.BodyBytes == nil {
+			t.Errorf("entry[%d] (within keep window) should retain BodyBytes", i)
+		}
+	}
+	for i := keepBodyBytes; i < len(entries); i++ {
+		if entries[i].Response != nil && entries[i].Response.BodyBytes != nil {
+			t.Errorf("entry[%d] (outside keep window) should have BodyBytes=nil", i)
+		}
+	}
+}
+
 // loadFromPath is a test helper that mirrors Open's behavior with a specific path.
 func loadFromPath(path string) (*Store, error) {
 	s := &Store{path: path}
