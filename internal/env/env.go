@@ -66,7 +66,7 @@ func (e *Env) Save() error {
 	return userconfig.SaveJSON(fileName, e)
 }
 
-var varRe = regexp.MustCompile(`\{\{(\w+)\}\}`)
+var varRe = regexp.MustCompile(`\{\{([\w-]+)\}\}`)
 
 // Vars returns the variable map of the currently selected environment, or
 // nil if no environment is selected or it has no vars.
