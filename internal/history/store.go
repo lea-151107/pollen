@@ -11,14 +11,12 @@ import (
 	"github.com/lea/pollen/internal/userconfig"
 )
 
-const (
-	currentVersion = 1
-	maxEntries     = 200
-)
+const currentVersion = 1
 
 type Store struct {
-	path    string
-	entries []Entry
+	path       string
+	entries    []Entry
+	maxEntries int
 }
 
 // Open loads history from disk. Missing files yield an empty store.
@@ -27,7 +25,7 @@ func Open() (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{path: path}
+	s := &Store{path: path, maxEntries: 200}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -55,11 +53,28 @@ func (s *Store) Entries() []Entry {
 	return s.entries
 }
 
-// Prepend adds a new entry at the front and trims to maxEntries.
+// SetMaxEntries updates the history cap and immediately trims any excess.
+func (s *Store) SetMaxEntries(n int) {
+	s.maxEntries = n
+	cap := s.cap()
+	if len(s.entries) > cap {
+		s.entries = s.entries[:cap]
+	}
+}
+
+// cap returns the effective cap, defaulting to 200 for zero-valued stores.
+func (s *Store) cap() int {
+	if s.maxEntries <= 0 {
+		return 200
+	}
+	return s.maxEntries
+}
+
+// Prepend adds a new entry at the front and trims to the effective cap.
 func (s *Store) Prepend(e Entry) {
 	s.entries = append([]Entry{e}, s.entries...)
-	if len(s.entries) > maxEntries {
-		s.entries = s.entries[:maxEntries]
+	if n := s.cap(); len(s.entries) > n {
+		s.entries = s.entries[:n]
 	}
 }
 

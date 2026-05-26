@@ -236,7 +236,7 @@ func (r *Response) computeDiff() string {
 // TextPreviewLimit caps how much of a text body the viewport renders. Bodies
 // larger than this still keep their full bytes in BodyBytes for the `s` save
 // action — only the display is truncated to keep rendering responsive.
-const TextPreviewLimit = 100 * 1024 // 100 KiB
+var TextPreviewLimit = 100 * 1024 // 100 KiB
 
 func (r Response) formatBody() string {
 	if r.resp == nil {

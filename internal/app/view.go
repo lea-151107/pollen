@@ -26,8 +26,8 @@ func (m Model) View() string {
 		if sidebarW < 20 {
 			sidebarW = 20
 		}
-		if sidebarW > 40 {
-			sidebarW = 40
+		if sidebarW > m.sidebarMaxWidth {
+			sidebarW = m.sidebarMaxWidth
 		}
 	}
 

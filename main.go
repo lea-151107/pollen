@@ -7,12 +7,15 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"time"
+
 	"github.com/lea/pollen/internal/app"
 	"github.com/lea/pollen/internal/collections"
 	"github.com/lea/pollen/internal/env"
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
 	"github.com/lea/pollen/internal/settings"
+	"github.com/lea/pollen/internal/ui"
 	"github.com/lea/pollen/internal/userconfig"
 )
 
@@ -43,11 +46,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Restore persistent settings (TLS toggle, etc.). Failures fall back to
-	// defaults silently — settings shouldn't block startup.
+	// Restore persistent settings. Failures fall back to defaults silently —
+	// settings shouldn't block startup.
 	cfg, _ := settings.Load()
 	if cfg != nil {
 		httpx.SkipTLSVerify.Store(cfg.SkipTLSVerify)
+		httpx.RequestTimeout = time.Duration(cfg.RequestTimeoutSecs) * time.Second
+		httpx.MaxResponseBytes = cfg.MaxResponseMiB * 1024 * 1024
+		store.SetMaxEntries(cfg.HistoryLimit)
+		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
+		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
 	}
 
 	// Variable environment (~/.config/pollen/env.json). Missing/corrupt → empty.

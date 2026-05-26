@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const DefaultHexDumpLimit = 4096
+var DefaultHexDumpLimit = 4096
 
 // HexDump renders a byte slice as a xxd-style dump, truncating to maxBytes
 // (passing <= 0 uses DefaultHexDumpLimit). If the input is longer, a trailing

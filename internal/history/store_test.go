@@ -153,11 +153,12 @@ func TestStore_InsertAt_OutOfRange(t *testing.T) {
 
 func TestStore_PrependLimit(t *testing.T) {
 	s := newTestStore(t)
-	for i := 0; i < maxEntries+50; i++ {
+	limit := s.cap()
+	for i := 0; i < limit+50; i++ {
 		s.Prepend(Entry{ID: "x"})
 	}
-	if len(s.Entries()) != maxEntries {
-		t.Errorf("expected cap at %d, got %d", maxEntries, len(s.Entries()))
+	if len(s.Entries()) != limit {
+		t.Errorf("expected cap at %d, got %d", limit, len(s.Entries()))
 	}
 }
 

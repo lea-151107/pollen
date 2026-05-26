@@ -87,6 +87,10 @@ type Model struct {
 	// response panel. Loaded from settings.json at startup (default 0.5).
 	responsePanelRatio float64
 
+	// sidebarMaxWidth is the maximum width of the left sidebar (history /
+	// collections panel). Loaded from settings.json at startup (default 40).
+	sidebarMaxWidth int
+
 	statusMsg  string // transient toast: copy result / save result / error
 	statusKind statusKind
 	statusGen  int // monotonic; a clearStatusMsg only clears if its gen matches
@@ -174,12 +178,16 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	}
 	// Seed view-visible TLS state from the httpx global (loaded by main.go).
 	m.tlsInsecure = httpx.SkipTLSVerify.Load()
-	// Load response panel ratio from settings (default 0.5 if unset/invalid).
+	// Load per-panel settings (defaults applied inside settings.Load).
 	if s, err := settings.Load(); err == nil {
 		m.responsePanelRatio = s.ResponsePanelRatio
+		m.sidebarMaxWidth = s.SidebarMaxWidth
 	}
 	if m.responsePanelRatio <= 0 || m.responsePanelRatio >= 1 {
 		m.responsePanelRatio = 0.5
+	}
+	if m.sidebarMaxWidth < 20 {
+		m.sidebarMaxWidth = 40
 	}
 	m.applyFocus()
 	return m

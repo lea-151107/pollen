@@ -19,7 +19,10 @@ var SkipTLSVerify atomic.Bool
 // MaxResponseBytes caps how much of a response body is read into memory. A
 // dev tool that accidentally hits a large download endpoint shouldn't OOM the
 // terminal; bytes beyond this cap are discarded and surfaced via Truncated.
-const MaxResponseBytes = 32 * 1024 * 1024 // 32 MiB
+var MaxResponseBytes = 32 * 1024 * 1024 // 32 MiB
+
+// RequestTimeout is the HTTP client timeout applied to every request.
+var RequestTimeout = 60 * time.Second
 
 // Do executes the given request and returns a Response.
 func Do(req history.Request) (*history.Response, error) {
@@ -48,7 +51,7 @@ func Do(req history.Request) (*history.Response, error) {
 		httpReq.Header.Set("Content-Type", contentType)
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: RequestTimeout}
 	if SkipTLSVerify.Load() {
 		// Clone DefaultTransport so we keep Proxy, keep-alive, HTTP/2, dial
 		// timeouts, and conn pooling defaults — only override the TLS config.
@@ -65,7 +68,7 @@ func Do(req history.Request) (*history.Response, error) {
 	defer resp.Body.Close()
 
 	// Cap the body read so a runaway endpoint cannot exhaust memory.
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, int64(MaxResponseBytes)+1))
 	if err != nil {
 		return nil, err
 	}
