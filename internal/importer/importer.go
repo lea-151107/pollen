@@ -198,8 +198,12 @@ type postmanReq struct {
 		Value string `json:"value"`
 	} `json:"header"`
 	Body *struct {
-		Mode string `json:"mode"`
-		Raw  string `json:"raw"`
+		Mode       string `json:"mode"`
+		Raw        string `json:"raw"`
+		URLEncoded []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"urlencoded"`
 	} `json:"body"`
 }
 
@@ -240,9 +244,24 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 
 	var body string
 	var bodyType history.BodyType
-	if req.Body != nil && req.Body.Mode == "raw" {
-		body = req.Body.Raw
-		bodyType = history.BodyRaw
+	if req.Body != nil {
+		switch req.Body.Mode {
+		case "raw":
+			body = req.Body.Raw
+			bodyType = history.BodyRaw
+		case "urlencoded":
+			var sb strings.Builder
+			for i, p := range req.Body.URLEncoded {
+				if i > 0 {
+					sb.WriteString("\n")
+				}
+				sb.WriteString(p.Key)
+				sb.WriteString("=")
+				sb.WriteString(p.Value)
+			}
+			body = sb.String()
+			bodyType = history.BodyForm
+		}
 	}
 
 	name := item.Name

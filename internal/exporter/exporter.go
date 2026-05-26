@@ -3,6 +3,7 @@ package exporter
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/lea/pollen/internal/collections"
 	"github.com/lea/pollen/internal/history"
@@ -31,8 +32,14 @@ type postmanExportReq struct {
 }
 
 type postmanExportBody struct {
-	Mode string `json:"mode"`
-	Raw  string `json:"raw,omitempty"`
+	Mode       string                   `json:"mode"`
+	Raw        string                   `json:"raw,omitempty"`
+	URLEncoded []postmanExportFormParam `json:"urlencoded,omitempty"`
+}
+
+type postmanExportFormParam struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // ExportPostman serialises entries as a Postman Collection v2.1 JSON document.
@@ -72,7 +79,7 @@ func entryToItem(e collections.Entry) postmanExportItem {
 		switch req.BodyType {
 		case history.BodyForm:
 			body.Mode = "urlencoded"
-			body.Raw = req.Body
+			body.URLEncoded = parseFormPairs(req.Body)
 		default:
 			body.Mode = "raw"
 			body.Raw = req.Body
@@ -80,4 +87,27 @@ func entryToItem(e collections.Entry) postmanExportItem {
 		item.Request.Body = body
 	}
 	return item
+}
+
+// parseFormPairs splits Pollen's internal "key=value\nkey=value" form body
+// into Postman's urlencoded array structure. Mirrors the parser in
+// httpx.buildBody so an export round-trips the same set of pairs the runtime
+// would actually send.
+func parseFormPairs(body string) []postmanExportFormParam {
+	var out []postmanExportFormParam
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		out = append(out, postmanExportFormParam{
+			Key:   strings.TrimSpace(k),
+			Value: strings.TrimSpace(v),
+		})
+	}
+	return out
 }

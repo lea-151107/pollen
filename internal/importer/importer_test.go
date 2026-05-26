@@ -4,6 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lea/pollen/internal/collections"
+	"github.com/lea/pollen/internal/exporter"
+	"github.com/lea/pollen/internal/history"
 )
 
 const sampleOpenAPIJSON = `{
@@ -132,6 +136,80 @@ func TestImportPostman(t *testing.T) {
 	}
 	if entries[1].Name != "Get user" {
 		t.Errorf("nested item: got %q", entries[1].Name)
+	}
+}
+
+func TestImportPostman_UrlencodedBody(t *testing.T) {
+	const collection = `{
+	  "info": {"name": "C"},
+	  "item": [{
+	    "name": "Login",
+	    "request": {
+	      "method": "POST",
+	      "url": {"raw": "https://api.example.com/login"},
+	      "body": {
+	        "mode": "urlencoded",
+	        "urlencoded": [
+	          {"key": "user", "value": "alice"},
+	          {"key": "pass", "value": "hunter2"}
+	        ]
+	      }
+	    }
+	  }]
+	}`
+	path := writeTemp(t, "collection.json", collection)
+	entries, err := Import(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	if got, want := string(entries[0].Request.BodyType), "form"; got != want {
+		t.Errorf("BodyType: got %q want %q", got, want)
+	}
+	if got, want := entries[0].Request.Body, "user=alice\npass=hunter2"; got != want {
+		t.Errorf("Body: got %q want %q", got, want)
+	}
+}
+
+// TestExportImportRoundtripFormBody is the regression test for the bug where
+// Pollen exported form bodies as {"mode": "urlencoded", "raw": "..."} while
+// the importer only accepted mode=raw, so a form body survived export but
+// vanished on re-import.
+func TestExportImportRoundtripFormBody(t *testing.T) {
+	original := []collections.Entry{{
+		ID:   "src-1",
+		Name: "Login",
+		Request: history.Request{
+			Method:   "POST",
+			URL:      "https://api.example.com/login",
+			BodyType: history.BodyForm,
+			Body:     "user=alice\npass=hunter2",
+		},
+	}}
+	data, err := exporter.ExportPostman(original, "c")
+	if err != nil {
+		t.Fatalf("export failed: %v", err)
+	}
+	path := writeTemp(t, "rt.json", string(data))
+
+	restored, err := Import(path)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if len(restored) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(restored))
+	}
+	got := restored[0].Request
+	if got.Method != "POST" || got.URL != original[0].Request.URL {
+		t.Errorf("method/url mismatch: %+v", got)
+	}
+	if got.BodyType != history.BodyForm {
+		t.Errorf("BodyType: got %q want form", got.BodyType)
+	}
+	if got.Body != original[0].Request.Body {
+		t.Errorf("Body roundtrip lost data: got %q want %q", got.Body, original[0].Request.Body)
 	}
 }
 
