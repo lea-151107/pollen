@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-05-27
+
+### Fixed
+
+- **Response panel: search overlay no longer hides filter / diff content**:
+  enabling the jq filter (`/`) or diff mode (`D`) and then typing in the
+  in-body search bar caused the viewport to revert to the raw body with
+  search highlights, even though the filter bar and diff badge stayed
+  visible. The search overlay now composes with the active base content
+  (filter > diff > plain), so search highlights are applied inside the
+  filtered or diff view rather than replacing it
+- **Diff badge hidden when filter overrides display**: with both diff mode
+  and a locked jq filter active, the `[diff]` badge stayed visible even
+  though the viewport showed the filtered content. The badge now only
+  appears when the diff view is actually shown
+- **Shift+Tab in body editor cycled focus**: Tab in the body editor inserts
+  two spaces of indent, but Shift+Tab triggered the global Prev-Focus
+  shortcut and dropped the user out of editor mode. Shift+Tab is now a
+  no-op in the editor (reserved for a future un-indent action)
+- **Terminal-control character sanitisation**: response bodies and header
+  values containing C0 / DEL / C1 bytes (e.g. ANSI escape sequences from a
+  buggy or malicious server) are now rendered as `\xHH` placeholders
+  instead of being passed through to the terminal, where they could
+  clear the screen or reposition the cursor
+- **BodyBytes memory growth bounded**: `BodyBytes` (in-session raw bytes
+  used by the `s` save action) are now dropped from entries older than the
+  10 most recent prepends, preventing unbounded memory accumulation
+  (previously up to `max_response_mib × history_limit` ≈ 6.4 GiB by
+  default). Text bodies remain savable from any entry via a Body string
+  fallback; binary bodies can only be re-saved from the 10 most recent
+
+[0.6.3]: https://github.com/lea-151107/pollen/releases/tag/v0.6.3
+
 ## [0.6.2] - 2026-05-26
 
 ### Fixed
