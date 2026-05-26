@@ -68,6 +68,7 @@ func (c *Collections) Focus() { c.focused = true }
 func (c *Collections) Blur() {
 	c.focused = false
 	c.filterMode = false
+	c.pendingG = false
 }
 func (c Collections) Focused() bool    { return c.focused }
 func (c Collections) InFilterMode() bool { return c.filterMode }

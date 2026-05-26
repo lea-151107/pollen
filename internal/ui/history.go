@@ -82,6 +82,7 @@ func (h *History) Focus() { h.focused = true }
 func (h *History) Blur() {
 	h.focused = false
 	h.filterMode = false
+	h.pendingG = false
 	// Note: keep `filter` so the same view comes back when the user returns.
 }
 func (h History) Focused() bool { return h.focused }
