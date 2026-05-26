@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-26
+
+### Added
+
+- **`--init-config`**: new startup flag that creates `~/.config/pollen/settings.json`
+  with all default values and exits. Combine with `--config` to target a custom
+  directory. Exits with an error if the file already exists (delete it first to reset).
+
+[0.5.1]: https://github.com/lea-151107/pollen/releases/tag/v0.5.1
+
 ## [0.5.0] - 2026-05-26
 
 ### Added
