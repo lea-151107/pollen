@@ -429,6 +429,12 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(km, m.keys.PrevFocus):
+		// Body editor consumes Shift+Tab symmetric with Tab — Tab inserts an
+		// indent, Shift+Tab is currently a no-op (reserved for a future
+		// un-indent). Either way, the user stays in the editor.
+		if m.focus == focusBody && m.body.InEditorMode() {
+			return m, nil
+		}
 		m.cycleFocus(false)
 		return m, nil
 	}
