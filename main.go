@@ -30,6 +30,20 @@ func main() {
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
 	flag.StringVar(&collFilter, "collection", "", "open collections sidebar filtered by name")
 	flag.BoolVar(&initConfig, "init-config", false, "write default settings.json and exit")
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		fmt.Fprintln(out, "Usage: pollen [--option ...]\n\nOptions:")
+		flag.CommandLine.VisitAll(func(f *flag.Flag) {
+			// flag.IsBoolFlag is the idiomatic way to detect bool flags.
+			if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && bf.IsBoolFlag() {
+				fmt.Fprintf(out, "  --%s\n        %s\n", f.Name, f.Usage)
+			} else if f.DefValue != "" {
+				fmt.Fprintf(out, "  --%s string\n        %s (default %q)\n", f.Name, f.Usage, f.DefValue)
+			} else {
+				fmt.Fprintf(out, "  --%s string\n        %s\n", f.Name, f.Usage)
+			}
+		})
+	}
 	flag.Parse()
 
 	if configDir != "" {
