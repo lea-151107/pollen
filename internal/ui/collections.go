@@ -61,6 +61,7 @@ func (c Collections) Selected() *collections.Entry {
 func (c *Collections) SetFilter(f string) {
 	c.filter = f
 	c.filterMode = false
+	c.pendingG = false
 	c.selected = 0
 }
 

@@ -182,9 +182,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 				_ = m.collStore.Save()
 				m.collUI.SetEntries(m.collStore.Entries())
 				m.setStatus(statusOK, fmt.Sprintf("updated: %s", m.collUpdateTargetName))
+				m.lastLoadedCollID = ""
+			} else {
+				m.setStatus(statusError, "collection entry not found")
 			}
 			m.collUpdatePromptOpen = false
-			m.lastLoadedCollID = ""
 			return m, m.statusTick(2 * time.Second)
 		case "n":
 			m.collUpdatePromptOpen = false

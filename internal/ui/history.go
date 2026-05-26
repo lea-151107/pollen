@@ -26,6 +26,7 @@ func NewHistory() History {
 }
 
 func (h *History) SetEntries(entries []history.Entry) {
+	h.pendingG = false
 	h.entries = entries
 	fe := h.filtered()
 	switch {
