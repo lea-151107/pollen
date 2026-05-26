@@ -21,7 +21,8 @@ const (
 //
 //   - Bearer: returns "Bearer <token>" with leading/trailing whitespace
 //     trimmed from token. Empty token → "".
-//   - Basic: returns "Basic <base64(user:pass)>". Both fields empty → "".
+//   - Basic: returns "Basic <base64(user:pass)>" with whitespace trimmed
+//     from user and pass. Both fields empty after trimming → "".
 //   - None: always "".
 func BuildAuthHeader(scheme AuthScheme, token, user, pass string) string {
 	switch scheme {
@@ -32,6 +33,8 @@ func BuildAuthHeader(scheme AuthScheme, token, user, pass string) string {
 		}
 		return "Bearer " + tok
 	case AuthBasic:
+		user = strings.TrimSpace(user)
+		pass = strings.TrimSpace(pass)
 		if user == "" && pass == "" {
 			return ""
 		}
