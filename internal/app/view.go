@@ -33,6 +33,9 @@ func (m Model) View() string {
 
 	// Split remaining width between request and response panels.
 	available := m.width - sidebarW
+	if available < 1 {
+		available = 1
+	}
 	responseW := int(float64(available) * m.responsePanelRatio)
 	if responseW < 30 {
 		responseW = 30

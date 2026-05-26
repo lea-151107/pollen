@@ -22,6 +22,7 @@ type Collections struct {
 func NewCollections() Collections { return Collections{} }
 
 func (c *Collections) SetEntries(entries []collections.Entry) {
+	c.pendingG = false
 	c.entries = entries
 	fe := c.filtered()
 	switch {
@@ -96,8 +97,9 @@ func (c Collections) Update(msg tea.Msg) (Collections, tea.Cmd) {
 		case "enter":
 			c.filterMode = false
 		case "backspace", "ctrl+h":
-			if len(c.filter) > 0 {
-				c.filter = c.filter[:len(c.filter)-1]
+			rs := []rune(c.filter)
+			if len(rs) > 0 {
+				c.filter = string(rs[:len(rs)-1])
 				c.selected = 0
 			}
 		default:

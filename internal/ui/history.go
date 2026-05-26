@@ -116,8 +116,9 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 			// Enter: keep the filter, leave editing mode.
 			h.filterMode = false
 		case "backspace", "ctrl+h":
-			if len(h.filter) > 0 {
-				h.filter = h.filter[:len(h.filter)-1]
+			rs := []rune(h.filter)
+			if len(rs) > 0 {
+				h.filter = string(rs[:len(rs)-1])
 				h.selected = 0
 			}
 		default:
