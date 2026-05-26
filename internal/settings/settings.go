@@ -22,13 +22,14 @@ type Settings struct {
 	HexDumpKiB         int     `json:"hex_dump_kib,omitempty"`
 }
 
-// Load reads settings from disk. A missing or corrupt file yields a
-// zero-valued Settings.
+// Load reads settings from disk. Missing or corrupt files fall back to
+// defaults — a bad disk state never blocks startup.
 func Load() (*Settings, error) {
 	s := &Settings{}
 	if _, err := userconfig.LoadJSON(fileName, s); err != nil {
-		// Corrupt file shouldn't brick startup; fall back to defaults.
-		return &Settings{}, nil
+		// Corrupt file: reset to zero so partial unmarshal doesn't leave
+		// stray values, then fall through to the normalization below.
+		s = &Settings{}
 	}
 	if s.ResponsePanelRatio <= 0 || s.ResponsePanelRatio >= 1 {
 		s.ResponsePanelRatio = 0.5

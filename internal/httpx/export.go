@@ -57,7 +57,7 @@ func ToFetch(req history.Request) string {
 	body, contentType, _ := buildBody(req)
 	if body != nil {
 		bodyStr := readerToString(req)
-		if _, ok := headers["Content-Type"]; !ok && contentType != "" {
+		if !hasHeader(req.Headers, "Content-Type") && contentType != "" {
 			headers["Content-Type"] = contentType
 		}
 		opts["body"] = bodyStr
