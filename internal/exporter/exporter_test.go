@@ -19,6 +19,28 @@ func TestExportPostman_EmptyEntries(t *testing.T) {
 	}
 }
 
+// TestExportPostman_EmptyItemArray is the regression test for the bug where an
+// empty entries slice was serialised as `"item": null`. Postman v2.1 requires
+// `item` to be an array, so strict parsers reject the null form.
+func TestExportPostman_EmptyItemArray(t *testing.T) {
+	data, err := ExportPostman(nil, "x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(string(data), `"item": []`) {
+		t.Errorf("expected '\"item\": []' in output, got: %s", data)
+	}
+	if strings.Contains(string(data), `"item": null`) {
+		t.Errorf("output must NOT contain '\"item\": null': %s", data)
+	}
+
+	// Same for an explicit empty slice (zero-length, non-nil).
+	data2, _ := ExportPostman([]collections.Entry{}, "x")
+	if !strings.Contains(string(data2), `"item": []`) {
+		t.Errorf("empty slice should also produce '[]', got: %s", data2)
+	}
+}
+
 func TestExportPostman_RawBody(t *testing.T) {
 	entries := []collections.Entry{
 		{

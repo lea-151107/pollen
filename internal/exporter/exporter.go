@@ -44,11 +44,15 @@ type postmanExportFormParam struct {
 
 // ExportPostman serialises entries as a Postman Collection v2.1 JSON document.
 func ExportPostman(entries []collections.Entry, name string) ([]byte, error) {
+	// Postman v2.1 requires `item` to be an array. Initialise the slice so
+	// an empty collection serialises as `"item": []` instead of `"item": null`,
+	// which strict parsers reject.
 	col := postmanExportCollection{
 		Info: postmanExportInfo{
 			Name:   name,
 			Schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		},
+		Item: []postmanExportItem{},
 	}
 	for _, e := range entries {
 		col.Item = append(col.Item, entryToItem(e))
