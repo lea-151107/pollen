@@ -60,7 +60,7 @@ func (r *Response) SetResponse(resp *history.Response, reqURL string) {
 	r.err = ""
 	r.loading = false
 	r.resetFilter()
-	if r.diffMode && r.prevResp != nil && !r.resp.IsBinary && !r.prevResp.IsBinary {
+	if r.diffMode && r.prevResp != nil && r.resp != nil && !r.resp.IsBinary && !r.prevResp.IsBinary {
 		r.diffBody = r.computeDiff()
 		r.vp.SetContent(r.diffBody)
 	} else {
@@ -534,7 +534,9 @@ func formatHeaders(headers []history.Header) string {
 	for _, h := range sorted {
 		lines = append(lines, fmt.Sprintf("%s: %s", h.Key, h.Value))
 		if len(lines) >= 5 {
-			lines = append(lines, fmt.Sprintf("(+ %d more headers)", len(sorted)-5))
+			if len(sorted) > 5 {
+				lines = append(lines, fmt.Sprintf("(+ %d more headers)", len(sorted)-5))
+			}
 			break
 		}
 	}

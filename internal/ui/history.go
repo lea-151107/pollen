@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -388,6 +389,47 @@ func formatRelative(t time.Time) string {
 	}
 }
 
+// caseInsensitiveIndex locates needle inside text case-insensitively and
+// returns byte offsets [start, end) in text. Unlike a naive strings.ToLower +
+// strings.Index, this walks the strings rune by rune so that Unicode case
+// mappings that change byte width (e.g. U+212A KELVIN SIGN → 'k') do not
+// misalign the slice boundaries — which would otherwise produce a sliced
+// invalid-UTF-8 fragment when rendered.
+func caseInsensitiveIndex(text, needle string) (start, end int, ok bool) {
+	needleLow := []rune(strings.ToLower(needle))
+	if len(needleLow) == 0 {
+		return 0, 0, false
+	}
+	type cell struct {
+		byteStart int
+		lower     rune
+	}
+	var cells []cell
+	for i, r := range text {
+		cells = append(cells, cell{byteStart: i, lower: unicode.ToLower(r)})
+	}
+	if len(cells) < len(needleLow) {
+		return 0, 0, false
+	}
+outer:
+	for i := 0; i <= len(cells)-len(needleLow); i++ {
+		for j, nr := range needleLow {
+			if cells[i+j].lower != nr {
+				continue outer
+			}
+		}
+		start = cells[i].byteStart
+		last := i + len(needleLow) - 1
+		if last+1 < len(cells) {
+			end = cells[last+1].byteStart
+		} else {
+			end = len(text)
+		}
+		return start, end, true
+	}
+	return 0, 0, false
+}
+
 // highlightMatchColored applies color to each segment (before/match/after) of
 // text individually, so the base color is never lost due to ANSI nesting. The
 // match segment additionally gets Bold+Underline. The result is padded to padW
@@ -402,15 +444,11 @@ func highlightMatchColored(text string, padW int, needle string, color lipgloss.
 	if needle == "" {
 		return base.Render(text + pad)
 	}
-	lower := strings.ToLower(text)
-	idx := strings.Index(lower, strings.ToLower(needle))
-	if idx < 0 {
+	start, end, ok := caseInsensitiveIndex(text, needle)
+	if !ok {
 		return base.Render(text + pad)
 	}
-	before := text[:idx]
-	match := text[idx : idx+len(needle)]
-	after := text[idx+len(needle):]
-	return base.Render(before) + base.Bold(true).Underline(true).Render(match) + base.Render(after+pad)
+	return base.Render(text[:start]) + base.Bold(true).Underline(true).Render(text[start:end]) + base.Render(text[end:]+pad)
 }
 
 // highlightMatch wraps the first case-insensitive occurrence of needle in bold
@@ -419,15 +457,11 @@ func highlightMatch(text, needle string) string {
 	if needle == "" {
 		return text
 	}
-	lower := strings.ToLower(text)
-	idx := strings.Index(lower, strings.ToLower(needle))
-	if idx < 0 {
+	start, end, ok := caseInsensitiveIndex(text, needle)
+	if !ok {
 		return text
 	}
-	before := text[:idx]
-	match := text[idx : idx+len(needle)]
-	after := text[idx+len(needle):]
-	return before + lipgloss.NewStyle().Bold(true).Underline(true).Render(match) + after
+	return text[:start] + lipgloss.NewStyle().Bold(true).Underline(true).Render(text[start:end]) + text[end:]
 }
 
 // padRightANSI pads s to at least w visible columns, using lipgloss.Width to

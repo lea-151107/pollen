@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lea/pollen/internal/history"
 )
 
@@ -101,5 +103,100 @@ func TestFormatRelative_LargeDay(t *testing.T) {
 	got := formatRelative(time.Now().Add(-72 * time.Hour))
 	if !strings.HasSuffix(got, "d ago") {
 		t.Errorf("expected '...d ago', got %q", got)
+	}
+}
+
+// stripANSI removes ANSI CSI escape sequences so plain-text content can be
+// compared even when lipgloss wrapped the result in styling codes.
+func stripANSI(s string) string {
+	var out strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
+			// Skip ESC '[' ... until a final byte in [@-~].
+			j := i + 2
+			for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
+				j++
+			}
+			if j < len(s) {
+				j++
+			}
+			i = j
+			continue
+		}
+		out.WriteByte(s[i])
+		i++
+	}
+	return out.String()
+}
+
+func TestHighlightMatch_ASCII(t *testing.T) {
+	got := highlightMatch("Hello World", "world")
+	plain := stripANSI(got)
+	if plain != "Hello World" {
+		t.Errorf("plain text should be preserved, got %q", plain)
+	}
+	if !strings.Contains(got, "World") {
+		t.Errorf("match should appear in output: %q", got)
+	}
+}
+
+func TestHighlightMatch_NoMatch(t *testing.T) {
+	got := highlightMatch("Hello", "xyz")
+	if got != "Hello" {
+		t.Errorf("no match should return original: %q", got)
+	}
+}
+
+func TestHighlightMatch_EmptyNeedle(t *testing.T) {
+	got := highlightMatch("Hello", "")
+	if got != "Hello" {
+		t.Errorf("empty needle should return original: %q", got)
+	}
+}
+
+// TestHighlightMatch_KelvinSign is the regression test for the bug where
+// strings.ToLower changed byte widths (U+212A KELVIN SIGN → 'k') so the byte
+// index from the lowercased string misaligned slicing on the original. After
+// the fix the highlighter should still produce valid UTF-8 with the original
+// text content fully preserved.
+func TestHighlightMatch_KelvinSign(t *testing.T) {
+	// U+212A KELVIN SIGN: 3 bytes (E2 84 AA), lowercases to 'k' (1 byte).
+	text := "hiKworld" // "hiKworld" where K is U+212A
+	got := highlightMatch(text, "k")
+	plain := stripANSI(got)
+	if plain != text {
+		t.Errorf("plain content should equal original, got %q want %q", plain, text)
+	}
+	if !strings.ContainsRune(plain, 'K') {
+		t.Errorf("Kelvin sign rune lost in output: %q", plain)
+	}
+}
+
+func TestHighlightMatchColored_KelvinSign(t *testing.T) {
+	text := "hiKworld"
+	got := highlightMatchColored(text, len([]rune(text)), "k", lipgloss.Color("44"))
+	plain := stripANSI(got)
+	if !strings.ContainsRune(plain, 'K') {
+		t.Errorf("Kelvin sign rune lost: %q", plain)
+	}
+}
+
+func TestCaseInsensitiveIndex_KelvinSign(t *testing.T) {
+	// U+212A is 3 bytes at positions 2-4; expecting [2, 5) byte range.
+	start, end, ok := caseInsensitiveIndex("hiKworld", "k")
+	if !ok {
+		t.Fatal("should find a match")
+	}
+	if start != 2 || end != 5 {
+		t.Errorf("got [%d,%d) want [2,5)", start, end)
+	}
+}
+
+func TestCaseInsensitiveIndex_Multibyte(t *testing.T) {
+	// Pure ASCII smoke test.
+	start, end, ok := caseInsensitiveIndex("Hello World", "world")
+	if !ok || start != 6 || end != 11 {
+		t.Errorf("got start=%d end=%d ok=%v want 6,11,true", start, end, ok)
 	}
 }
