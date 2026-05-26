@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-05-26
+
+### Fixed
+
+- **Response jq filter / search bar swallowed by global `u` and `s`**: when
+  the response panel had an active jq filter (`/`) or in-body search (`Ctrl+F`),
+  the global `u` shortcut (undo last history delete) consumed the `u`
+  keystroke instead of inserting it into the input, and the panel-local `s`
+  shortcut (save response body) similarly intercepted `s`. Filters like
+  `.users` or `.servers` were unreachable while the undo window was open or
+  while the response panel had focus. The text-editing focus guard now treats
+  `focusResponse` as text-editing when either input is active, mirroring how
+  History/Collections filter modes are already handled
+- **Diff toggle dropped search highlights**: with a locked search query
+  (Enter pressed after typing in the search bar), toggling diff off cleared
+  the search overlay even though the search bar still displayed the query.
+  The diff toggle's "off" branch now defers to `currentDisplayBody`, restoring
+  the documented `search > filter > diff > plain` priority
+- **Postman export `"item": null` for empty collections**: exporting an empty
+  collection produced `"item": null` instead of the spec-required `"item": []`,
+  which strict Postman v2.1 parsers may reject
+
+[0.6.2]: https://github.com/lea-151107/pollen/releases/tag/v0.6.2
+
 ## [0.6.1] - 2026-05-26
 
 ### Fixed
