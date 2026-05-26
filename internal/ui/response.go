@@ -94,6 +94,11 @@ func (r *Response) Blur()             { r.focused = false }
 func (r Response) Focused() bool      { return r.focused }
 func (r Response) FilterActive() bool { return r.filterActive }
 
+// SearchActive reports whether the in-body search input is currently capturing
+// keystrokes. Returns false once Enter "locks" the query (searchQuery is
+// preserved but the bar no longer eats input).
+func (r Response) SearchActive() bool { return r.searchActive }
+
 func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 	if !r.focused {
 		return r, nil
@@ -170,10 +175,11 @@ func (r Response) Update(msg tea.Msg) (Response, tea.Cmd) {
 			if r.diffMode {
 				r.diffBody = r.computeDiff()
 				r.vp.SetContent(r.diffBody)
-			} else if r.filteredBody != "" {
-				r.vp.SetContent(r.filteredBody)
 			} else {
-				r.vp.SetContent(r.formatBody())
+				// Toggling diff off: defer to currentDisplayBody so a locked
+				// search query or jq filter is restored as the visible overlay,
+				// matching the documented search > filter > diff > plain priority.
+				r.vp.SetContent(r.currentDisplayBody())
 			}
 			r.vp.GotoTop()
 			return r, nil

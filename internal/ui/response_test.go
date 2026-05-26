@@ -98,6 +98,17 @@ func TestSetResponse_NilDoesNotPanic(t *testing.T) {
 	r.SetResponse(nil, "")
 }
 
+func TestResponse_SearchActiveAccessor(t *testing.T) {
+	r := NewResponse()
+	if r.SearchActive() {
+		t.Errorf("fresh Response should not have search active")
+	}
+	r.searchActive = true
+	if !r.SearchActive() {
+		t.Errorf("SearchActive should reflect r.searchActive")
+	}
+}
+
 func TestIsJSONContentType(t *testing.T) {
 	cases := map[string]bool{
 		"application/json":         true,

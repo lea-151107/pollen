@@ -27,7 +27,7 @@ type clearStatusMsg struct{ gen int }
 // isTextEditingFocus reports whether the currently focused panel is actively
 // accepting character input. Used to gate single-letter global shortcuts
 // (currently `u` for undo) so they don't swallow real input.
-func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode, collFilterMode bool) bool {
+func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode, collFilterMode, responseInputActive bool) bool {
 	switch f {
 	case focusURL, focusQuery, focusAuth, focusHeaders:
 		return true
@@ -37,6 +37,8 @@ func isTextEditingFocus(f focusArea, bodyInEditor, historyFilterMode, collFilter
 		return historyFilterMode
 	case focusCollections:
 		return collFilterMode
+	case focusResponse:
+		return responseInputActive
 	}
 	return false
 }
@@ -295,7 +297,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpOpen = true
 		return m, nil
 
-	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode()):
+	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode(), m.response.FilterActive() || m.response.SearchActive()):
 		u := m.pendingUndo
 		m.store.InsertAt(u.index, u.entry)
 		_ = m.store.Save()
@@ -405,7 +407,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.response, cmd = m.response.Update(km)
 		return m, cmd
 
-	case m.focus == focusResponse && km.String() == "s":
+	case m.focus == focusResponse && km.String() == "s" && !m.response.FilterActive() && !m.response.SearchActive():
 		// See note above on sendRequest — avoid relying on undefined eval order.
 		cmd := m.saveResponse()
 		return m, cmd
