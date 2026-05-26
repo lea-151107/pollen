@@ -10,6 +10,7 @@ import (
 	"github.com/lea/pollen/internal/env"
 	"github.com/lea/pollen/internal/history"
 	"github.com/lea/pollen/internal/httpx"
+	"github.com/lea/pollen/internal/settings"
 	"github.com/lea/pollen/internal/ui"
 )
 
@@ -81,6 +82,10 @@ type Model struct {
 	// tlsInsecure mirrors httpx.SkipTLSVerify so the view layer doesn't have
 	// to reach into the http package's globals just to draw a badge.
 	tlsInsecure bool
+
+	// responsePanelRatio is the fraction of available width given to the
+	// response panel. Loaded from settings.json at startup (default 0.5).
+	responsePanelRatio float64
 
 	statusMsg  string // transient toast: copy result / save result / error
 	statusKind statusKind
@@ -169,6 +174,13 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	}
 	// Seed view-visible TLS state from the httpx global (loaded by main.go).
 	m.tlsInsecure = httpx.SkipTLSVerify.Load()
+	// Load response panel ratio from settings (default 0.5 if unset/invalid).
+	if s, err := settings.Load(); err == nil {
+		m.responsePanelRatio = s.ResponsePanelRatio
+	}
+	if m.responsePanelRatio <= 0 || m.responsePanelRatio >= 1 {
+		m.responsePanelRatio = 0.5
+	}
 	m.applyFocus()
 	return m
 }

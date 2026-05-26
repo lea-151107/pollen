@@ -18,6 +18,7 @@ type History struct {
 	focused    bool
 	filter     string // empty = no filter
 	filterMode bool   // true while the user is typing in the filter
+	pendingG   bool   // true after a single 'g' press, waiting for 'gg'
 }
 
 func NewHistory() History {
@@ -130,31 +131,53 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 
 	switch {
 	case km.String() == "/":
+		h.pendingG = false
 		h.filterMode = true
 		return h, nil
 	case km.String() == "esc" && h.filter != "":
 		// Outside filter mode, Esc still clears an active filter.
+		h.pendingG = false
 		h.filter = ""
 		h.selected = 0
 		return h, nil
+	case km.String() == "G":
+		h.pendingG = false
+		if n := len(h.filtered()); n > 0 {
+			h.selected = n - 1
+		}
+		return h, nil
+	case km.String() == "g":
+		if h.pendingG {
+			h.pendingG = false
+			h.selected = 0
+		} else {
+			h.pendingG = true
+		}
+		return h, nil
 	case key.Matches(km, key.NewBinding(key.WithKeys("up", "k"))):
+		h.pendingG = false
 		if h.selected > 0 {
 			h.selected--
 		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("down", "j"))):
+		h.pendingG = false
 		if h.selected < len(h.filtered())-1 {
 			h.selected++
 		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("enter"))):
+		h.pendingG = false
 		if e := h.Selected(); e != nil {
 			entry := *e
 			return h, func() tea.Msg { return HistorySelectMsg{Entry: entry} }
 		}
 	case km.String() == "d":
+		h.pendingG = false
 		if e := h.Selected(); e != nil {
 			id := e.ID
 			return h, func() tea.Msg { return HistoryDeleteMsg{ID: id} }
 		}
+	default:
+		h.pendingG = false
 	}
 	return h, nil
 }

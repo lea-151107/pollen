@@ -16,6 +16,7 @@ type Collections struct {
 	focused    bool
 	filter     string
 	filterMode bool
+	pendingG   bool // true after a single 'g' press, waiting for 'gg'
 }
 
 func NewCollections() Collections { return Collections{} }
@@ -109,33 +110,54 @@ func (c Collections) Update(msg tea.Msg) (Collections, tea.Cmd) {
 
 	switch {
 	case km.String() == "/":
+		c.pendingG = false
 		c.filterMode = true
 	case km.String() == "esc" && c.filter != "":
+		c.pendingG = false
 		c.filter = ""
 		c.selected = 0
+	case km.String() == "G":
+		c.pendingG = false
+		if n := len(c.filtered()); n > 0 {
+			c.selected = n - 1
+		}
+	case km.String() == "g":
+		if c.pendingG {
+			c.pendingG = false
+			c.selected = 0
+		} else {
+			c.pendingG = true
+		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("up", "k"))):
+		c.pendingG = false
 		if c.selected > 0 {
 			c.selected--
 		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("down", "j"))):
+		c.pendingG = false
 		if c.selected < len(c.filtered())-1 {
 			c.selected++
 		}
 	case key.Matches(km, key.NewBinding(key.WithKeys("enter"))):
+		c.pendingG = false
 		if e := c.Selected(); e != nil {
 			entry := *e
 			return c, func() tea.Msg { return CollectionSelectMsg{Entry: entry} }
 		}
 	case km.String() == "d":
+		c.pendingG = false
 		if e := c.Selected(); e != nil {
 			id := e.ID
 			return c, func() tea.Msg { return CollectionDeleteMsg{ID: id} }
 		}
 	case km.String() == "e":
+		c.pendingG = false
 		if e := c.Selected(); e != nil {
 			id := e.ID
 			return c, func() tea.Msg { return CollectionRenameMsg{ID: id} }
 		}
+	default:
+		c.pendingG = false
 	}
 	return c, nil
 }

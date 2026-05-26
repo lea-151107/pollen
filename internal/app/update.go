@@ -268,6 +268,9 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.Quit):
 		return m, tea.Quit
 
+	case km.String() == "ctrl+l":
+		return m, tea.ClearScreen
+
 	case m.copyMenuOpen:
 		return m.handleCopyMenu(km)
 

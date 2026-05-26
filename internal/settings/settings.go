@@ -12,7 +12,8 @@ import (
 const fileName = "settings.json"
 
 type Settings struct {
-	SkipTLSVerify bool `json:"skip_tls_verify"`
+	SkipTLSVerify      bool    `json:"skip_tls_verify"`
+	ResponsePanelRatio float64 `json:"response_panel_ratio,omitempty"`
 }
 
 // Load reads settings from disk. A missing or corrupt file yields a
@@ -22,6 +23,9 @@ func Load() (*Settings, error) {
 	if _, err := userconfig.LoadJSON(fileName, s); err != nil {
 		// Corrupt file shouldn't brick startup; fall back to defaults.
 		return &Settings{}, nil
+	}
+	if s.ResponsePanelRatio <= 0 || s.ResponsePanelRatio >= 1 {
+		s.ResponsePanelRatio = 0.5
 	}
 	return s, nil
 }

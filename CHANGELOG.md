@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-26
+
+### Added
+
+- **Response right panel**: the response viewer is now a persistent right-side
+  panel instead of sharing vertical space with the body editor. The body editor
+  expands to fill all remaining height. The split ratio defaults to 50 % and
+  can be changed by setting `"response_panel_ratio"` (e.g. `0.6`) in
+  `~/.config/pollen/settings.json`
+- **History / Collections — G / gg jump**: press `G` to jump to the last
+  entry; press `g g` (twice) to jump to the first. Matches vim-style navigation
+- **Ctrl+L**: force-redraws the terminal (useful after the screen is garbled
+  by another program's output)
+
+[0.5.0]: https://github.com/lea-151107/pollen/releases/tag/v0.5.0
+
 ## [0.4.3] - 2026-05-25
 
 ### Fixed

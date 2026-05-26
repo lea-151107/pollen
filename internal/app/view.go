@@ -30,12 +30,24 @@ func (m Model) View() string {
 			sidebarW = 40
 		}
 	}
-	mainW := m.width - sidebarW
-	if mainW < 30 {
-		mainW = 30
+
+	// Split remaining width between request and response panels.
+	available := m.width - sidebarW
+	responseW := int(float64(available) * m.responsePanelRatio)
+	if responseW < 30 {
+		responseW = 30
+	}
+	if responseW > available-20 {
+		responseW = available - 20
+	}
+	requestW := available - responseW
+	if requestW < 20 {
+		requestW = 20
 	}
 
-	main := m.renderMain(mainW, contentH)
+	reqPanel := m.renderRequest(requestW, contentH)
+	respPanel := m.response.View(responseW, contentH)
+	main := lipgloss.JoinHorizontal(lipgloss.Top, reqPanel, respPanel)
 
 	var top string
 	if m.showHistory {
@@ -75,7 +87,7 @@ func (m Model) View() string {
 	return view
 }
 
-func (m Model) renderMain(width, height int) string {
+func (m Model) renderRequest(width, height int) string {
 	methodView := m.method.View()
 	methodW := lipgloss.Width(methodView)
 	urlView := m.urlBar.View(width - methodW - 1)
@@ -85,26 +97,17 @@ func (m Model) renderMain(width, height int) string {
 	authView := m.auth.View(width)
 	headersView := m.headers.View(width)
 
-	// Compute remaining space: split between body and response.
+	// Body takes all remaining vertical space (response is now in the right panel).
 	used := lipgloss.Height(requestLine) + lipgloss.Height(queryView) +
 		lipgloss.Height(authView) + lipgloss.Height(headersView)
-	remaining := height - used
-	if remaining < 6 {
-		remaining = 6
-	}
-	bodyH := remaining / 2
-	respH := remaining - bodyH
+	bodyH := height - used
 	if bodyH < 4 {
 		bodyH = 4
 	}
-	if respH < 4 {
-		respH = 4
-	}
 
 	bodyView := m.body.View(width, bodyH)
-	respView := m.response.View(width, respH)
 
-	return lipgloss.JoinVertical(lipgloss.Left, requestLine, queryView, authView, headersView, bodyView, respView)
+	return lipgloss.JoinVertical(lipgloss.Left, requestLine, queryView, authView, headersView, bodyView)
 }
 
 func (m Model) renderStatusBar() string {
