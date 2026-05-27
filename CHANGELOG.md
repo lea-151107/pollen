@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-05-27
+
+First stable release. The CLI, configuration file schemas, keybindings, and
+variable-expansion syntax are now covered by Semantic Versioning — see the
+*Versioning and stability* section of the README for what is and isn't part
+of the stable surface.
+
+### Stable
+
+- **CLI flags** (`--version`, `--config`, `--env`, `--collection`,
+  `--init-config`, `--export-collections`)
+- **`settings.json` schema** (12 fields: `skip_tls_verify`,
+  `response_panel_ratio`, `request_timeout_secs`, `max_response_mib`,
+  `history_limit`, `text_preview_kib`, `sidebar_max_width`, `hex_dump_kib`,
+  `proxy_url`, `disable_redirects`, `ca_cert_file`, `enable_cookies`)
+- **`env.json` schema** with multiple named environments and the v0.1.0
+  flat-`vars` migration path
+- **`history.json` and `collections.json` schemas** with their `version: 1`
+  envelope
+- **Keybindings** documented in the README and the in-app help overlay
+  (`Ctrl+/`)
+- **Variable-expansion syntax**: `{{name}}` for env vars,
+  `{{response.body.<jq-path>}}` / `{{response.headers.<name>}}` /
+  `{{response.status}}` for request chaining
+
+### Added
+
+- Pre-built binaries published on each release for Linux / macOS / Windows
+  (amd64 + arm64) via `goreleaser`
+- GitHub Actions CI runs `go test` / `go vet` / `go build` on every push and
+  pull request across Linux, macOS, and Windows
+- `examples/` directory with sample OpenAPI spec, Postman collection, and
+  reference `settings.json` / `env.json`
+
+### Notes
+
+- No breaking changes from v0.6.4. Existing config files load unchanged.
+- v0.1.0 flat-`vars` env.json files are still auto-migrated to the
+  per-environment format on load.
+
+[1.0.0]: https://github.com/lea-151107/pollen/releases/tag/v1.0.0
+
 ## [0.6.4] - 2026-05-27
 
 ### Fixed
