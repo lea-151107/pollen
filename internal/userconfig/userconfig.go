@@ -18,7 +18,12 @@ var dirOverride string
 
 // SetOverride replaces the default config directory for this process lifetime.
 // Call before opening any stores (e.g. from main, before history.Open).
+// Passing an empty string clears any previous override (useful in tests).
 func SetOverride(path string) {
+	if path == "" {
+		dirOverride = ""
+		return
+	}
 	dirOverride = filepath.Clean(path)
 }
 

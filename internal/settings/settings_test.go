@@ -8,11 +8,14 @@ import (
 	"github.com/lea/pollen/internal/userconfig"
 )
 
-// withTempConfig redirects XDG_CONFIG_HOME for the duration of the test.
+// withTempConfig redirects userconfig.Dir for the duration of the test.
+// SetOverride works on all platforms; XDG_CONFIG_HOME is only honoured on
+// Linux by os.UserConfigDir, so using it directly would route this test's
+// writes into the developer's real config directory on macOS / Windows.
 func withTempConfig(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	userconfig.SetOverride(t.TempDir())
+	t.Cleanup(func() { userconfig.SetOverride("") })
 }
 
 func TestLoad_MissingFileReturnsDefault(t *testing.T) {

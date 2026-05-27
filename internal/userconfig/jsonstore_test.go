@@ -12,7 +12,7 @@ type testPayload struct {
 }
 
 func TestSaveLoadJSON_Roundtrip(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempOverride(t)
 
 	src := testPayload{Name: "alice", Count: 7}
 	if err := SaveJSON("foo.json", &src); err != nil {
@@ -33,7 +33,7 @@ func TestSaveLoadJSON_Roundtrip(t *testing.T) {
 }
 
 func TestLoadJSON_MissingFile(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempOverride(t)
 
 	var dst testPayload
 	ok, err := LoadJSON("doesnotexist.json", &dst)
@@ -46,7 +46,7 @@ func TestLoadJSON_MissingFile(t *testing.T) {
 }
 
 func TestLoadJSON_CorruptSurfacesError(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempOverride(t)
 	// Write a corrupt file in the right place.
 	path, _ := Path("bad.json")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
@@ -63,7 +63,7 @@ func TestLoadJSON_CorruptSurfacesError(t *testing.T) {
 }
 
 func TestSaveJSON_AtomicViaTmpRename(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withTempOverride(t)
 
 	if err := SaveJSON("x.json", testPayload{Name: "a"}); err != nil {
 		t.Fatal(err)

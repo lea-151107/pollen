@@ -10,7 +10,12 @@ import (
 
 func withTempConfig(t *testing.T) {
 	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Use userconfig.SetOverride rather than XDG_CONFIG_HOME because
+	// os.UserConfigDir only honours XDG_CONFIG_HOME on Linux — on macOS and
+	// Windows the env var is ignored, which would route this test's writes
+	// into the developer's real config directory.
+	userconfig.SetOverride(t.TempDir())
+	t.Cleanup(func() { userconfig.SetOverride("") })
 }
 
 // envFor builds an Env with a single active environment containing vars.

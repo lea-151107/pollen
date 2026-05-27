@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lea/pollen/internal/userconfig"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -57,16 +59,18 @@ func TestStore_SaveLoad(t *testing.T) {
 }
 
 func TestOpen_CorruptFileReturnsEmpty(t *testing.T) {
-	// Redirect XDG_CONFIG_HOME so Open's default path lands in TempDir.
+	// Redirect userconfig.Dir so Open's default path lands in TempDir.
+	// SetOverride works on all platforms; XDG_CONFIG_HOME only works on Linux.
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	userconfig.SetOverride(dir)
+	t.Cleanup(func() { userconfig.SetOverride("") })
 
-	// Write a corrupt history.json.
-	pollenDir := filepath.Join(dir, "pollen")
-	if err := os.MkdirAll(pollenDir, 0o755); err != nil {
+	// Write a corrupt history.json directly in the override dir (no nested
+	// "pollen" subdir because SetOverride supplies the full pollen dir).
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	corrupt := filepath.Join(pollenDir, "history.json")
+	corrupt := filepath.Join(dir, "history.json")
 	if err := os.WriteFile(corrupt, []byte("{not valid json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
