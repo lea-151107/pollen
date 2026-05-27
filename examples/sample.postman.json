@@ -1,0 +1,46 @@
+{
+  "info": {
+    "name": "Sample collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "url": {"raw": "https://api.example.com/auth/login"},
+        "header": [
+          {"key": "Content-Type", "value": "application/json"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\":\"alice\",\"password\":\"hunter2\"}"
+        }
+      }
+    },
+    {
+      "name": "List users",
+      "request": {
+        "method": "GET",
+        "url": {"raw": "https://api.example.com/users?limit=10"},
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{response.body.token}}"}
+        ]
+      }
+    },
+    {
+      "name": "Submit form",
+      "request": {
+        "method": "POST",
+        "url": {"raw": "https://api.example.com/feedback"},
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {"key": "subject", "value": "Hello"},
+            {"key": "body", "value": "Pollen test"}
+          ]
+        }
+      }
+    }
+  ]
+}

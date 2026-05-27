@@ -1,0 +1,38 @@
+openapi: "3.0.3"
+info:
+  title: Sample User API
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com
+paths:
+  /users:
+    get:
+      summary: List users
+      operationId: listUsers
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          required: true
+          schema:
+            type: string
+    post:
+      summary: Create user
+      operationId: createUser
+  /users/{id}:
+    get:
+      summary: Get user
+      operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+    delete:
+      summary: Delete user
+      operationId: deleteUser
