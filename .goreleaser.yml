@@ -1,0 +1,56 @@
+# goreleaser v2 config. Run locally with `goreleaser release --snapshot --clean`
+# to dry-run, or `goreleaser release --clean` on a fresh tag (CI does this).
+version: 2
+
+project_name: pollen
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: pollen
+    main: .
+    binary: pollen
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/lea/pollen/internal/version.Version={{ .Version }}
+
+archives:
+  - id: pollen
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}'
+
+changelog:
+  disable: true # We maintain CHANGELOG.md by hand.
+
+release:
+  draft: false
+  prerelease: auto
