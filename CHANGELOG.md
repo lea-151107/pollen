@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-05-27
+
+### Fixed
+
+- **CI: cross-platform test stability**. `TestDir_UsesXDGConfigHome`
+  asserted Linux-specific `os.UserConfigDir` behaviour (the env var
+  `XDG_CONFIG_HOME`) and failed on the macOS and Windows runners; it now
+  skips on non-Linux. Other test helpers that previously redirected via
+  `XDG_CONFIG_HOME` — and would silently write into the runner's real
+  config directory on macOS/Windows — now go through
+  `userconfig.SetOverride`, which works on every platform.
+  `userconfig.SetOverride("")` now correctly clears the override (was
+  treated as `"."` by `filepath.Clean`), so test cleanup actually resets
+  state between cases.
+
+No user-visible runtime behaviour changed. The pollen binary itself is
+byte-equivalent to v1.0.0.
+
+[1.0.1]: https://github.com/lea-151107/pollen/releases/tag/v1.0.1
+
 ## [1.0.0] - 2026-05-27
 
 First stable release. The CLI, configuration file schemas, keybindings, and
