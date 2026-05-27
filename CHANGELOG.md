@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-05-27
+
+### Fixed
+
+- **Terminal-control sanitisation: cover the remaining display paths**:
+  v0.6.3 sanitised response bodies, headers, and the diff view, but
+  `Response.SetError` (network/HTTP error messages — also re-displayed
+  from history via `applyEntry`), the `binaryHeader` Content-Type
+  readout, and Content-Disposition filenames written by the `s` save
+  action still passed raw bytes through. A server returning an
+  `\x1b`-laced Content-Type, error text, or filename could clear the
+  terminal or reposition the cursor. All three paths are now sanitised —
+  display paths via the existing `sanitizeTerminalControl` helper,
+  filenames via a `_` replacement applied before writing to disk so the
+  on-disk name and the "saved to ..." status message agree
+
+[0.6.4]: https://github.com/lea-151107/pollen/releases/tag/v0.6.4
+
 ## [0.6.3] - 2026-05-27
 
 ### Fixed
