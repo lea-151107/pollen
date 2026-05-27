@@ -208,6 +208,50 @@ func TestSanitizeTerminalControl_PreservesTabNewline(t *testing.T) {
 	}
 }
 
+// ---- Bug K: complete sanitisation coverage ----
+
+// TestSetError_SanitizesANSI guards Bug K-1: SetError put err verbatim into
+// the viewport so an HTTP error containing server-influenced text could carry
+// raw escape sequences into the terminal (and stick around in history for
+// later re-display via applyEntry).
+func TestSetError_SanitizesANSI(t *testing.T) {
+	r := NewResponse()
+	r.SetError("network: \x1b[2J refused")
+	got := r.vp.View()
+	if strings.ContainsRune(got, 0x1b) {
+		// Find which ESC. lipgloss styling injects ESCs for colours, but
+		// those should be balanced terminators; the raw \x1b[2J injection
+		// from the server text must be replaced with the literal "\x1b"
+		// escape representation.
+		if strings.Contains(got, "\x1b[2J") {
+			t.Errorf("raw '\\x1b[2J' must not survive into viewport: %q", got)
+		}
+	}
+	if !strings.Contains(got, "\\x1b") {
+		t.Errorf("escape sequence should be visualised in error: %q", got)
+	}
+}
+
+// TestBinaryHeader_SanitizesContentType guards Bug K-2: a malformed
+// Content-Type that survives ParseContentType's fallback path used to be
+// rendered into the binary-response status line raw.
+func TestBinaryHeader_SanitizesContentType(t *testing.T) {
+	r := NewResponse()
+	r.resp = &history.Response{
+		ContentType: "binary/x\x1b[2J",
+		IsBinary:    true,
+		SizeBytes:   10,
+		BodyBytes:   []byte("\x00"),
+	}
+	got := r.binaryHeader()
+	if strings.Contains(got, "\x1b[2J") {
+		t.Errorf("raw ESC sequence must not be in binaryHeader: %q", got)
+	}
+	if !strings.Contains(got, "\\x1b") {
+		t.Errorf("ESC sequence should appear escaped: %q", got)
+	}
+}
+
 // ---- CurrentBytes fallback (Minor 2 companion) ----
 
 func TestCurrentBytes_FallsBackToBodyForText(t *testing.T) {

@@ -54,6 +54,38 @@ func TestPickFilename_SanitizePath(t *testing.T) {
 	}
 }
 
+// TestSanitizeFilename_StripsControlChars is the regression test for Bug K-3:
+// a malicious Content-Disposition with embedded control chars (e.g. ANSI
+// escapes) must not survive into the on-disk filename or the "saved to ..."
+// status message that gets rendered to the terminal.
+func TestSanitizeFilename_StripsControlChars(t *testing.T) {
+	got := sanitizeFilename("evil\x1b[2J.txt")
+	if strings.ContainsRune(got, 0x1b) {
+		t.Errorf("output must not contain raw ESC, got %q", got)
+	}
+	for _, r := range got {
+		if r < 0x20 || r == 0x7f {
+			t.Errorf("output must not contain control chars, got %q (rune %U)", got, r)
+		}
+	}
+}
+
+func TestSanitizeFilename_PreservesNormal(t *testing.T) {
+	in := "report.pdf"
+	if got := sanitizeFilename(in); got != in {
+		t.Errorf("normal name should pass through, got %q", got)
+	}
+}
+
+func TestSanitizeFilename_EmptyAfterSanitize(t *testing.T) {
+	// All-control input becomes underscores; trim doesn't strip underscores so
+	// the fallback only triggers for truly-empty results — but let's verify.
+	got := sanitizeFilename("")
+	if got != "response.bin" {
+		t.Errorf("empty input should fall back, got %q", got)
+	}
+}
+
 func TestUniquePath_AvoidsOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "photo.png"), []byte("first"), 0o644); err != nil {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -100,11 +101,32 @@ func ensureExtension(name, contentType string) string {
 func sanitizeFilename(name string) string {
 	name = filepath.Base(name) // strip directory components
 	name = strings.ReplaceAll(name, string(filepath.Separator), "_")
+	// Replace control characters (C0 / DEL / C1) coming from a malicious
+	// Content-Disposition header — both to keep the on-disk filename sane
+	// and to keep the "saved to ..." status message safe to render in the
+	// terminal without smuggling ANSI escape sequences.
+	name = replaceControlChars(name)
 	name = strings.Trim(name, " .")
 	if name == "" {
 		return "response.bin"
 	}
 	return name
+}
+
+func replaceControlChars(s string) string {
+	if !strings.ContainsFunc(s, unicode.IsControl) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			b.WriteByte('_')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // uniquePath returns dir/name if it does not exist, otherwise appends "(2)",

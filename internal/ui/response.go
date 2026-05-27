@@ -78,7 +78,11 @@ func (r *Response) SetError(err string) {
 	r.resp = nil
 	r.err = err
 	r.loading = false
-	r.vp.SetContent(lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(err))
+	// Sanitize: err strings can contain server-influenced text (TLS Subject,
+	// redirect URL, etc.) and are also re-displayed from history via
+	// applyEntry, so a stored injection could fire later.
+	r.vp.SetContent(lipgloss.NewStyle().Foreground(lipgloss.Color("9")).
+		Render(sanitizeTerminalControl(err)))
 }
 
 func (r *Response) SetLoading(loading bool) {
@@ -381,6 +385,9 @@ func (r Response) binaryHeader() string {
 	if ct == "" {
 		ct = "unknown"
 	}
+	// ParseContentType's fallback path can pass through control bytes from a
+	// malformed Content-Type — sanitize before mixing into the rendered line.
+	ct = sanitizeTerminalControl(ct)
 	line1 := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
 		Render(fmt.Sprintf("Binary response (%s, %s)", formatSize(r.resp.SizeBytes), ct))
 	if len(r.resp.BodyBytes) == 0 {
