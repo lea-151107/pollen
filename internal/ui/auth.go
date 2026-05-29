@@ -254,8 +254,8 @@ func (a Auth) View(width int) string {
 		sb.WriteString(a.pass.View())
 	}
 
+	var hint string
 	if a.focused {
-		var hint string
 		if a.cursor == 0 {
 			if a.authType == AuthNone {
 				hint = "  ←/→ select type"
@@ -265,9 +265,9 @@ func (a Auth) View(width int) string {
 		} else {
 			hint = "  Esc/↑ back to type"
 		}
-		sb.WriteString("\n")
-		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hint))
 	}
+	sb.WriteString("\n")
+	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hint))
 
 	return border.Render(sb.String())
 }

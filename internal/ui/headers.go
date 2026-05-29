@@ -262,21 +262,19 @@ func (h Headers) View(width int) string {
 		lines = append(lines, row)
 	}
 
-	if h.focused {
-		// Suggestion line takes priority; otherwise show editing hints so the
-		// user can discover ctrl+d / enter without reading the docs.
-		if len(h.suggestions) > 0 {
-			text := "  ↹ " + truncate(strings.Join(h.suggestions, "  ·  "), contentW-4)
-			lines = append(lines, lipgloss.NewStyle().
-				Foreground(lipgloss.Color("244")).
-				Italic(true).
-				Render(text))
-		} else {
-			lines = append(lines, lipgloss.NewStyle().
-				Foreground(lipgloss.Color("244")).
-				Render("  enter: new row  ·  ctrl+d: delete row"))
-		}
+	// Always reserve one hint row so panel height does not change with focus.
+	var hintLine string
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	switch {
+	case h.focused && len(h.suggestions) > 0:
+		hintLine = "  ↹ " + truncate(strings.Join(h.suggestions, "  ·  "), contentW-4)
+		hintStyle = hintStyle.Italic(true)
+	case h.focused:
+		hintLine = "  enter: new row  ·  ctrl+d: delete row"
+	default:
+		hintLine = " "
 	}
+	lines = append(lines, hintStyle.Render(hintLine))
 
 	return border.Render(strings.Join(lines, "\n"))
 }

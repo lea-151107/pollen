@@ -202,10 +202,11 @@ func (q Query) View(width int) string {
 		lines = append(lines, row)
 	}
 
+	hint := " "
 	if q.focused {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).
-			Render("  enter: new row  ·  ctrl+d: delete row"))
+		hint = "  enter: new row  ·  ctrl+d: delete row"
 	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hint))
 
 	return border.Render(strings.Join(lines, "\n"))
 }

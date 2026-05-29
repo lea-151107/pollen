@@ -172,24 +172,23 @@ func (b Body) View(width, height int) string {
 	}
 	tabBar := strings.Join(tabs, " ")
 
-	hint := ""
+	hint := " "
 	if b.focused {
 		if b.tabFocus {
-			hint = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).
-				Render("  ←/→ tab  •  Enter to edit")
+			hint = "  ←/→ tab  •  Enter to edit"
 		} else {
-			hint = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).
-				Render("  Tab: indent  •  Esc: leave editor")
+			hint = "  Tab: indent  •  Esc: leave editor"
 		}
 	}
+	hintLine := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hint)
 
 	ta := b.editors[b.Type()]
 	ta.SetWidth(inner - 2) // -2 for left/right padding
-	taH := innerH - 1      // -1 for tab bar line
+	taH := innerH - 2      // -1 for tab bar, -1 for hint line
 	if taH < 1 {
 		taH = 1
 	}
 	ta.SetHeight(taH)
 
-	return border.Render(tabBar + hint + "\n" + ta.View())
+	return border.Render(tabBar + "\n" + hintLine + "\n" + ta.View())
 }
