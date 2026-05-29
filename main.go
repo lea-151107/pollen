@@ -33,6 +33,7 @@ func main() {
 		initConfig  bool
 		showVersion bool
 		exportColls   string
+		exportPostman string
 		exportOpenAPI string
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
@@ -40,7 +41,8 @@ func main() {
 	flag.StringVar(&collFilter, "collection", "", "open collections sidebar filtered by name")
 	flag.BoolVar(&initConfig, "init-config", false, "write default settings.json and exit")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
-	flag.StringVar(&exportColls, "export-collections", "", "export collections to Postman v2.1 JSON (use - for stdout)")
+	flag.StringVar(&exportPostman, "export-postman", "", "export collections to Postman v2.1 JSON (use - for stdout)")
+	flag.StringVar(&exportColls, "export-collections", "", "alias for --export-postman (kept for backwards compatibility)")
 	flag.StringVar(&exportOpenAPI, "export-openapi", "", "export collections as OpenAPI 3.x (.json / .yaml / .yml; use - for stdout JSON)")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
@@ -77,7 +79,16 @@ func main() {
 		os.Exit(0)
 	}
 
-	if exportColls != "" {
+	if exportPostman != "" && exportColls != "" {
+		fmt.Fprintln(os.Stderr,
+			"pollen: --export-postman and --export-collections are aliases; specify only one")
+		os.Exit(2)
+	}
+	postmanTarget := exportPostman
+	if postmanTarget == "" {
+		postmanTarget = exportColls
+	}
+	if postmanTarget != "" {
 		collStore, err := collections.Open()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "pollen: %v\n", err)
@@ -88,14 +99,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
 			os.Exit(1)
 		}
-		if exportColls == "-" {
+		if postmanTarget == "-" {
 			fmt.Println(string(data))
 		} else {
-			if err := os.WriteFile(exportColls, data, 0o644); err != nil {
+			if err := os.WriteFile(postmanTarget, data, 0o644); err != nil {
 				fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
 				os.Exit(1)
 			}
-			fmt.Println("exported", len(collStore.Entries()), "entries to", exportColls)
+			fmt.Println("exported", len(collStore.Entries()), "entries to", postmanTarget)
 		}
 		os.Exit(0)
 	}
