@@ -120,3 +120,22 @@ func TestPayloadCaseToggle_NonLettersUnchanged(t *testing.T) {
 		t.Errorf("case toggle a1B: got %v, want %v", got, want)
 	}
 }
+
+func TestPayloadCaseToggle_TooManyLettersErrors(t *testing.T) {
+	// 31 ASCII letters would make `1 << 31` exceed what we cap at; the
+	// runtime cap protects against 2^L exploding past sane MaxRequests
+	// values and against the shift becoming negative on smaller ints.
+	base := strings.Repeat("a", 31)
+	_, err := NewIterator(PayloadConfig{Kind: PayloadCaseToggle, Base: base})
+	if err == nil {
+		t.Errorf("expected error for case-toggle base with 31 letters")
+	}
+}
+
+func TestPayloadCaseToggle_ThirtyLettersOk(t *testing.T) {
+	// 30 letters is exactly at the cap and must still construct.
+	base := strings.Repeat("a", 30)
+	if _, err := NewIterator(PayloadConfig{Kind: PayloadCaseToggle, Base: base}); err != nil {
+		t.Errorf("30-letter base should be allowed, got %v", err)
+	}
+}

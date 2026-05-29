@@ -68,6 +68,12 @@ func NewIterator(cfg PayloadConfig) (PayloadIterator, error) {
 				letterPositions = append(letterPositions, i)
 			}
 		}
+		// 2^L combinations are stored in an int; cap L to keep the shift
+		// in range and the total bounded. 30 still allows ~1B permutations,
+		// well past anything MaxRequests would let through.
+		if len(letterPositions) > 30 {
+			return nil, fmt.Errorf("case-toggle base has %d ASCII letters; max 30 (2^30 combinations)", len(letterPositions))
+		}
 		return &caseToggleIter{
 			runes:     runes,
 			positions: letterPositions,
