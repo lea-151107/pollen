@@ -353,6 +353,31 @@ func TestIntruder_PresetCyclesAllErrorsSuccess(t *testing.T) {
 	}
 }
 
+func TestIntruder_EmptyViewMessageDistinguishesFilter(t *testing.T) {
+	// Empty results: should say "waiting".
+	emptyResults := withResults(nil)
+	emptyResults.state = IntruderResults
+	emptyResults.width = 80
+	emptyResults.height = 30
+	out := emptyResults.viewResults()
+	if !strings.Contains(out, "waiting for first response") {
+		t.Errorf("empty results should show waiting message; got:\n%s", out)
+	}
+	// Results present but filter excludes all: should say "no matches".
+	filtered := withResults(sampleResults())
+	filtered.state = IntruderResults
+	filtered.filter = "zzzz-never-match"
+	filtered.width = 80
+	filtered.height = 30
+	out2 := filtered.viewResults()
+	if !strings.Contains(out2, "no results match filter") {
+		t.Errorf("filter-excludes-all should show no-match message; got:\n%s", out2)
+	}
+	if strings.Contains(out2, "waiting for first response") {
+		t.Errorf("filter-excludes-all should NOT show waiting message; got:\n%s", out2)
+	}
+}
+
 func TestIntruder_ScrollClampsToFilteredView(t *testing.T) {
 	in := withResults(sampleResults())
 	in.state = IntruderResults

@@ -570,7 +570,14 @@ func (m Intruder) viewResults() string {
 	rows := []string{headerRow}
 	idx := m.view()
 	if len(idx) == 0 {
-		rows = append(rows, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("  (waiting for first response…)"))
+		// Distinguish "still waiting" from "filter excluded everything"
+		// so the user doesn't think the run hung when in fact their
+		// filter is too strict.
+		msg := "  (waiting for first response…)"
+		if len(m.results) > 0 {
+			msg = "  (no results match filter)"
+		}
+		rows = append(rows, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(msg))
 	}
 	// Window the results so the table never overflows the terminal height.
 	visible := m.visibleRows()
