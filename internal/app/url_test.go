@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/lea/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/ui"
 )
 
 func TestComposeURL_NoParams(t *testing.T) {

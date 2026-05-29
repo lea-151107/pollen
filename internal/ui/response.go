@@ -14,8 +14,8 @@ import (
 	"github.com/itchyny/gojq"
 	"github.com/sergi/go-diff/diffmatchpatch"
 
-	"github.com/lea/pollen/internal/history"
-	"github.com/lea/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/httpx"
 )
 
 // ResponseCopyMsg is emitted when the user requests the response body be

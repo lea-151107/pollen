@@ -15,7 +15,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 // saveResponse writes the current response body to a file in the cwd and

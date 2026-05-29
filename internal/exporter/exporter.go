@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/lea/pollen/internal/collections"
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 type postmanExportCollection struct {

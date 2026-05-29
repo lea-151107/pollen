@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 const fileName = "settings.json"

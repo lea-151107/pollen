@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lea/pollen/internal/collections"
-	"github.com/lea/pollen/internal/exporter"
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/exporter"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 const sampleOpenAPIJSON = `{

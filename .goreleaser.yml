@@ -23,7 +23,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/lea/pollen/internal/version.Version={{ .Version }}
+      - -X github.com/lea-151107/pollen/internal/version.Version={{ .Version }}
 
 archives:
   - id: pollen

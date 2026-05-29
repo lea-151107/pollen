@@ -11,8 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/google/uuid"
-	"github.com/lea/pollen/internal/collections"
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 // Import reads path, detects the format (OpenAPI 3.x or Postman v2.1), and

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 // ToCurl renders the request as a POSIX-compatible cURL command.

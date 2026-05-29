@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/lea/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/httpx"
 )
 
 // handleCopyMenu dispatches keypresses while the copy menu overlay is open.

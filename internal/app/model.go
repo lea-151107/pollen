@@ -6,12 +6,12 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/lea/pollen/internal/collections"
-	"github.com/lea/pollen/internal/env"
-	"github.com/lea/pollen/internal/history"
-	"github.com/lea/pollen/internal/httpx"
-	"github.com/lea/pollen/internal/settings"
-	"github.com/lea/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/env"
+	"github.com/lea-151107/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/settings"
+	"github.com/lea-151107/pollen/internal/ui"
 )
 
 type focusArea int

@@ -15,7 +15,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 const fileName = "env.json"

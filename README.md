@@ -43,7 +43,7 @@ Or build a local checkout (lets you embed a specific version string):
 ```sh
 git clone https://github.com/lea-151107/pollen.git
 cd pollen
-go build -ldflags="-X github.com/lea/pollen/internal/version.Version=$(git describe --tags)" -o pollen .
+go build -ldflags="-X github.com/lea-151107/pollen/internal/version.Version=$(git describe --tags)" -o pollen .
 ./pollen --version
 ```
 

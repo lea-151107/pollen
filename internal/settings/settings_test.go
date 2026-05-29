@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 // withTempConfig redirects userconfig.Dir for the duration of the test.

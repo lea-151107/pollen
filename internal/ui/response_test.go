@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 func TestTryPrettyJSON_ValidObject(t *testing.T) {

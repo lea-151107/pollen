@@ -11,16 +11,16 @@ import (
 	"net/http/cookiejar"
 	"time"
 
-	"github.com/lea/pollen/internal/app"
-	"github.com/lea/pollen/internal/exporter"
-	"github.com/lea/pollen/internal/version"
-	"github.com/lea/pollen/internal/collections"
-	"github.com/lea/pollen/internal/env"
-	"github.com/lea/pollen/internal/history"
-	"github.com/lea/pollen/internal/httpx"
-	"github.com/lea/pollen/internal/settings"
-	"github.com/lea/pollen/internal/ui"
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/app"
+	"github.com/lea-151107/pollen/internal/exporter"
+	"github.com/lea-151107/pollen/internal/version"
+	"github.com/lea-151107/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/env"
+	"github.com/lea-151107/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/settings"
+	"github.com/lea-151107/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 func withTempConfig(t *testing.T) {

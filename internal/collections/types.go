@@ -1,6 +1,6 @@
 package collections
 
-import "github.com/lea/pollen/internal/history"
+import "github.com/lea-151107/pollen/internal/history"
 
 type Entry struct {
 	ID      string          `json:"id"`

@@ -6,7 +6,7 @@ import (
 
 	"github.com/atotto/clipboard"
 
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 // clipboardHint returns a platform-specific install suggestion to append to a

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 func TestToCurl_GET(t *testing.T) {

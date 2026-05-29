@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lea/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/ui"
 )
 
 // composeURL merges the query parameters from the Query panel into the URL.

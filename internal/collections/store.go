@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lea/pollen/internal/history"
-	"github.com/lea/pollen/internal/userconfig"
+	"github.com/lea-151107/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
 
 const currentVersion = 1

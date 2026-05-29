@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lea/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/collections"
 )
 
 type Collections struct {

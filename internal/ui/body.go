@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lea/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/history"
 )
 
 var bodyTypes = []history.BodyType{history.BodyJSON, history.BodyForm, history.BodyRaw}

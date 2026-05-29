@@ -7,9 +7,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 
-	"github.com/lea/pollen/internal/history"
-	"github.com/lea/pollen/internal/httpx"
-	"github.com/lea/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/ui"
 )
 
 // sendResultMsg carries the outcome of an asynchronous request back to the
