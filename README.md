@@ -22,7 +22,7 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
 - **Copy response body** (`y`): clipboard, with a file fallback on Linux
   without `xclip` / `wl-clipboard`
 - **Import** OpenAPI 3.x (JSON/YAML) or Postman Collection v2.1 (`Ctrl+I`)
-- **Export** all collections to Postman v2.1 JSON (`--export-collections`) or
+- **Export** all collections to Postman v2.1 JSON (`--export-postman`) or
   OpenAPI 3.x JSON / YAML (`--export-openapi`)
 - Binary response detection with hex dump preview, `s`-to-save
 - TLS options: skip verification, custom CA certificate file, HTTP(S) proxy,
@@ -141,7 +141,8 @@ pollen [--option ...]
 | `--env <name>` | Activate the named environment at startup (warning to stderr if unknown) |
 | `--collection <name>` | Open the Collections sidebar pre-filtered by this name |
 | `--init-config` | Write a default `settings.json` to the config directory and exit |
-| `--export-collections <path>` | Export all collections to a Postman v2.1 JSON file. Use `-` to write to stdout |
+| `--export-postman <path>` | Export all collections to a Postman v2.1 JSON file. Use `-` to write to stdout |
+| `--export-collections <path>` | Alias for `--export-postman`, kept for backwards compatibility |
 | `--export-openapi <path>` | Export all collections as an OpenAPI 3.x document. Format is picked by extension (`.yaml` / `.yml` → YAML, otherwise JSON). Use `-` for JSON on stdout |
 
 Examples:
@@ -151,7 +152,7 @@ pollen --env staging                                   # start in staging enviro
 pollen --config ./myproject/.pollen                    # project-local config
 pollen --collection "User API"                         # open with "User API" pre-selected
 pollen --init-config                                   # seed default settings.json
-pollen --export-collections /tmp/pollen-collections.json
+pollen --export-postman /tmp/pollen-collections.json
 pollen --export-openapi /tmp/pollen-openapi.yaml      # OpenAPI 3.0.3 in YAML
 ```
 
@@ -311,12 +312,15 @@ import. See `examples/` for sample input files.
 Postman v2.1:
 
 ```sh
-pollen --export-collections collection.json    # write to file
-pollen --export-collections -                  # write to stdout (for piping)
+pollen --export-postman collection.json    # write to file
+pollen --export-postman -                  # write to stdout (for piping)
 ```
 
 The output is a Postman Collection v2.1 JSON document. Form-urlencoded bodies
 are serialised as Postman's `urlencoded` array, raw bodies as `mode: raw`.
+
+`--export-collections` is kept as an alias for `--export-postman` so existing
+scripts keep working. Specifying both flags at the same time is an error.
 
 OpenAPI 3.x:
 

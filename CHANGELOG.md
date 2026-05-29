@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-29
+
+### Added
+
+- **`--export-postman <path>`**: new CLI flag that writes the
+  collection store as a Postman v2.1 JSON document. Behaviour is
+  byte-identical to the existing `--export-collections`; the new name
+  exists so the two export flags read symmetrically — `--export-postman`
+  and `--export-openapi` are both named by their target format.
+
+### Deprecated
+
+- **`--export-collections <path>`** is now an alias for
+  `--export-postman` and is kept for backwards compatibility. No warning
+  is printed at runtime so existing scripts keep working unchanged.
+  Specifying both `--export-postman` and `--export-collections` at the
+  same time is an error and exits with status 2; pick one.
+
+No other behaviour changed: CLI semantics, JSON config schemas,
+keybindings, and variable-expansion tokens all match v1.0.4 exactly.
+
+[1.1.0]: https://github.com/lea-151107/pollen/releases/tag/v1.1.0
+
 ## [1.0.4] - 2026-05-29
 
 ### Changed
