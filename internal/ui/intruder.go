@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,18 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lea-151107/pollen/internal/intruder"
+)
+
+// sortColumn identifies which result-table column the user is sorting by.
+// Cycled by `s` in the results view.
+type sortColumn int
+
+const (
+	sortIndex sortColumn = iota
+	sortStatus
+	sortSize
+	sortDuration
+	numSortColumns
 )
 
 // IntruderState is the three-way mode of the Intruder overlay.
@@ -44,6 +57,12 @@ type Intruder struct {
 	cancel  context.CancelFunc
 	done    bool
 	runErr  string
+
+	// Sort state for the result table. sortIndex/ascending matches the
+	// default v1.2.0 "send order" so existing users see no behaviour
+	// change until they press `s`.
+	sortCol sortColumn
+	sortAsc bool
 
 	scrollOffset int
 
@@ -87,6 +106,8 @@ func NewIntruder(defaultConcurrency, defaultDelayMs, defaultMaxReq int) Intruder
 		delayInput:   delay,
 		maxInput:     max,
 		focus:        1,
+		sortCol:      sortIndex,
+		sortAsc:      true,
 	}
 }
 
@@ -242,8 +263,56 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 		if m.scrollOffset > max {
 			m.scrollOffset = max
 		}
+	case "s":
+		// Cycle sort column; default direction is ascending for index
+		// (send-order), descending for the numeric metrics so the most
+		// interesting rows (slowest, largest, highest status code)
+		// surface first.
+		m.sortCol = (m.sortCol + 1) % numSortColumns
+		m.sortAsc = m.sortCol == sortIndex
+		m.scrollOffset = 0
+	case "S":
+		m.sortAsc = !m.sortAsc
+		m.scrollOffset = 0
 	}
 	return m, nil
+}
+
+// view returns the indices into m.results in the order the table should
+// render them. The underlying slice is never reordered so AppendResult
+// can safely keep streaming in send-order while the user sorts.
+func (m Intruder) view() []int {
+	out := make([]int, len(m.results))
+	for i := range m.results {
+		out[i] = i
+	}
+	if m.sortCol == sortIndex && m.sortAsc {
+		return out // already in send order
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := m.results[out[i]], m.results[out[j]]
+		cmp := 0
+		switch m.sortCol {
+		case sortStatus:
+			cmp = a.Status - b.Status
+		case sortSize:
+			cmp = a.Size - b.Size
+		case sortDuration:
+			switch {
+			case a.DurationMs < b.DurationMs:
+				cmp = -1
+			case a.DurationMs > b.DurationMs:
+				cmp = 1
+			}
+		default:
+			cmp = a.Index - b.Index
+		}
+		if !m.sortAsc {
+			cmp = -cmp
+		}
+		return cmp < 0
+	})
+	return out
 }
 
 // visibleRows is the number of result rows that fit in the table body.
@@ -259,8 +328,10 @@ func (m Intruder) visibleRows() int {
 
 // maxScrollOffset is the largest scrollOffset that still keeps at least
 // one row visible; scrolling further would render an empty table body.
+// Driven off len(view()) so applying a filter immediately shrinks the
+// scroll range.
 func (m Intruder) maxScrollOffset() int {
-	n := len(m.results) - m.visibleRows()
+	n := len(m.view()) - m.visibleRows()
 	if n < 0 {
 		return 0
 	}
@@ -365,23 +436,43 @@ func (m Intruder) viewResults() string {
 		header += "  " + lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("(running…)")
 	}
 
-	cols := []string{"#", "payload", "status", "size", "ms", "content-type"}
-	colW := []int{4, 30, 7, 8, 6, 24}
+	colLabels := []string{"#", "payload", "status", "size", "ms", "content-type"}
+	// Mark the active sort column with ▲/▼ so the user can see at a
+	// glance which column drives the row order.
+	sortMarker := func(col sortColumn, label string) string {
+		if m.sortCol != col {
+			return label
+		}
+		if m.sortAsc {
+			return label + " ▲"
+		}
+		return label + " ▼"
+	}
+	cols := []string{
+		sortMarker(sortIndex, colLabels[0]),
+		colLabels[1],
+		sortMarker(sortStatus, colLabels[2]),
+		sortMarker(sortSize, colLabels[3]),
+		sortMarker(sortDuration, colLabels[4]),
+		colLabels[5],
+	}
+	colW := []int{4, 30, 9, 10, 8, 24}
 	headerRow := renderRow(cols, colW, true, false)
 
 	rows := []string{headerRow}
-	if len(m.results) == 0 {
+	idx := m.view()
+	if len(idx) == 0 {
 		rows = append(rows, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("  (waiting for first response…)"))
 	}
 	// Window the results so the table never overflows the terminal height.
 	visible := m.visibleRows()
 	start := m.scrollOffset
 	end := start + visible
-	if end > len(m.results) {
-		end = len(m.results)
+	if end > len(idx) {
+		end = len(idx)
 	}
 	for i := start; i < end; i++ {
-		r := m.results[i]
+		r := m.results[idx[i]]
 		statusCell := strconv.Itoa(r.Status)
 		if r.Error != "" {
 			statusCell = "ERR"
@@ -398,7 +489,7 @@ func (m Intruder) viewResults() string {
 	}
 
 	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(
-		"↑/↓ scroll  ·  PgUp/PgDn page  ·  Esc abort & close")
+		"↑/↓ scroll  ·  s sort  ·  S reverse  ·  Esc abort & close")
 
 	body := strings.Join([]string{
 		header,
@@ -422,10 +513,19 @@ func renderRow(cells []string, widths []int, header bool, highlight bool) string
 	parts := make([]string, len(cells))
 	for i, c := range cells {
 		s := c
-		if len(s) > widths[i] {
-			s = s[:widths[i]]
+		// Use visual width so multi-byte glyphs like ▲/▼ in the header
+		// and CJK characters in user payloads truncate and pad
+		// correctly. Byte-slicing would cut UTF-8 sequences mid-way.
+		w := lipgloss.Width(s)
+		if w > widths[i] {
+			rs := []rune(s)
+			for w > widths[i] && len(rs) > 0 {
+				rs = rs[:len(rs)-1]
+				s = string(rs)
+				w = lipgloss.Width(s)
+			}
 		}
-		parts[i] = s + strings.Repeat(" ", widths[i]-len(s))
+		parts[i] = s + strings.Repeat(" ", widths[i]-w)
 	}
 	row := "  " + strings.Join(parts, "  ")
 	style := lipgloss.NewStyle()
