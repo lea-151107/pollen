@@ -45,6 +45,39 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestLoad_IntruderDefaults(t *testing.T) {
+	withTempConfig(t)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.IntruderConcurrency != 5 {
+		t.Errorf("IntruderConcurrency: want 5, got %d", s.IntruderConcurrency)
+	}
+	if s.IntruderDelayMs != 0 {
+		t.Errorf("IntruderDelayMs: want 0, got %d", s.IntruderDelayMs)
+	}
+	if s.IntruderMaxRequests != 1000 {
+		t.Errorf("IntruderMaxRequests: want 1000, got %d", s.IntruderMaxRequests)
+	}
+}
+
+func TestLoad_IntruderClampsOutOfRange(t *testing.T) {
+	withTempConfig(t)
+	// Persist out-of-range values, reload, expect them clamped to defaults.
+	bad := &Settings{IntruderConcurrency: 9999, IntruderDelayMs: -5, IntruderMaxRequests: 0}
+	if err := bad.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.IntruderConcurrency != 5 || s.IntruderDelayMs != 0 || s.IntruderMaxRequests != 1000 {
+		t.Errorf("clamped values wrong: %+v", s)
+	}
+}
+
 func TestLoad_CorruptFileReturnsDefault(t *testing.T) {
 	withTempConfig(t)
 	path, _ := userconfig.Path("settings.json")

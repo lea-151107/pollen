@@ -144,6 +144,7 @@ func TestStart_DelayAppliesBetweenWorkerJobs(t *testing.T) {
 
 func TestStart_CancelStopsRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // guard against early returns; the loop below also calls it.
 	doer := func(req history.Request) (*history.Response, error) {
 		time.Sleep(10 * time.Millisecond)
 		return &history.Response{Status: 200}, nil

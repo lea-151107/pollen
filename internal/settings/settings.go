@@ -28,6 +28,9 @@ type Settings struct {
 	DisableRedirects   bool    `json:"disable_redirects,omitempty"`
 	CACertFile         string  `json:"ca_cert_file,omitempty"`
 	EnableCookies      bool    `json:"enable_cookies,omitempty"`
+	IntruderConcurrency int    `json:"intruder_concurrency,omitempty"`
+	IntruderDelayMs    int     `json:"intruder_delay_ms,omitempty"`
+	IntruderMaxRequests int    `json:"intruder_max_requests,omitempty"`
 }
 
 // Load reads settings from disk. Missing or corrupt files fall back to
@@ -64,6 +67,15 @@ func Load() (*Settings, error) {
 		if _, err := url.Parse(s.ProxyURL); err != nil {
 			s.ProxyURL = ""
 		}
+	}
+	if s.IntruderConcurrency < 1 || s.IntruderConcurrency > 256 {
+		s.IntruderConcurrency = 5
+	}
+	if s.IntruderDelayMs < 0 || s.IntruderDelayMs > 60000 {
+		s.IntruderDelayMs = 0
+	}
+	if s.IntruderMaxRequests < 1 || s.IntruderMaxRequests > 1000000 {
+		s.IntruderMaxRequests = 1000
 	}
 	return s, nil
 }
