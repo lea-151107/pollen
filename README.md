@@ -24,6 +24,10 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
 - **Import** OpenAPI 3.x (JSON/YAML) or Postman Collection v2.1 (`Ctrl+I`)
 - **Export** all collections to Postman v2.1 JSON (`--export-postman`) or
   OpenAPI 3.x JSON / YAML (`--export-openapi`)
+- **Intruder** (`Ctrl+R`): fire the current request against a generated
+  payload list (numeric range, wordlist, brute force, or case toggles),
+  with configurable concurrency and a live result table. Inspired by
+  Burp Suite's Sniper mode
 - Binary response detection with hex dump preview, `s`-to-save
 - TLS options: skip verification, custom CA certificate file, HTTP(S) proxy,
   cookie jar, redirect control — all toggleable from `settings.json`
@@ -81,6 +85,7 @@ Press `Ctrl+/` inside the app for the full list at any time.
 | `Ctrl+T` | Toggle TLS verification skip (persists) |
 | `Ctrl+L` | Force terminal redraw (recover from stray output) |
 | `Ctrl+/` | Show help overlay |
+| `Ctrl+R` | Open Intruder (concurrent requests against a payload list) |
 | `u` | Undo last history delete (within 5 s) |
 | `Ctrl+C` | Quit |
 
@@ -144,6 +149,7 @@ pollen [--option ...]
 | `--export-postman <path>` | Export all collections to a Postman v2.1 JSON file. Use `-` to write to stdout |
 | `--export-collections <path>` | Alias for `--export-postman`, kept for backwards compatibility |
 | `--export-openapi <path>` | Export all collections as an OpenAPI 3.x document. Format is picked by extension (`.yaml` / `.yml` → YAML, otherwise JSON). Use `-` for JSON on stdout |
+| `--export-intruder <path>` | Export the most recent Intruder run as CSV (default) or JSON (when `<path>` ends in `.json`). Use `-` for CSV on stdout. Exits with status 2 if no run has been recorded yet |
 
 Examples:
 
@@ -154,6 +160,7 @@ pollen --collection "User API"                         # open with "User API" pr
 pollen --init-config                                   # seed default settings.json
 pollen --export-postman /tmp/pollen-collections.json
 pollen --export-openapi /tmp/pollen-openapi.yaml      # OpenAPI 3.0.3 in YAML
+pollen --export-intruder /tmp/intruder.csv            # last Intruder run
 ```
 
 ## Configuration
@@ -340,6 +347,55 @@ bodies, `application/x-www-form-urlencoded` for form bodies (with each pair as a
 typed property), `text/plain` (or any explicit `Content-Type` header) for raw
 bodies. **No header masking is performed**: `Authorization`, `Cookie`, and other
 sensitive headers will appear in the exported spec, so review before sharing.
+
+## Intruder
+
+Press `Ctrl+R` to open the Intruder modal. It fires the current request
+template against a generated sequence of payloads using a worker pool —
+think Burp Suite's Sniper attack mode, scoped to one payload position.
+
+Mark where the payload should go with the reserved token `{{$payload}}`
+anywhere in the URL, body, or header values:
+
+```
+URL:    https://api.example.com/users/{{$payload}}
+Body:   {"id": "{{$payload}}"}
+Header: X-API-Key: {{$payload}}
+```
+
+`{{$payload}}` survives `{{varName}}` and `{{response.*}}` expansion
+unchanged, so you can combine env variables, response chaining, and an
+Intruder run in the same request.
+
+In the config modal pick a payload kind with `←` / `→` and enter its
+parameters. Format strings appear inline below the input.
+
+| Kind | Format | Example |
+|------|--------|---------|
+| `Range` | `<from>-<to>` or `<from>-<to>/<step>` | `1-100/5` |
+| `List` | `a,b,c` or `@/path/to/wordlist` | `admin,root,guest` |
+| `Brute` | `<alphabet> <min>-<max>` | `abc 1-3` |
+| `CaseToggle` | `<base>` | `admin` (16 permutations of upper/lower) |
+
+`Concurrency`, `Delay (ms)`, and `Max requests` are pre-filled from
+`settings.json`. Press `Enter` to start; the modal becomes a live table
+that streams in as workers complete each request:
+
+- `↑/↓ PgUp/PgDn` scroll the table
+- 4xx, 5xx, and network-error rows are highlighted in red
+- `Esc` cancels the run and closes the overlay (the most recent run is
+  still cached on disk for `--export-intruder`)
+
+To export the most recent run from outside the TUI:
+
+```sh
+pollen --export-intruder results.csv     # CSV (default for stdout too)
+pollen --export-intruder results.json    # JSON, indented
+pollen --export-intruder -               # CSV on stdout
+```
+
+If no Intruder run has ever finished in the same config directory, the
+command exits with status 2.
 
 ## Versioning and stability
 
