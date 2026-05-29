@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-29
+
+### Added
+
+- **Intruder mode** (`Ctrl+R`). Pollen now ships a Burp Suite Sniper
+  workflow scoped to a single payload position: fire the current
+  request template against a generated payload list using a worker
+  pool, with a live result table that streams responses as they
+  complete.
+  - Mark the payload position with the reserved token `{{$payload}}`
+    anywhere in the URL, body, or header values. The token survives
+    `{{varName}}` env expansion and `{{response.*}}` chaining
+    unchanged, so an Intruder run can compose with the existing
+    expanders.
+  - Four payload generators: `Range` (`1-100` or `1-100/5`), `List`
+    (comma-separated or `@/path/to/wordlist`), `Brute` (`<alphabet>
+    <min>-<max>`, lexicographic), and `CaseToggle` (all 2^L
+    upper/lower permutations of the ASCII letters in a base string).
+  - Worker pool with configurable concurrency, per-worker delay, and a
+    hard cap on total requests. `Esc` cancels in-flight workers via
+    `context.Cancel`; in-flight HTTP requests respect the existing
+    `request_timeout_secs` setting.
+  - Live result table with `#`, payload, status, size, ms,
+    content-type columns. 4xx, 5xx, and network-error rows are
+    highlighted in red. `↑/↓ PgUp/PgDn` scroll a windowed view sized
+    to the terminal height.
+- **`--export-intruder <path>`** CLI flag. Exports the most recent
+  run's results as CSV (default) or JSON (when `<path>` ends in
+  `.json`). Use `-` for CSV on stdout. Exits with status 2 if no run
+  has ever been recorded in the config directory.
+- **Three new `settings.json` fields** with the existing clamp-on-load
+  pattern: `intruder_concurrency` (default 5, clamped to [1, 256]),
+  `intruder_delay_ms` (default 0, clamped to [0, 60000]), and
+  `intruder_max_requests` (default 1000, clamped to [1, 1000000]).
+  Existing files load unchanged; the defaults populate the Intruder
+  config modal so a one-off run never needs the user to type the
+  knobs by hand.
+
+### Notes
+
+- The marker syntax (`{{$payload}}`), the four payload kinds, the
+  Intruder keybinding (`Ctrl+R`), and the three new `settings.json`
+  fields are part of pollen's stable v1.x surface — they won't be
+  removed or renamed in a minor release. The exact wording in the
+  result table header and any colour tweaks remain unstable, as
+  declared by the SemVer policy in the README.
+- Only the most recent run is persisted to disk (in
+  `~/.config/pollen/intruder_last.json`). Older runs are not kept;
+  the file is overwritten on every completed run.
+- v1.2.0 ships Sniper mode only — Battering ram / Pitchfork / Cluster
+  bomb (multi-position payload distribution) are reserved for a
+  future release.
+
+[1.2.0]: https://github.com/lea-151107/pollen/releases/tag/v1.2.0
+
 ## [1.1.0] - 2026-05-29
 
 ### Added
