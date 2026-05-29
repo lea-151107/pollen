@@ -198,3 +198,137 @@ func TestStart_RecordsErrorResponses(t *testing.T) {
 func fakeDoerOK(req history.Request) (*history.Response, error) {
 	return &history.Response{Status: 200, StatusText: "200 OK"}, nil
 }
+
+func TestStart_PitchforkRunsZipped(t *testing.T) {
+	ctx := context.Background()
+	var seen sync.Map
+	doer := func(req history.Request) (*history.Response, error) {
+		seen.Store(req.URL, true)
+		return &history.Response{Status: 200, StatusText: "200 OK"}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Mode:     Pitchfork,
+		Template: history.Request{URL: "/u={{$payload1}}&p={{$payload2}}"},
+		Payloads: []PayloadConfig{
+			{Kind: PayloadList, Words: []string{"alice", "bob", "carol"}},
+			{Kind: PayloadList, Words: []string{"p1", "p2", "p3"}},
+		},
+		Concurrency: 1,
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	var results []Result
+	for r := range ch {
+		results = append(results, r)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 zipped results, got %d", len(results))
+	}
+	for _, want := range []string{
+		"/u=alice&p=p1",
+		"/u=bob&p=p2",
+		"/u=carol&p=p3",
+	} {
+		if _, ok := seen.Load(want); !ok {
+			t.Errorf("missing URL: %s", want)
+		}
+	}
+	// Result.Payload should reflect the joined vector.
+	wantPayloads := map[string]bool{
+		"alice | p1": false,
+		"bob | p2":   false,
+		"carol | p3": false,
+	}
+	for _, r := range results {
+		if _, ok := wantPayloads[r.Payload]; !ok {
+			t.Errorf("unexpected joined payload: %q", r.Payload)
+		}
+		wantPayloads[r.Payload] = true
+	}
+	for k, v := range wantPayloads {
+		if !v {
+			t.Errorf("missing joined payload: %s", k)
+		}
+	}
+}
+
+func TestStart_ClusterBombRunsProduct(t *testing.T) {
+	ctx := context.Background()
+	var seen sync.Map
+	doer := func(req history.Request) (*history.Response, error) {
+		seen.Store(req.URL, true)
+		return &history.Response{Status: 200, StatusText: "200 OK"}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Mode:     ClusterBomb,
+		Template: history.Request{URL: "/u={{$payload1}}&p={{$payload2}}"},
+		Payloads: []PayloadConfig{
+			{Kind: PayloadList, Words: []string{"alice", "bob"}},
+			{Kind: PayloadList, Words: []string{"p1", "p2"}},
+		},
+		Concurrency: 1,
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	var results []Result
+	for r := range ch {
+		results = append(results, r)
+	}
+	if len(results) != 4 {
+		t.Fatalf("expected 2*2=4 product results, got %d", len(results))
+	}
+	for _, want := range []string{
+		"/u=alice&p=p1", "/u=alice&p=p2",
+		"/u=bob&p=p1", "/u=bob&p=p2",
+	} {
+		if _, ok := seen.Load(want); !ok {
+			t.Errorf("missing URL: %s", want)
+		}
+	}
+}
+
+func TestStart_ClusterBombRespectsMaxRequests(t *testing.T) {
+	ctx := context.Background()
+	var count int32
+	doer := func(req history.Request) (*history.Response, error) {
+		atomic.AddInt32(&count, 1)
+		return &history.Response{Status: 200, StatusText: "200 OK"}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Mode:     ClusterBomb,
+		Template: history.Request{URL: "/u={{$payload1}}&p={{$payload2}}"},
+		Payloads: []PayloadConfig{
+			{Kind: PayloadRange, From: 1, To: 100},
+			{Kind: PayloadRange, From: 1, To: 100}, // 10,000 product
+		},
+		Concurrency: 4,
+		MaxRequests: 25,
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for range ch {
+	}
+	got := atomic.LoadInt32(&count)
+	if got > 25 {
+		t.Errorf("MaxRequests not enforced: got %d > 25", got)
+	}
+}
+
+func TestStart_PitchforkRejectsMissingMarker(t *testing.T) {
+	ctx := context.Background()
+	_, err := startWithDoer(ctx, RunConfig{
+		Mode:     Pitchfork,
+		Template: history.Request{URL: "/u={{$payload1}}"}, // missing payload2
+		Payloads: []PayloadConfig{
+			{Kind: PayloadList, Words: []string{"a"}},
+			{Kind: PayloadList, Words: []string{"b"}},
+		},
+		Concurrency: 1,
+	}, fakeDoerOK)
+	if err == nil {
+		t.Errorf("expected error for pitchfork with missing marker")
+	}
+}
