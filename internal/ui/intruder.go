@@ -95,6 +95,7 @@ func (m Intruder) Results() []intruder.Result    { return m.results }
 func (m *Intruder) SetSize(w, h int)             { m.width = w; m.height = h }
 func (m *Intruder) OpenConfig()                  { m.state = IntruderConfig; m.formErr = ""; m.scrollOffset = 0 }
 func (m *Intruder) Close()                       { m.state = IntruderHidden }
+func (m *Intruder) SetFormErr(s string)          { m.formErr = s }
 func (m Intruder) IsRunning() bool               { return m.cancel != nil && !m.done }
 func (m Intruder) Done() bool                    { return m.done }
 

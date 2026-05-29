@@ -18,6 +18,7 @@ type KeyMap struct {
 	ImportFile  key.Binding
 	ToggleTLS   key.Binding
 	SwitchEnv   key.Binding
+	Intruder    key.Binding
 	Help        key.Binding
 	Cancel      key.Binding
 }
@@ -35,6 +36,7 @@ func DefaultKeyMap() KeyMap {
 		ImportFile: key.NewBinding(key.WithKeys("ctrl+i")),
 		ToggleTLS:  key.NewBinding(key.WithKeys("ctrl+t")),
 		SwitchEnv:  key.NewBinding(key.WithKeys("ctrl+e")),
+		Intruder:   key.NewBinding(key.WithKeys("ctrl+r")),
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
@@ -73,6 +75,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 				{Keys: bindingKeys(k.ImportFile), Desc: "Import OpenAPI / Postman file"},
 				{Keys: bindingKeys(k.ToggleTLS), Desc: "Toggle TLS verification skip"},
 				{Keys: bindingKeys(k.SwitchEnv), Desc: "Switch variable environment"},
+				{Keys: bindingKeys(k.Intruder), Desc: "Open Intruder (concurrent requests)"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
 				{Keys: bindingKeys(k.Help), Desc: "This help"},
 				{Keys: "u", Desc: "Undo last history delete"},
@@ -128,6 +131,14 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "/", Desc: "jq filter"},
 			{Keys: "Ctrl+F", Desc: "Search in body"},
 			{Keys: "D", Desc: "Toggle diff vs previous"},
+		}},
+		{Title: "Intruder", Items: []HelpItem{
+			{Keys: "{{$payload}}", Desc: "Marker in URL / body / headers, replaced per request"},
+			{Keys: "←/→", Desc: "Switch payload kind in the config modal"},
+			{Keys: "Tab / Shift+Tab", Desc: "Move between fields"},
+			{Keys: "Enter", Desc: "Start run"},
+			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll results"},
+			{Keys: "Esc", Desc: "Cancel run / close overlay"},
 		}},
 		{Title: "Chaining", Items: []HelpItem{
 			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},

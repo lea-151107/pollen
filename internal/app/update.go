@@ -48,6 +48,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.intruder.SetSize(msg.Width, msg.Height)
 		return m, nil
 
 	case sendResultMsg:
@@ -137,6 +138,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Undo window expires together with the toast that announced it.
 			m.pendingUndo = nil
 		}
+		return m, nil
+
+	case ui.IntruderResultMsg:
+		// Workers stream results in via this msg; only retain them while
+		// the overlay is still open so an aborted run isn't accumulating
+		// memory after the user dismisses it.
+		if m.intruder.State() == ui.IntruderResults {
+			m.intruder.AppendResult(msg.Result)
+		}
+		// Schedule the next read; the channel close becomes IntruderDoneMsg.
+		if m.intruderCh != nil {
+			return m, nextIntruderResultCmd(m.intruderCh)
+		}
+		return m, nil
+
+	case ui.IntruderDoneMsg:
+		m.intruder.MarkDone("")
+		m.intruderCh = nil
 		return m, nil
 
 	case tea.KeyMsg:
@@ -235,6 +254,20 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	}
+
+	// Intruder overlay takes precedence over any other panel input so the
+	// modal feels modal. Enter in the config state starts the run; Esc
+	// inside the results table cancels and closes.
+	if m.intruder.State() != ui.IntruderHidden {
+		// Enter in the config form triggers a run; let updateConfig fall
+		// through for every other key (text input + Tab navigation).
+		if m.intruder.State() == ui.IntruderConfig && km.String() == "enter" {
+			return m, m.startIntruderRun()
+		}
+		var cmd tea.Cmd
+		m.intruder, cmd = m.intruder.Update(km)
+		return m, cmd
 	}
 
 	// Save-to-collection dialog intercepts all input first.
@@ -364,6 +397,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.ImportFile):
 		m.importingFile = true
 		return m, m.importInput.Focus()
+
+	case key.Matches(km, m.keys.Intruder):
+		m.intruder.SetSize(m.width, m.height)
+		m.intruder.OpenConfig()
+		return m, nil
 
 	case key.Matches(km, m.keys.SwitchEnv):
 		names := m.env.Names()

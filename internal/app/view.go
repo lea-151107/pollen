@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/lea-151107/pollen/internal/ui"
 )
 
 func (m Model) View() string {
@@ -69,6 +71,9 @@ func (m Model) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, top, statusBar)
 
+	if m.intruder.State() != ui.IntruderHidden {
+		return m.intruder.View()
+	}
 	if m.copyMenuOpen {
 		return copyMenuView(m.width, m.height)
 	}

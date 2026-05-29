@@ -13,6 +13,7 @@ import (
 	"github.com/lea-151107/pollen/internal/env"
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/intruder"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 )
@@ -107,6 +108,12 @@ type Model struct {
 	// pressing Ctrl+S twice in quick succession could let the slower (older)
 	// request's response overwrite the newer one.
 	requestGen int
+
+	// intruder owns the Intruder overlay (config modal + result table). The
+	// runner channel intruderCh stays non-nil while a run is in flight so
+	// Update knows to schedule a follow-up nextResultCmd after each Result.
+	intruder   ui.Intruder
+	intruderCh <-chan intruder.Result
 }
 
 type pendingUndo struct {
@@ -182,10 +189,15 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	// Seed view-visible TLS state from the httpx global (loaded by main.go).
 	m.tlsInsecure = httpx.SkipTLSVerify.Load()
 	// Load per-panel settings (defaults applied inside settings.Load).
+	intruderConc, intruderDelay, intruderMax := 5, 0, 1000
 	if s, err := settings.Load(); err == nil {
 		m.responsePanelRatio = s.ResponsePanelRatio
 		m.sidebarMaxWidth = s.SidebarMaxWidth
+		intruderConc = s.IntruderConcurrency
+		intruderDelay = s.IntruderDelayMs
+		intruderMax = s.IntruderMaxRequests
 	}
+	m.intruder = ui.NewIntruder(intruderConc, intruderDelay, intruderMax)
 	if m.responsePanelRatio <= 0 || m.responsePanelRatio >= 1 {
 		m.responsePanelRatio = 0.5
 	}
