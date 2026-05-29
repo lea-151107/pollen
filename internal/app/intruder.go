@@ -34,14 +34,14 @@ func (m *Model) intruderTemplate() history.Request {
 // is set and nil cmd is returned (the modal stays open).
 func (m *Model) startIntruderRun() tea.Cmd {
 	template := m.intruderTemplate()
-	payload, conc, delay, max, errMsg := m.intruder.BuildConfig()
+	mode, payloads, conc, delay, max, errMsg := m.intruder.BuildConfig()
 	if errMsg != "" {
 		m.intruder.SetFormErr(errMsg)
 		return nil
 	}
 	cfg := intruderpkg.RunConfig{
-		Mode:        intruderpkg.Sniper,
-		Payloads:    []intruderpkg.PayloadConfig{payload},
+		Mode:        mode,
+		Payloads:    payloads,
 		Template:    template,
 		Concurrency: conc,
 		DelayMs:     delay,

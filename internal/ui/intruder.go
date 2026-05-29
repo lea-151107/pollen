@@ -48,7 +48,12 @@ const (
 	IntruderResults
 )
 
-// Intruder owns the v1.2.0 Intruder UI: a configuration modal that the
+// maxPositions caps the number of payload positions a Pitchfork or
+// ClusterBomb run can declare. 8 is well past any realistic credential
+// stuffing or fuzzing target and keeps the config UI usable.
+const maxPositions = 8
+
+// Intruder owns the Intruder UI: a configuration modal that the
 // caller pops up on Ctrl+R, followed by a fullscreen result table that
 // streams rows as workers complete. Cancellation (Esc in the results
 // view) flows back to the runner via the stored cancel func.
@@ -56,13 +61,14 @@ type Intruder struct {
 	state IntruderState
 
 	// Config-form inputs.
-	kind         intruder.PayloadKind
-	payloadInput textinput.Model
-	concInput    textinput.Model
-	delayInput   textinput.Model
-	maxInput     textinput.Model
-	focus        int // 0=kind, 1=payload, 2=concurrency, 3=delay, 4=max
-	formErr      string
+	mode          intruder.AttackMode
+	kinds         []intruder.PayloadKind // length = number of payload positions
+	payloadInputs []textinput.Model      // length = number of payload positions
+	concInput     textinput.Model
+	delayInput    textinput.Model
+	maxInput      textinput.Model
+	focus         int // see focusLayout
+	formErr       string
 
 	// Run state.
 	results []intruder.Result
@@ -119,16 +125,46 @@ func NewIntruder(defaultConcurrency, defaultDelayMs, defaultMaxReq int) Intruder
 	max.SetValue(strconv.Itoa(defaultMaxReq))
 
 	return Intruder{
-		state:        IntruderHidden,
-		kind:         intruder.PayloadRange,
-		payloadInput: payload,
-		concInput:    conc,
-		delayInput:   delay,
-		maxInput:     max,
-		focus:        1,
-		sortCol:      sortIndex,
-		sortAsc:      true,
+		state:         IntruderHidden,
+		mode:          intruder.Sniper,
+		kinds:         []intruder.PayloadKind{intruder.PayloadRange},
+		payloadInputs: []textinput.Model{payload},
+		concInput:     conc,
+		delayInput:    delay,
+		maxInput:      max,
+		focus:         2, // start at the first payload input (after mode + position-count)
+		sortCol:       sortIndex,
+		sortAsc:       true,
 	}
+}
+
+// focusLayout maps the modal's focus index to a conceptual field. The
+// layout grows with the number of payload positions:
+//
+//	0           mode selector
+//	1           position count selector
+//	2 + 2*i     kind selector for payload i (i = 0..N-1)
+//	3 + 2*i     text input for payload i
+//	2 + 2*N     concurrency input
+//	3 + 2*N     delay input
+//	4 + 2*N     max-requests input
+func (m Intruder) totalFocusFields() int {
+	return 5 + 2*len(m.kinds)
+}
+
+func (m Intruder) focusConcurrency() int { return 2 + 2*len(m.kinds) }
+func (m Intruder) focusDelay() int       { return 3 + 2*len(m.kinds) }
+func (m Intruder) focusMax() int         { return 4 + 2*len(m.kinds) }
+
+// positionForFocus returns the payload index (0-based) the focus is
+// currently on, or -1 if focus isn't on a payload row. kindRow is true
+// when focus is on the kind selector, false for the text input.
+func (m Intruder) positionForFocus() (idx int, kindRow bool) {
+	if m.focus < 2 || m.focus >= m.focusConcurrency() {
+		return -1, false
+	}
+	off := m.focus - 2
+	return off / 2, off%2 == 0
 }
 
 func (m Intruder) State() IntruderState         { return m.state }
@@ -140,26 +176,59 @@ func (m *Intruder) SetFormErr(s string)          { m.formErr = s }
 func (m Intruder) IsRunning() bool               { return m.cancel != nil && !m.done }
 func (m Intruder) Done() bool                    { return m.done }
 
-// BuildConfig parses the form into an intruder.RunConfig and returns it
-// together with an error message string (empty on success).
-func (m Intruder) BuildConfig() (intruder.PayloadConfig, int, int, int, string) {
+// BuildConfig parses the form into an attack mode, the list of payload
+// configs (one per position), and the concurrency knobs. The error
+// string is empty on success.
+func (m Intruder) BuildConfig() (intruder.AttackMode, []intruder.PayloadConfig, int, int, int, string) {
 	conc, err := parsePositiveInt(m.concInput.Value(), "concurrency")
 	if err != "" {
-		return intruder.PayloadConfig{}, 0, 0, 0, err
+		return 0, nil, 0, 0, 0, err
 	}
 	delay, err := parseNonNegativeInt(m.delayInput.Value(), "delay")
 	if err != "" {
-		return intruder.PayloadConfig{}, 0, 0, 0, err
+		return 0, nil, 0, 0, 0, err
 	}
 	max, err := parsePositiveInt(m.maxInput.Value(), "max requests")
 	if err != "" {
-		return intruder.PayloadConfig{}, 0, 0, 0, err
+		return 0, nil, 0, 0, 0, err
 	}
-	p, err := parsePayloadInput(m.kind, m.payloadInput.Value())
-	if err != "" {
-		return intruder.PayloadConfig{}, 0, 0, 0, err
+	configs := make([]intruder.PayloadConfig, len(m.kinds))
+	for i, k := range m.kinds {
+		p, perr := parsePayloadInput(k, m.payloadInputs[i].Value())
+		if perr != "" {
+			return 0, nil, 0, 0, 0, fmt.Sprintf("payload %d: %s", i+1, perr)
+		}
+		configs[i] = p
 	}
-	return p, conc, delay, max, ""
+	return m.mode, configs, conc, delay, max, ""
+}
+
+// SetPositionCount resizes the payload slice. Sniper is locked to 1;
+// Pitchfork / ClusterBomb clamp to [2, maxPositions]. Growing adds
+// fresh Range inputs; shrinking drops the trailing ones.
+func (m *Intruder) setPositionCount(n int) {
+	if m.mode == intruder.Sniper {
+		n = 1
+	} else {
+		if n < 2 {
+			n = 2
+		}
+		if n > maxPositions {
+			n = maxPositions
+		}
+	}
+	for len(m.kinds) < n {
+		ti := textinput.New()
+		ti.Placeholder = "e.g. 1-100"
+		ti.CharLimit = 256
+		ti.Width = 40
+		m.kinds = append(m.kinds, intruder.PayloadRange)
+		m.payloadInputs = append(m.payloadInputs, ti)
+	}
+	if len(m.kinds) > n {
+		m.kinds = m.kinds[:n]
+		m.payloadInputs = m.payloadInputs[:n]
+	}
 }
 
 // AppendResult records a Result delivered by the runner. The caller (the
@@ -214,6 +283,7 @@ func (m Intruder) updateConfig(msg tea.Msg) (Intruder, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	total := m.totalFocusFields()
 	switch keyMsg.String() {
 	case "esc":
 		m.Close()
@@ -223,33 +293,78 @@ func (m Intruder) updateConfig(msg tea.Msg) (Intruder, tea.Cmd) {
 		if keyMsg.String() == "shift+tab" {
 			dir = -1
 		}
-		m.focus = (m.focus + dir + 5) % 5
+		m.focus = (m.focus + dir + total) % total
 		m.applyFocus()
 		return m, nil
-	case "left":
-		if m.focus == 0 {
-			m.kind = (m.kind + 3) % 4 // cycle 4 kinds backwards
-			m.payloadInput.Placeholder = placeholderFor(m.kind)
-			return m, nil
+	case "left", "right":
+		dir := 1
+		if keyMsg.String() == "left" {
+			dir = -1
 		}
-	case "right":
-		if m.focus == 0 {
-			m.kind = (m.kind + 1) % 4
-			m.payloadInput.Placeholder = placeholderFor(m.kind)
+		switch m.focus {
+		case 0:
+			// Cycle attack mode and snap position count to a valid value.
+			modes := []intruder.AttackMode{intruder.Sniper, intruder.Pitchfork, intruder.ClusterBomb}
+			idx := 0
+			for i, mm := range modes {
+				if mm == m.mode {
+					idx = i
+				}
+			}
+			idx = (idx + dir + len(modes)) % len(modes)
+			m.mode = modes[idx]
+			// Ensure positions match the mode (Sniper → 1, others → >=2).
+			n := len(m.kinds)
+			if m.mode == intruder.Sniper {
+				n = 1
+			} else if n < 2 {
+				n = 2
+			}
+			m.setPositionCount(n)
+			if m.focus >= total {
+				m.focus = 0
+			}
+			m.applyFocus()
 			return m, nil
+		case 1:
+			// Cycle position count within the mode's allowed range.
+			if m.mode == intruder.Sniper {
+				return m, nil
+			}
+			n := len(m.kinds) + dir
+			if n < 2 {
+				n = 2
+			}
+			if n > maxPositions {
+				n = maxPositions
+			}
+			m.setPositionCount(n)
+			if m.focus >= m.totalFocusFields() {
+				m.focus = m.totalFocusFields() - 1
+			}
+			m.applyFocus()
+			return m, nil
+		default:
+			if idx, kindRow := m.positionForFocus(); kindRow && idx >= 0 {
+				m.kinds[idx] = intruder.PayloadKind((int(m.kinds[idx]) + dir + 4) % 4)
+				m.payloadInputs[idx].Placeholder = placeholderFor(m.kinds[idx])
+				return m, nil
+			}
 		}
 	}
 	// Delegate to the focused textinput.
 	var cmd tea.Cmd
-	switch m.focus {
-	case 1:
-		m.payloadInput, cmd = m.payloadInput.Update(msg)
-	case 2:
+	switch {
+	case m.focus == m.focusConcurrency():
 		m.concInput, cmd = m.concInput.Update(msg)
-	case 3:
+	case m.focus == m.focusDelay():
 		m.delayInput, cmd = m.delayInput.Update(msg)
-	case 4:
+	case m.focus == m.focusMax():
 		m.maxInput, cmd = m.maxInput.Update(msg)
+	default:
+		if idx, kindRow := m.positionForFocus(); !kindRow && idx >= 0 {
+			m.payloadInputs[idx], cmd = m.payloadInputs[idx].Update(msg)
+		}
 	}
 	return m, cmd
 }
@@ -442,19 +557,23 @@ func (m Intruder) maxScrollOffset() int {
 }
 
 func (m *Intruder) applyFocus() {
-	m.payloadInput.Blur()
+	for i := range m.payloadInputs {
+		m.payloadInputs[i].Blur()
+	}
 	m.concInput.Blur()
 	m.delayInput.Blur()
 	m.maxInput.Blur()
-	switch m.focus {
-	case 1:
-		m.payloadInput.Focus()
-	case 2:
+	switch {
+	case m.focus == m.focusConcurrency():
 		m.concInput.Focus()
-	case 3:
+	case m.focus == m.focusDelay():
 		m.delayInput.Focus()
-	case 4:
+	case m.focus == m.focusMax():
 		m.maxInput.Focus()
+	default:
+		if idx, kindRow := m.positionForFocus(); !kindRow && idx >= 0 {
+			m.payloadInputs[idx].Focus()
+		}
 	}
 }
 
@@ -475,19 +594,26 @@ func (m Intruder) viewConfig() string {
 	bold := lipgloss.NewStyle().Bold(true)
 	hi := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
 
-	kindLabel := func(k intruder.PayloadKind, name string) string {
+	highlight := func(name string, active bool) string {
 		label := "[ " + name + " ]"
-		if m.kind == k {
+		if active {
 			return hi.Render(label)
 		}
 		return dim.Render(label)
 	}
-	kindRow := strings.Join([]string{
-		kindLabel(intruder.PayloadRange, "Range"),
-		kindLabel(intruder.PayloadList, "List"),
-		kindLabel(intruder.PayloadBrute, "Brute"),
-		kindLabel(intruder.PayloadCaseToggle, "CaseToggle"),
+	modeRow := strings.Join([]string{
+		highlight("Sniper", m.mode == intruder.Sniper),
+		highlight("Pitchfork", m.mode == intruder.Pitchfork),
+		highlight("ClusterBomb", m.mode == intruder.ClusterBomb),
 	}, "  ")
+	kindRow := func(k intruder.PayloadKind) string {
+		return strings.Join([]string{
+			highlight("Range", k == intruder.PayloadRange),
+			highlight("List", k == intruder.PayloadList),
+			highlight("Brute", k == intruder.PayloadBrute),
+			highlight("CaseToggle", k == intruder.PayloadCaseToggle),
+		}, "  ")
+	}
 
 	marker := func(field int, label string) string {
 		ind := "  "
@@ -497,20 +623,48 @@ func (m Intruder) viewConfig() string {
 		return ind + label
 	}
 
-	lines := []string{
-		bold.Render("Intruder — Sniper mode"),
-		"",
-		marker(0, "Payload kind:  ") + kindRow,
-		"",
-		marker(1, "Payload:       ") + m.payloadInput.View(),
-		dim.Render("  format: " + placeholderFor(m.kind)),
-		"",
-		marker(2, "Concurrency:   ") + m.concInput.View(),
-		marker(3, "Delay (ms):    ") + m.delayInput.View(),
-		marker(4, "Max requests:  ") + m.maxInput.View(),
-		"",
-		dim.Render("Tab: next field  ·  Shift+Tab: prev  ·  ←/→: switch kind  ·  Enter: run  ·  Esc: cancel"),
+	title := "Intruder — Sniper mode"
+	switch m.mode {
+	case intruder.Pitchfork:
+		title = "Intruder — Pitchfork mode"
+	case intruder.ClusterBomb:
+		title = "Intruder — ClusterBomb mode"
 	}
+
+	lines := []string{
+		bold.Render(title),
+		"",
+		marker(0, "Mode:          ") + modeRow,
+	}
+	if m.mode != intruder.Sniper {
+		lines = append(lines, marker(1, "Positions:     ")+hi.Render(strconv.Itoa(len(m.kinds)))+dim.Render("   (←/→ to adjust, 2.."+strconv.Itoa(maxPositions)+")"))
+	} else {
+		lines = append(lines, marker(1, "Positions:     ")+dim.Render("1  (Sniper)"))
+	}
+	for i := range m.kinds {
+		label := "Payload " + strconv.Itoa(i+1) + " kind: "
+		if len(m.kinds) == 1 {
+			label = "Payload kind:  "
+		}
+		lines = append(lines, "")
+		lines = append(lines, marker(2+2*i, label)+kindRow(m.kinds[i]))
+		input := m.payloadInputs[i]
+		input.Placeholder = placeholderFor(m.kinds[i])
+		ilabel := "Payload " + strconv.Itoa(i+1) + ":      "
+		if len(m.kinds) == 1 {
+			ilabel = "Payload:       "
+		}
+		lines = append(lines, marker(3+2*i, ilabel)+input.View())
+		lines = append(lines, dim.Render("  format: "+placeholderFor(m.kinds[i])))
+	}
+	lines = append(lines,
+		"",
+		marker(m.focusConcurrency(), "Concurrency:   ")+m.concInput.View(),
+		marker(m.focusDelay(), "Delay (ms):    ")+m.delayInput.View(),
+		marker(m.focusMax(), "Max requests:  ")+m.maxInput.View(),
+		"",
+		dim.Render("Tab: next field  ·  Shift+Tab: prev  ·  ←/→: switch mode/kind/positions  ·  Enter: run  ·  Esc: cancel"),
+	)
 	if m.formErr != "" {
 		lines = append(lines, "", lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("error: "+m.formErr))
 	}
