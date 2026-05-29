@@ -535,15 +535,17 @@ func (r Response) View(width, height int) string {
 	}
 
 	r.vp.Width = inner - 2 // -2 for padding
+	// lipgloss.Height treats "\n" as a line separator, not as an extra row,
+	// so each bar contributes only its own rendered row count.
 	filterBarH := 0
 	if r.filterActive || r.filteredBody != "" {
-		filterBarH = 2 // "\n" + one line of filter bar
+		filterBarH = 1
 	}
 	searchBarH := 0
 	if r.searchActive || r.searchQuery != "" {
-		searchBarH = 2
+		searchBarH = 1
 	}
-	vpH := innerH - lipgloss.Height(statusLine) - 1 - filterBarH - searchBarH
+	vpH := innerH - lipgloss.Height(statusLine) - filterBarH - searchBarH
 	if vpH < 1 {
 		vpH = 1
 	}
