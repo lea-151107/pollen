@@ -1,3 +1,5 @@
+// Package importer reads OpenAPI 3.x (JSON/YAML) and Postman Collection v2.1
+// documents and converts them into pollen collection entries.
 package importer
 
 import (

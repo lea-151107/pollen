@@ -1,3 +1,6 @@
+// Package app holds the Bubble Tea Model, the Update message dispatch,
+// the View composition, and pollen-specific helpers (variable expansion,
+// clipboard, save) that glue the UI panels to the storage and HTTP layers.
 package app
 
 import (

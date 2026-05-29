@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-05-29
+
+### Changed
+
+- **Unified wording across the TUI**. Panel hints, modal dialogs, and the
+  help overlay now use one consistent style: key names are Title-Case
+  (`Enter`, `Ctrl+D`, `Esc`, `Tab`), items are joined with the same
+  middle-dot separator (`·`), and the `Key: action` form is used
+  throughout. Concretely:
+  - Query / Headers hints switched from lowercase `enter: new row` to
+    Title-Case `Enter: new row`.
+  - Auth / Body hints switched the `•` separator to `·` and added the
+    explicit `Key: action` colon so they parse the same as Query /
+    Headers.
+  - Help overlay key names are derived through a normaliser, so binding
+    tokens stored as `ctrl+s` render as `Ctrl+S`. The one inline
+    outlier (`ctrl+f` in the Response section) was fixed to match.
+  - Modal titles lost their trailing punctuation
+    (`Update collection entry?` → `Update collection entry`,
+    `Copy request as:` → `Copy request`).
+  - The env switcher's instruction line gained colons to match the
+    other modals (`Enter confirm` → `Enter: confirm`).
+- **Response panel state lines no longer repeat the panel name**. While
+  loading / on error / before the first request, the panel rendered
+  `Response: loading…`, `Response: error`, `Response: (no requests
+  yet)`. The successful-response branch already omitted the prefix
+  (rendering the status line directly), so the prefix is now dropped
+  from the idle paths too.
+- **`pollen:` prefix is now uniform on stderr**. The two startup paths
+  that previously emitted `failed to load history: ...` /
+  `failed to load collections: ...` now read
+  `pollen: history: ...` / `pollen: collections: ...`, matching every
+  other error in `main.go`.
+- **TLS-toggle status uses the state form even on save failure**.
+  Previously the save-failed branch said `TLS toggled (...)` while the
+  success branches said `TLS verification: ON/OFF`; the save-failed
+  branch now also leads with `TLS verification: ...`.
+
+### Documentation
+
+- Every `internal/*` package now carries a `// Package <name> ...` doc
+  comment. Previously only 4 of the 12 packages had one.
+
+No user-visible runtime behaviour, no CLI flags, no JSON keys, no
+keybindings, and no variable-expansion tokens changed. The pollen binary
+behaves identically to v1.0.3 at the protocol level.
+
+[1.0.4]: https://github.com/lea-151107/pollen/releases/tag/v1.0.4
+
 ## [1.0.3] - 2026-05-29
 
 ### Added

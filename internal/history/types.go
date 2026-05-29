@@ -1,3 +1,6 @@
+// Package history persists the request/response history in
+// ~/.config/pollen/history.json and defines the Request, Response, and
+// Header types shared with other packages.
 package history
 
 import "time"

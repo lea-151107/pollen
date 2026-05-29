@@ -1,3 +1,6 @@
+// Package ui provides the Bubble Tea panel components for pollen — Method,
+// URLBar, Query, Auth, Headers, Body, Response, History, and Collections —
+// each rendering inside a bordered box with focus-driven highlights.
 package ui
 
 import (

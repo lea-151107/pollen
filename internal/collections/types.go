@@ -1,3 +1,6 @@
+// Package collections persists named saved requests in
+// ~/.config/pollen/collections.json and exposes Add / Delete / Rename /
+// UpdateRequest operations on the store.
 package collections
 
 import "github.com/lea-151107/pollen/internal/history"

@@ -1,3 +1,7 @@
+// Package httpx executes HTTP requests with pollen-specific transport
+// options (TLS skip, custom CA pool, proxy, redirect control, cookie jar,
+// byte-capped responses) and builds the request body from pollen's
+// BodyType variants.
 package httpx
 
 import (

@@ -1,3 +1,5 @@
+// Package headers holds the curated list of standard HTTP header names
+// used for tab-completion in the Headers panel.
 package headers
 
 import "strings"
