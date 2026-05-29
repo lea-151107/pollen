@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-29
+
+### Added
+
+- **Two new Intruder attack modes: Pitchfork and ClusterBomb.**
+  - **Pitchfork** assigns N payload lists to N marker positions and
+    iterates them in parallel ("zip"), stopping when any list
+    exhausts. Use it for credential pairs, ordered probes, anything
+    where lists are pre-aligned.
+  - **ClusterBomb** assigns N lists to N positions and enumerates
+    the Cartesian product. Use it for combinatorial discovery (path
+    × method, user × pass, etc). The product is capped by
+    `intruder_max_requests` so a 1000×1000 input still terminates.
+  - Both modes support up to 8 payload positions, configured in the
+    Intruder modal with the new `Mode` and `Positions` rows.
+- **Multi-position marker syntax.** Mark each payload position with
+  `{{$payload1}}`, `{{$payload2}}`, …, `{{$payloadN}}`. `{{$payload}}`
+  continues to work and is treated as an alias for `{{$payload1}}`,
+  so every v1.2.x request template runs unchanged under Sniper. The
+  runner validates that all markers a chosen mode needs are present
+  pre-flight, naming any missing positions in the error.
+
+### Changed
+
+- `RunConfig.Payload` (single `PayloadConfig`) becomes
+  `RunConfig.Payloads` ([]PayloadConfig). The `intruder` package is
+  not part of the SemVer-frozen public surface, but downstream Go
+  consumers of the package (if any) will need to wrap their existing
+  value in `[]PayloadConfig{p}`.
+- Sniper's behaviour and the Sniper UI are unchanged — the modal
+  still opens to the same single-payload form, and `{{$payload}}`
+  with multiple occurrences in the template still gets the same
+  value at every position (equivalent to Burp's Battering ram, as
+  before).
+- Multi-position runs join the per-position payloads with ` | ` in
+  the result table's `payload` column and in `--export-intruder`
+  CSV/JSON. Sniper rows display the payload bare, matching v1.2.x.
+
+### Fixed
+
+- The Intruder result-table filter input now accepts multi-byte
+  characters (CJK kanji, accented Latin, …). The v1.2.1 default
+  branch checked byte length and silently dropped any rune longer
+  than 1 byte, leaving international payloads unfilterable.
+- When the filter excludes every result, the table now shows
+  `(no results match filter)` instead of the misleading
+  `(waiting for first response…)` message, which previously made
+  the run look stuck.
+
 ## [1.2.1] - 2026-05-29
 
 ### Added

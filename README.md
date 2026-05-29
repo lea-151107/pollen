@@ -367,7 +367,27 @@ Header: X-API-Key: {{$payload}}
 unchanged, so you can combine env variables, response chaining, and an
 Intruder run in the same request.
 
-In the config modal pick a payload kind with `←` / `→` and enter its
+Pollen ships three attack modes; the config modal's first row picks
+which (`←` / `→` to cycle):
+
+| Mode | Lists × positions | Iteration |
+|------|-------------------|-----------|
+| **Sniper** | 1 list × any positions | Same payload substituted at every marker (Burp's "Battering ram" for free — mark multiple positions and each receives the same value) |
+| **Pitchfork** | N lists × N positions | Zip (request `k` uses list1[k], list2[k], …, lN[k]); stops at the shortest list |
+| **ClusterBomb** | N lists × N positions | Cartesian product (every combination, bounded by `intruder_max_requests`) |
+
+For Pitchfork / ClusterBomb the second row picks the number of payload
+positions (2–8). Mark them in the request as `{{$payload1}}`,
+`{{$payload2}}`, …, up to the position count you chose. `{{$payload}}`
+is preserved as an alias of `{{$payload1}}` so existing v1.2.x
+templates still run unchanged under Sniper.
+
+```
+URL:    https://api.example.com/login?user={{$payload1}}&pass={{$payload2}}
+Body:   {"token":"{{$payload3}}"}
+```
+
+In each payload position pick a kind with `←` / `→` and enter its
 parameters. Format strings appear inline below the input.
 
 | Kind | Format | Example |
