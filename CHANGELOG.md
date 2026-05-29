@@ -43,14 +43,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   success branches said `TLS verification: ON/OFF`; the save-failed
   branch now also leads with `TLS verification: ...`.
 
+### Fixed
+
+- **Response panel no longer leaves a one-row gap below itself**. The
+  `vpH` calculation in `internal/ui/response.go` was off by one because
+  the `"\n"` separator between the status line and the viewport was
+  being counted as an extra row (and `filterBarH` / `searchBarH` carried
+  the same mistake). `lipgloss.Height` treats `"\n"` as a line break
+  rather than an additional row, so the viewport reserved one row fewer
+  than it should and the rendered Response column ended one row shorter
+  than the request column — the status bar accordingly sat one row
+  below where it should have. The calculation now sums only the actual
+  rendered rows, so the Response panel's bottom border sits flush
+  against the status bar.
+
 ### Documentation
 
 - Every `internal/*` package now carries a `// Package <name> ...` doc
   comment. Previously only 4 of the 12 packages had one.
 
-No user-visible runtime behaviour, no CLI flags, no JSON keys, no
-keybindings, and no variable-expansion tokens changed. The pollen binary
-behaves identically to v1.0.3 at the protocol level.
+No protocol behaviour changed: CLI flags, JSON keys, keybindings, and
+variable-expansion tokens all match v1.0.3 exactly. The visual changes
+are limited to the wording and layout points above.
 
 [1.0.4]: https://github.com/lea-151107/pollen/releases/tag/v1.0.4
 
