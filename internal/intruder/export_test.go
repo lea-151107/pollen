@@ -42,6 +42,38 @@ func TestJSON_EmptySliceMarshalsAsEmptyArray(t *testing.T) {
 	}
 }
 
+func TestSaveLoadLastRun(t *testing.T) {
+	tmp := t.TempDir()
+	userconfigSetOverride(t, tmp)
+
+	if err := SaveLastRun(sampleResults()); err != nil {
+		t.Fatalf("SaveLastRun: %v", err)
+	}
+	got, err := LoadLastRun()
+	if err != nil {
+		t.Fatalf("LoadLastRun: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len: %d", len(got))
+	}
+	if got[1].Payload != "2,3" {
+		t.Errorf("roundtrip lost field: %+v", got[1])
+	}
+}
+
+func TestLoadLastRun_NoFileReturnsNil(t *testing.T) {
+	tmp := t.TempDir()
+	userconfigSetOverride(t, tmp)
+
+	got, err := LoadLastRun()
+	if err != nil {
+		t.Fatalf("LoadLastRun: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil for missing file, got %v", got)
+	}
+}
+
 func TestJSON_RoundTrip(t *testing.T) {
 	data, err := JSON(sampleResults())
 	if err != nil {

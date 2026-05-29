@@ -15,6 +15,7 @@ import (
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/importer"
+	intruderpkg "github.com/lea-151107/pollen/internal/intruder"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 )
@@ -156,6 +157,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ui.IntruderDoneMsg:
 		m.intruder.MarkDone("")
 		m.intruderCh = nil
+		// Persist the latest run so the --export-intruder CLI can read
+		// the same data. Failures are silent; the TUI keeps its
+		// in-memory copy regardless.
+		_ = intruderpkg.SaveLastRun(m.intruder.Results())
 		return m, nil
 
 	case tea.KeyMsg:

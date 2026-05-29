@@ -20,6 +20,7 @@ import (
 	"github.com/lea-151107/pollen/internal/env"
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
+	"github.com/lea-151107/pollen/internal/intruder"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 	"github.com/lea-151107/pollen/internal/userconfig"
@@ -32,9 +33,10 @@ func main() {
 		collFilter  string
 		initConfig  bool
 		showVersion bool
-		exportColls   string
-		exportPostman string
-		exportOpenAPI string
+		exportColls    string
+		exportPostman  string
+		exportOpenAPI  string
+		exportIntruder string
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
@@ -44,6 +46,7 @@ func main() {
 	flag.StringVar(&exportPostman, "export-postman", "", "export collections to Postman v2.1 JSON (use - for stdout)")
 	flag.StringVar(&exportColls, "export-collections", "", "alias for --export-postman (kept for backwards compatibility)")
 	flag.StringVar(&exportOpenAPI, "export-openapi", "", "export collections as OpenAPI 3.x (.json / .yaml / .yml; use - for stdout JSON)")
+	flag.StringVar(&exportIntruder, "export-intruder", "", "export the last Intruder run (.csv / .json; use - for stdout CSV)")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintln(out, "Usage: pollen [--option ...]\n\nOptions:")
@@ -135,6 +138,40 @@ func main() {
 				os.Exit(1)
 			}
 			fmt.Println("exported", len(collStore.Entries()), "entries to", exportOpenAPI)
+		}
+		os.Exit(0)
+	}
+
+	if exportIntruder != "" {
+		results, err := intruder.LoadLastRun()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+			os.Exit(1)
+		}
+		if results == nil {
+			fmt.Fprintln(os.Stderr, "pollen: no intruder run to export (run one from the TUI first)")
+			os.Exit(2)
+		}
+		var data []byte
+		switch strings.ToLower(filepath.Ext(exportIntruder)) {
+		case ".json":
+			data, err = intruder.JSON(results)
+		default:
+			// CSV is the default for stdout, .csv, and any other extension.
+			data, err = intruder.CSV(results)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+			os.Exit(1)
+		}
+		if exportIntruder == "-" {
+			fmt.Print(string(data))
+		} else {
+			if err := os.WriteFile(exportIntruder, data, 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("exported", len(results), "rows to", exportIntruder)
 		}
 		os.Exit(0)
 	}

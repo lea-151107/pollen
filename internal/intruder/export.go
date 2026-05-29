@@ -6,7 +6,46 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/lea-151107/pollen/internal/userconfig"
 )
+
+// LastRunFile is the on-disk name of the most-recent run cached in the
+// pollen config directory. Only the most recent run is kept; older runs
+// are overwritten so the file can't grow unboundedly.
+const LastRunFile = "intruder_last.json"
+
+type lastRunDoc struct {
+	Version int      `json:"version"`
+	Results []Result `json:"results"`
+}
+
+// SaveLastRun writes results to <config>/intruder_last.json so the
+// --export-intruder CLI flag can serve the same data the TUI just
+// produced. results == nil writes the empty array form ("[]") so a
+// subsequent Load doesn't see a null.
+func SaveLastRun(results []Result) error {
+	rows := results
+	if rows == nil {
+		rows = []Result{}
+	}
+	return userconfig.SaveJSON(LastRunFile, lastRunDoc{Version: 1, Results: rows})
+}
+
+// LoadLastRun returns the persisted most-recent results, or (nil, nil)
+// when no run has been recorded yet. Callers should treat the empty
+// case as "no data" and exit early.
+func LoadLastRun() ([]Result, error) {
+	var doc lastRunDoc
+	loaded, err := userconfig.LoadJSON(LastRunFile, &doc)
+	if err != nil {
+		return nil, err
+	}
+	if !loaded {
+		return nil, nil
+	}
+	return doc.Results, nil
+}
 
 // CSV serialises results as RFC 4180 CSV with a header row. Useful for
 // piping into spreadsheets or grep-ing for outliers.
