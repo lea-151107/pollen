@@ -284,7 +284,15 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// Re-clamp the scroll offset on every input. If the view shrank
+	// since the last keystroke (a Result arrived that changes filter
+	// membership, or the user just narrowed via /f), scrollOffset can
+	// be stale; this catches it before the next nav key would silently
+	// no-op.
 	max := m.maxScrollOffset()
+	if m.scrollOffset > max {
+		m.scrollOffset = max
+	}
 	switch keyMsg.String() {
 	case "esc":
 		// Three-layer Esc: an active filter (substring or preset) is
