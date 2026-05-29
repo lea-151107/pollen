@@ -130,13 +130,13 @@ func main() {
 
 	store, err := history.Open()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load history: %v\n", err)
+		fmt.Fprintf(os.Stderr, "pollen: history: %v\n", err)
 		os.Exit(1)
 	}
 
 	collStore, err := collections.Open()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load collections: %v\n", err)
+		fmt.Fprintf(os.Stderr, "pollen: collections: %v\n", err)
 		os.Exit(1)
 	}
 

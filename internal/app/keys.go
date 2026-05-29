@@ -1,6 +1,10 @@
 package app
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"strings"
+
+	"github.com/charmbracelet/bubbles/key"
+)
 
 type KeyMap struct {
 	Quit        key.Binding
@@ -122,7 +126,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "s", Desc: "Save response"},
 			{Keys: "y", Desc: "Copy body to clipboard"},
 			{Keys: "/", Desc: "jq filter"},
-			{Keys: "ctrl+f", Desc: "Search in body"},
+			{Keys: "Ctrl+F", Desc: "Search in body"},
 			{Keys: "D", Desc: "Toggle diff vs previous"},
 		}},
 		{Title: "Chaining", Items: []HelpItem{
@@ -133,16 +137,40 @@ func (k KeyMap) HelpSections() []HelpSection {
 	}
 }
 
-// bindingKeys returns the printable keys of a binding (e.g. "ctrl+s") in a
-// form suitable for help display.
+// bindingKeys returns the printable keys of a binding in Title-Case form
+// (e.g. "Ctrl+S") so the help overlay matches the status bar's casing.
 func bindingKeys(b key.Binding) string {
 	keys := b.Keys()
 	if len(keys) == 0 {
 		return ""
 	}
-	out := keys[0]
+	out := formatKey(keys[0])
 	for _, k := range keys[1:] {
-		out += " / " + k
+		out += " / " + formatKey(k)
 	}
 	return out
+}
+
+// formatKey converts bubbles/key's lowercase token (e.g. "ctrl+s", "tab",
+// "shift+tab") to display casing. Single-character segments are uppercased
+// (so the modifier suffix in "ctrl+s" becomes "S") and multi-character
+// segments are Title-Cased ("ctrl" → "Ctrl", "tab" → "Tab"). Lone literal
+// keys like "d" or "/" pass through unchanged.
+func formatKey(s string) string {
+	parts := strings.Split(s, "+")
+	if len(parts) == 1 {
+		switch strings.ToLower(s) {
+		case "tab", "enter", "esc", "shift", "ctrl", "alt", "meta", "space":
+			return strings.ToUpper(s[:1]) + s[1:]
+		}
+		return s
+	}
+	for i, p := range parts {
+		if len(p) == 1 {
+			parts[i] = strings.ToUpper(p)
+		} else if len(p) > 0 {
+			parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		}
+	}
+	return strings.Join(parts, "+")
 }

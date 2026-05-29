@@ -175,9 +175,9 @@ func (b Body) View(width, height int) string {
 	hint := " "
 	if b.focused {
 		if b.tabFocus {
-			hint = "  ←/→ tab  •  Enter to edit"
+			hint = "  ←/→: tab  ·  Enter: edit"
 		} else {
-			hint = "  Tab: indent  •  Esc: leave editor"
+			hint = "  Tab: indent  ·  Esc: leave editor"
 		}
 	}
 	hintLine := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hint)

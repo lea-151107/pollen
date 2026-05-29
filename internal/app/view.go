@@ -260,7 +260,7 @@ func envSwitcherView(names []string, cursor int, current string, w, h int) strin
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
-	sb.WriteString("\n↑/↓ select  ·  Enter confirm  ·  Esc cancel")
+	sb.WriteString("\n↑/↓: select  ·  Enter: confirm  ·  Esc: cancel")
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("205")).
@@ -297,7 +297,7 @@ func renameCollectionView(inputView string, w, h int) string {
 }
 
 func collUpdatePromptView(name string, w, h int) string {
-	body := "Update collection entry?\n\n  " + name + "\n\n  Enter: update in-place  ·  n: save as new  ·  Esc: cancel"
+	body := "Update collection entry\n\n  " + name + "\n\n  Enter: update in-place  ·  N: save as new  ·  Esc: cancel"
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("205")).
@@ -327,6 +327,6 @@ func copyMenuView(w, h int) string {
 		Padding(1, 2).
 		Background(lipgloss.Color("236")).
 		Foreground(lipgloss.Color("230")).
-		Render("Copy request as:\n\n  [c] cURL  (POSIX)\n  [f] fetch (JavaScript)\n\n  Esc to cancel")
+		Render("Copy request\n\n  [c] cURL  (POSIX)\n  [f] fetch (JavaScript)\n\n  Esc: cancel")
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, menu)
 }

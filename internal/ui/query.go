@@ -204,7 +204,7 @@ func (q Query) View(width int) string {
 
 	hint := " "
 	if q.focused {
-		hint = "  enter: new row  ·  ctrl+d: delete row"
+		hint = "  Enter: new row  ·  Ctrl+D: delete row"
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hint))
 

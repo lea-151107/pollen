@@ -393,7 +393,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		saveErr := s.Save()
 		switch {
 		case saveErr != nil:
-			m.setStatus(statusWarn, fmt.Sprintf("TLS toggled (settings save failed: %v)", saveErr))
+			m.setStatus(statusWarn, fmt.Sprintf("TLS verification: toggled (settings save failed: %v)", saveErr))
 		case newVal:
 			m.setStatus(statusWarn, "TLS verification: OFF (insecure)")
 		default:

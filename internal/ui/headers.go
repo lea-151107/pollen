@@ -270,7 +270,7 @@ func (h Headers) View(width int) string {
 		hintLine = "  ↹ " + truncate(strings.Join(h.suggestions, "  ·  "), contentW-4)
 		hintStyle = hintStyle.Italic(true)
 	case h.focused:
-		hintLine = "  enter: new row  ·  ctrl+d: delete row"
+		hintLine = "  Enter: new row  ·  Ctrl+D: delete row"
 	default:
 		hintLine = " "
 	}

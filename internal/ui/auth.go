@@ -258,12 +258,12 @@ func (a Auth) View(width int) string {
 	if a.focused {
 		if a.cursor == 0 {
 			if a.authType == AuthNone {
-				hint = "  ←/→ select type"
+				hint = "  ←/→: select type"
 			} else {
-				hint = "  ←/→ type  •  Enter/↓ to edit"
+				hint = "  ←/→: type  ·  Enter/↓: edit"
 			}
 		} else {
-			hint = "  Esc/↑ back to type"
+			hint = "  Esc/↑: back to type"
 		}
 	}
 	sb.WriteString("\n")

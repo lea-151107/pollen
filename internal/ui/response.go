@@ -498,9 +498,9 @@ func (r Response) View(width, height int) string {
 	var statusLine string
 	switch {
 	case r.loading:
-		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("Response: loading…")
+		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("loading…")
 	case r.err != "":
-		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("Response: error")
+		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("error")
 	case r.resp != nil:
 		color := lipgloss.Color("10")
 		if r.resp.Status >= 400 {
@@ -531,7 +531,7 @@ func (r Response) View(width, height int) string {
 			statusLine += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hdrs)
 		}
 	default:
-		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("Response: (no requests yet)")
+		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("(no requests yet)")
 	}
 
 	r.vp.Width = inner - 2 // -2 for padding
