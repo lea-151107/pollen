@@ -27,6 +27,18 @@ const (
 	numSortColumns
 )
 
+// filterPreset is a coarse status-class filter the user toggles with `f`,
+// orthogonal to the substring filter and meant for the common "show me
+// only failing rows" / "show me only successes" lookup.
+type filterPreset int
+
+const (
+	presetAll filterPreset = iota
+	presetErrors
+	presetSuccess
+	numFilterPresets
+)
+
 // IntruderState is the three-way mode of the Intruder overlay.
 type IntruderState int
 
@@ -63,6 +75,14 @@ type Intruder struct {
 	// change until they press `s`.
 	sortCol sortColumn
 	sortAsc bool
+
+	// Filter state. filter is a payload substring match (lowercased on
+	// comparison); preset is a status-class quick filter. Both apply
+	// before sorting in view(). filterMode is true while the user is
+	// typing into the bottom-of-screen prompt.
+	filter     string
+	filterMode bool
+	preset     filterPreset
 
 	scrollOffset int
 
@@ -239,9 +259,42 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	// Filter-input mode: swallow every key as filter editing until the
+	// user commits (Enter) or aborts (Esc). Mirrors the three-layer
+	// pattern in internal/ui/history.go so users get the same muscle
+	// memory across the two filterable panels.
+	if m.filterMode {
+		switch keyMsg.String() {
+		case "esc":
+			m.filter = ""
+			m.filterMode = false
+			m.scrollOffset = 0
+		case "enter":
+			m.filterMode = false
+		case "backspace":
+			if rs := []rune(m.filter); len(rs) > 0 {
+				m.filter = string(rs[:len(rs)-1])
+				m.scrollOffset = 0
+			}
+		default:
+			if s := keyMsg.String(); len(s) == 1 {
+				m.filter += s
+				m.scrollOffset = 0
+			}
+		}
+		return m, nil
+	}
 	max := m.maxScrollOffset()
 	switch keyMsg.String() {
 	case "esc":
+		// Three-layer Esc: an active filter (substring or preset) is
+		// cleared first; only the no-filter Esc actually aborts the run.
+		if m.filter != "" || m.preset != presetAll {
+			m.filter = ""
+			m.preset = presetAll
+			m.scrollOffset = 0
+			return m, nil
+		}
 		m.CancelRun()
 		m.Close()
 		return m, nil
@@ -274,20 +327,56 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 	case "S":
 		m.sortAsc = !m.sortAsc
 		m.scrollOffset = 0
+	case "/":
+		m.filterMode = true
+	case "f":
+		m.preset = (m.preset + 1) % numFilterPresets
+		m.scrollOffset = 0
 	}
 	return m, nil
 }
 
+// filterDescription returns a short label for the currently active
+// filter, suitable for the header badge.
+func (m Intruder) filterDescription() string {
+	parts := []string{}
+	if m.filter != "" {
+		parts = append(parts, "payload~"+m.filter)
+	}
+	switch m.preset {
+	case presetErrors:
+		parts = append(parts, "errors only")
+	case presetSuccess:
+		parts = append(parts, "2xx only")
+	}
+	return strings.Join(parts, ", ")
+}
+
 // view returns the indices into m.results in the order the table should
-// render them. The underlying slice is never reordered so AppendResult
-// can safely keep streaming in send-order while the user sorts.
+// render them, after applying the substring filter and the status-class
+// preset. The underlying slice is never reordered so AppendResult can
+// safely keep streaming in send-order while the user sorts and filters.
 func (m Intruder) view() []int {
-	out := make([]int, len(m.results))
-	for i := range m.results {
-		out[i] = i
+	out := make([]int, 0, len(m.results))
+	needle := strings.ToLower(m.filter)
+	for i, r := range m.results {
+		if needle != "" && !strings.Contains(strings.ToLower(r.Payload), needle) {
+			continue
+		}
+		switch m.preset {
+		case presetErrors:
+			if r.Error == "" && r.Status < 400 {
+				continue
+			}
+		case presetSuccess:
+			if !(r.Status >= 200 && r.Status < 300) {
+				continue
+			}
+		}
+		out = append(out, i)
 	}
 	if m.sortCol == sortIndex && m.sortAsc {
-		return out // already in send order
+		return out // already in send order, filter preserves order
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := m.results[out[i]], m.results[out[j]]
@@ -435,6 +524,11 @@ func (m Intruder) viewResults() string {
 	} else {
 		header += "  " + lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("(running…)")
 	}
+	if filterActive := m.filter != "" || m.preset != presetAll; filterActive {
+		shown := len(m.view())
+		header += "  " + lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(
+			fmt.Sprintf("(%d/%d shown · %s)", shown, len(m.results), m.filterDescription()))
+	}
 
 	colLabels := []string{"#", "payload", "status", "size", "ms", "content-type"}
 	// Mark the active sort column with ▲/▼ so the user can see at a
@@ -488,15 +582,24 @@ func (m Intruder) viewResults() string {
 		rows = append(rows, renderRow(cells, colW, false, statusColor(r)))
 	}
 
-	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(
-		"↑/↓ scroll  ·  s sort  ·  S reverse  ·  Esc abort & close")
+	hintText := "↑/↓ scroll  ·  s/S sort  ·  / filter  ·  f preset  ·  Esc abort"
+	if m.filterMode {
+		hintText = "type to filter payload  ·  Enter accept  ·  Esc cancel"
+	}
+	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hintText)
+
+	bottomLines := []string{hint}
+	if m.filterMode {
+		prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("/" + m.filter + "█")
+		bottomLines = append([]string{prompt}, bottomLines...)
+	}
 
 	body := strings.Join([]string{
 		header,
 		"",
 		strings.Join(rows, "\n"),
 		"",
-		hint,
+		strings.Join(bottomLines, "\n"),
 	}, "\n")
 
 	box := lipgloss.NewStyle().
