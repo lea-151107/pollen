@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-05-29
+
+### Added
+
+- **Sort the Intruder result table.** Press `s` in the results
+  overlay to cycle the sort column (`#` → `status` → `size` → `ms`
+  → `#`); the active column shows a ▲ / ▼ marker in the header so
+  the current order is visible at a glance. `Shift+S` reverses the
+  direction on the current column. The default direction is
+  ascending for `#` (matching v1.2.0's send-order behaviour) and
+  descending for the numeric columns so the largest, slowest, or
+  highest-status rows surface first.
+- **Filter the Intruder result table.** Press `/` to open a
+  payload-substring filter (case-insensitive, matches anywhere in
+  the payload). Press `f` to cycle a status-class preset: `All`
+  → `Errors (4xx/5xx + network errors)` → `Success (2xx)` → `All`.
+  The two filters compose, and the header shows a
+  `(N/M shown · …)` badge whenever filtering is active so the
+  effect is obvious.
+
+### Changed
+
+- The Intruder results overlay's `Esc` key now applies three layers:
+  inside the filter input it cancels the input, with an active filter
+  outside input mode it clears the filter only, and with no filter
+  active it aborts the run as before. This matches the existing
+  three-layer `Esc` behaviour in the History panel.
+- The result table now truncates and pads by visual width
+  (lipgloss.Width) instead of byte length, so the new ▲ / ▼
+  header markers and any CJK characters in payloads or
+  content-types display without cutting UTF-8 sequences in half.
+
 ## [1.2.0] - 2026-05-29
 
 ### Added

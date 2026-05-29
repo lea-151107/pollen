@@ -383,8 +383,17 @@ that streams in as workers complete each request:
 
 - `↑/↓ PgUp/PgDn` scroll the table
 - 4xx, 5xx, and network-error rows are highlighted in red
-- `Esc` cancels the run and closes the overlay (the most recent run is
-  still cached on disk for `--export-intruder`)
+- `s` cycles the sort column (`#` → `status` → `size` → `ms` → `#`).
+  The active column shows a ▲ / ▼ marker. `Shift+S` reverses the
+  current direction
+- `/` opens a payload-substring filter (case-insensitive). `Enter`
+  commits, `Esc` drops it. `f` cycles a status-class preset:
+  `All` → `Errors (4xx/5xx + network)` → `Success (2xx)` → `All`.
+  When a filter is active the header shows `(N/M shown · …)`; a
+  first `Esc` clears it, a second `Esc` aborts the run as below
+- `Esc` (with no filter active) cancels the run and closes the
+  overlay (the most recent run is still cached on disk for
+  `--export-intruder`)
 
 To export the most recent run from outside the TUI:
 
