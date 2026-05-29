@@ -260,6 +260,32 @@ func TestIntruder_FilterSlashEntersInputMode(t *testing.T) {
 	}
 }
 
+func TestIntruder_FilterAcceptsMultiByteRunes(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in = sendKey(in, "/")
+	// Send a single CJK kanji as KeyRunes. The character is 3 bytes
+	// in UTF-8 but a single rune; the old byte-length check rejected
+	// it. Verify it lands in the filter.
+	out, _ := in.updateResults(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune("あ")}))
+	if out.filter != "あ" {
+		t.Errorf("multi-byte rune rejected from filter: %q", out.filter)
+	}
+}
+
+func TestIntruder_FilterRejectsNamedKeysAndControlChars(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in = sendKey(in, "/")
+	// "left" is a named key (Type=KeyLeft). After my fix the default
+	// branch should still reject it because String() returns "left"
+	// (4 runes). Verify nothing is appended.
+	out, _ := in.updateResults(tea.KeyMsg(tea.Key{Type: tea.KeyLeft}))
+	if out.filter != "" {
+		t.Errorf("named key leaked into filter: %q", out.filter)
+	}
+}
+
 func TestIntruder_FilterInputAcceptsAndCommits(t *testing.T) {
 	in := withResults(sampleResults())
 	in.state = IntruderResults

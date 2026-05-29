@@ -277,7 +277,13 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 				m.scrollOffset = 0
 			}
 		default:
-			if s := keyMsg.String(); len(s) == 1 {
+			// Accept any single printable rune. Matches history.go's
+			// pattern so multi-byte glyphs (CJK kanji, accented Latin)
+			// are appended; named keys like "left" or "ctrl+a" are
+			// multi-rune strings and excluded.
+			s := keyMsg.String()
+			rs := []rune(s)
+			if len(rs) == 1 && rs[0] >= ' ' {
 				m.filter += s
 				m.scrollOffset = 0
 			}
