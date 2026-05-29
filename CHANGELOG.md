@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-05-29
+
+### Added
+
+- **OpenAPI 3.x export**. `--export-openapi <path>` writes the current
+  collection store as an OpenAPI 3.0.3 document. Format is picked by
+  extension: `.yaml` / `.yml` produce YAML, anything else (including `-`
+  for stdout) produces JSON. When every entry shares a single
+  `scheme://host` it is emitted as `servers[0].url` and paths are
+  relative; mixed or template-tokenised hosts skip the `servers` block
+  and keep the raw URL as the path key. Headers and URL query strings
+  become `parameters` with `in: header` / `in: query` and an `example`
+  carrying the stored value. Body content is emitted under the natural
+  media type (`application/json`, `application/x-www-form-urlencoded`,
+  or `text/plain` / the explicit `Content-Type` header). **No header
+  masking is performed** — `Authorization`, `Cookie`, and any other
+  sensitive headers appear in the exported spec, so review before
+  sharing.
+
+### Fixed
+
+- **Layout no longer shifts when focus moves between request-column
+  panels**. `Query`, `Auth`, and `Headers` previously appended a one-row
+  hint only when focused, and `Body` concatenated its hint onto the
+  tab-bar row in a way that could wrap on narrow widths. Together these
+  let each panel's height oscillate by one row as Tab moved through
+  them, and on short terminals the body's `bodyH < 4` clamp let the
+  request column overflow past `contentH` and push the status bar out
+  of view. Each panel now always reserves the hint row (rendered blank
+  when unfocused), and `Body` places its hint on its own row with the
+  textarea height reduced by one, so panel heights are independent of
+  focus state.
+
+[1.0.3]: https://github.com/lea-151107/pollen/releases/tag/v1.0.3
+
 ## [1.0.2] - 2026-05-29
 
 ### Fixed

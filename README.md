@@ -22,7 +22,8 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
 - **Copy response body** (`y`): clipboard, with a file fallback on Linux
   without `xclip` / `wl-clipboard`
 - **Import** OpenAPI 3.x (JSON/YAML) or Postman Collection v2.1 (`Ctrl+I`)
-- **Export** all collections to Postman v2.1 JSON (`--export-collections`)
+- **Export** all collections to Postman v2.1 JSON (`--export-collections`) or
+  OpenAPI 3.x JSON / YAML (`--export-openapi`)
 - Binary response detection with hex dump preview, `s`-to-save
 - TLS options: skip verification, custom CA certificate file, HTTP(S) proxy,
   cookie jar, redirect control — all toggleable from `settings.json`
@@ -141,6 +142,7 @@ pollen [--option ...]
 | `--collection <name>` | Open the Collections sidebar pre-filtered by this name |
 | `--init-config` | Write a default `settings.json` to the config directory and exit |
 | `--export-collections <path>` | Export all collections to a Postman v2.1 JSON file. Use `-` to write to stdout |
+| `--export-openapi <path>` | Export all collections as an OpenAPI 3.x document. Format is picked by extension (`.yaml` / `.yml` → YAML, otherwise JSON). Use `-` for JSON on stdout |
 
 Examples:
 
@@ -150,6 +152,7 @@ pollen --config ./myproject/.pollen                    # project-local config
 pollen --collection "User API"                         # open with "User API" pre-selected
 pollen --init-config                                   # seed default settings.json
 pollen --export-collections /tmp/pollen-collections.json
+pollen --export-openapi /tmp/pollen-openapi.yaml      # OpenAPI 3.0.3 in YAML
 ```
 
 ## Configuration
@@ -305,6 +308,8 @@ import. See `examples/` for sample input files.
 
 ### Exporting collections
 
+Postman v2.1:
+
 ```sh
 pollen --export-collections collection.json    # write to file
 pollen --export-collections -                  # write to stdout (for piping)
@@ -312,6 +317,25 @@ pollen --export-collections -                  # write to stdout (for piping)
 
 The output is a Postman Collection v2.1 JSON document. Form-urlencoded bodies
 are serialised as Postman's `urlencoded` array, raw bodies as `mode: raw`.
+
+OpenAPI 3.x:
+
+```sh
+pollen --export-openapi api.yaml               # YAML (extension picks format)
+pollen --export-openapi api.json               # JSON
+pollen --export-openapi -                      # JSON on stdout
+```
+
+The output is OpenAPI 3.0.3. When every entry shares one `scheme://host`, that
+host is emitted as `servers[0].url` and each entry's path is relative; mixed or
+template-tokenised hosts (`{{baseURL}}/users/...`) skip the `servers` block and
+keep the raw URL as the path key. Headers and URL query strings become
+`parameters` entries with an `example` field set to the stored value. Body
+contents are emitted under the natural media type — `application/json` for JSON
+bodies, `application/x-www-form-urlencoded` for form bodies (with each pair as a
+typed property), `text/plain` (or any explicit `Content-Type` header) for raw
+bodies. **No header masking is performed**: `Authorization`, `Cookie`, and other
+sensitive headers will appear in the exported spec, so review before sharing.
 
 ## Versioning and stability
 
