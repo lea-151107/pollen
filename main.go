@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -30,7 +32,8 @@ func main() {
 		collFilter  string
 		initConfig  bool
 		showVersion bool
-		exportColls string
+		exportColls   string
+		exportOpenAPI string
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
@@ -38,6 +41,7 @@ func main() {
 	flag.BoolVar(&initConfig, "init-config", false, "write default settings.json and exit")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.StringVar(&exportColls, "export-collections", "", "export collections to Postman v2.1 JSON (use - for stdout)")
+	flag.StringVar(&exportOpenAPI, "export-openapi", "", "export collections as OpenAPI 3.x (.json / .yaml / .yml; use - for stdout JSON)")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintln(out, "Usage: pollen [--option ...]\n\nOptions:")
@@ -92,6 +96,34 @@ func main() {
 				os.Exit(1)
 			}
 			fmt.Println("exported", len(collStore.Entries()), "entries to", exportColls)
+		}
+		os.Exit(0)
+	}
+
+	if exportOpenAPI != "" {
+		collStore, err := collections.Open()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: %v\n", err)
+			os.Exit(1)
+		}
+		format := exporter.OpenAPIJSON
+		switch strings.ToLower(filepath.Ext(exportOpenAPI)) {
+		case ".yaml", ".yml":
+			format = exporter.OpenAPIYAML
+		}
+		data, err := exporter.ExportOpenAPI(collStore.Entries(), "pollen", format)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+			os.Exit(1)
+		}
+		if exportOpenAPI == "-" {
+			fmt.Println(string(data))
+		} else {
+			if err := os.WriteFile(exportOpenAPI, data, 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "pollen: export: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("exported", len(collStore.Entries()), "entries to", exportOpenAPI)
 		}
 		os.Exit(0)
 	}
