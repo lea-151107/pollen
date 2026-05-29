@@ -218,6 +218,7 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	max := m.maxScrollOffset()
 	switch keyMsg.String() {
 	case "esc":
 		m.CancelRun()
@@ -228,7 +229,7 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 			m.scrollOffset--
 		}
 	case "down", "j":
-		if m.scrollOffset < len(m.results) {
+		if m.scrollOffset < max {
 			m.scrollOffset++
 		}
 	case "pgup":
@@ -238,11 +239,32 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 		}
 	case "pgdown":
 		m.scrollOffset += 10
-		if m.scrollOffset > len(m.results) {
-			m.scrollOffset = len(m.results)
+		if m.scrollOffset > max {
+			m.scrollOffset = max
 		}
 	}
 	return m, nil
+}
+
+// visibleRows is the number of result rows that fit in the table body.
+// Kept centralized so updateResults' scroll clamp and viewResults' window
+// don't drift apart.
+func (m Intruder) visibleRows() int {
+	v := m.height - 8
+	if v < 5 {
+		v = 5
+	}
+	return v
+}
+
+// maxScrollOffset is the largest scrollOffset that still keeps at least
+// one row visible; scrolling further would render an empty table body.
+func (m Intruder) maxScrollOffset() int {
+	n := len(m.results) - m.visibleRows()
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func (m *Intruder) applyFocus() {
@@ -352,10 +374,7 @@ func (m Intruder) viewResults() string {
 		rows = append(rows, lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("  (waiting for first response…)"))
 	}
 	// Window the results so the table never overflows the terminal height.
-	visible := m.height - 8
-	if visible < 5 {
-		visible = 5
-	}
+	visible := m.visibleRows()
 	start := m.scrollOffset
 	end := start + visible
 	if end > len(m.results) {
