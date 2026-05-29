@@ -22,7 +22,7 @@ func TestStart_RejectsTemplateWithoutMarker(t *testing.T) {
 	ctx := context.Background()
 	_, err := startWithDoer(ctx, RunConfig{
 		Template: history.Request{URL: "/no-marker"},
-		Payload:  PayloadConfig{Kind: PayloadRange, From: 1, To: 3},
+		Payloads: []PayloadConfig{{Kind: PayloadRange, From: 1, To: 3}},
 	}, fakeDoerOK)
 	if err == nil {
 		t.Errorf("expected error for template without {{$payload}}")
@@ -38,7 +38,7 @@ func TestStart_RangeFiresAllPayloads(t *testing.T) {
 	}
 	ch, err := startWithDoer(ctx, RunConfig{
 		Template:    makeTemplate(),
-		Payload:     PayloadConfig{Kind: PayloadRange, From: 1, To: 3},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 3}},
 		Concurrency: 1,
 	}, doer)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestStart_ConcurrencyCap(t *testing.T) {
 	}
 	ch, err := startWithDoer(ctx, RunConfig{
 		Template:    makeTemplate(),
-		Payload:     PayloadConfig{Kind: PayloadRange, From: 1, To: 20},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 20}},
 		Concurrency: 3,
 	}, doer)
 	if err != nil {
@@ -104,7 +104,7 @@ func TestStart_MaxRequestsStops(t *testing.T) {
 	}
 	ch, err := startWithDoer(ctx, RunConfig{
 		Template:    makeTemplate(),
-		Payload:     PayloadConfig{Kind: PayloadRange, From: 1, To: 10000},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 10000}},
 		Concurrency: 4,
 		MaxRequests: 7,
 	}, doer)
@@ -126,7 +126,7 @@ func TestStart_DelayAppliesBetweenWorkerJobs(t *testing.T) {
 	start := time.Now()
 	ch, err := startWithDoer(ctx, RunConfig{
 		Template:    makeTemplate(),
-		Payload:     PayloadConfig{Kind: PayloadRange, From: 1, To: 3},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 3}},
 		Concurrency: 1,
 		DelayMs:     30,
 	}, doer)
@@ -151,7 +151,7 @@ func TestStart_CancelStopsRun(t *testing.T) {
 	}
 	ch, err := startWithDoer(ctx, RunConfig{
 		Template:    makeTemplate(),
-		Payload:     PayloadConfig{Kind: PayloadRange, From: 1, To: 10000},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 10000}},
 		Concurrency: 2,
 		MaxRequests: 10000,
 	}, doer)
@@ -182,7 +182,7 @@ func TestStart_RecordsErrorResponses(t *testing.T) {
 	}
 	ch, err := startWithDoer(ctx, RunConfig{
 		Template:    makeTemplate(),
-		Payload:     PayloadConfig{Kind: PayloadRange, From: 1, To: 2},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 2}},
 		Concurrency: 1,
 	}, doer)
 	if err != nil {

@@ -44,7 +44,10 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 		cfg.DelayMs = 0
 	}
 
-	iter, err := NewIterator(cfg.Payload)
+	if len(cfg.Payloads) != 1 {
+		return nil, fmt.Errorf("sniper: expected 1 payload list, got %d", len(cfg.Payloads))
+	}
+	iter, err := NewIterator(cfg.Payloads[0])
 	if err != nil {
 		return nil, err
 	}

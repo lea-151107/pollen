@@ -14,12 +14,22 @@ import "github.com/lea-151107/pollen/internal/history"
 const PayloadMarker = "{{$payload}}"
 
 // AttackMode selects how payloads are distributed across positions.
-// v1.2.0 supports Sniper only; the other modes are reserved for later
-// versions and never emitted by the current UI.
+//
+//   - Sniper: one payload list, all marker occurrences in the request
+//     get replaced with the same value per iteration. Functionally
+//     equivalent to Burp Suite's Battering ram when multiple markers
+//     are present; the v1.2.0 release shipped this as the default and
+//     only mode.
+//   - Pitchfork: N payload lists, N marker positions, zip iteration
+//     (request K uses payload K from each list, stopping at shortest).
+//   - ClusterBomb: N payload lists, N marker positions, Cartesian
+//     product (every combination, governed by MaxRequests).
 type AttackMode int
 
 const (
 	Sniper AttackMode = iota
+	Pitchfork
+	ClusterBomb
 )
 
 // PayloadKind identifies which payload generator to instantiate.
@@ -57,11 +67,15 @@ type PayloadConfig struct {
 }
 
 // RunConfig groups everything a single Intruder run needs: the request
-// template (already env- and response-expanded by the caller), the
-// payload generator config, and the concurrency knobs.
+// template (already env- and response-expanded by the caller), one
+// PayloadConfig per attack position, and the concurrency knobs.
+//
+// Payloads carries one entry for Sniper (the legacy single-position
+// mode) and N entries for Pitchfork / ClusterBomb, where N matches
+// the count of {{$payloadK}} markers in the template.
 type RunConfig struct {
 	Mode        AttackMode
-	Payload     PayloadConfig
+	Payloads    []PayloadConfig
 	Template    history.Request
 	Concurrency int
 	DelayMs     int

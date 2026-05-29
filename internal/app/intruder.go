@@ -45,7 +45,7 @@ func (m *Model) startIntruderRun() tea.Cmd {
 	}
 	cfg := intruderpkg.RunConfig{
 		Mode:        intruderpkg.Sniper,
-		Payload:     payload,
+		Payloads:    []intruderpkg.PayloadConfig{payload},
 		Template:    template,
 		Concurrency: conc,
 		DelayMs:     delay,
