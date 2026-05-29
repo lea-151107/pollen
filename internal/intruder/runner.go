@@ -2,7 +2,6 @@ package intruder
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -31,8 +30,8 @@ func Start(ctx context.Context, cfg RunConfig) (<-chan Result, error) {
 // uses httpx.Do; tests swap in a stub that records concurrency and
 // returns canned responses.
 func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Result, error) {
-	if !HasMarker(cfg.Template) {
-		return nil, fmt.Errorf("request template has no %s marker", PayloadMarker)
+	if err := HasMarkers(cfg.Template, cfg.Mode, len(cfg.Payloads)); err != nil {
+		return nil, err
 	}
 	if cfg.Concurrency < 1 {
 		cfg.Concurrency = 1
@@ -44,10 +43,7 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 		cfg.DelayMs = 0
 	}
 
-	if len(cfg.Payloads) != 1 {
-		return nil, fmt.Errorf("sniper: expected 1 payload list, got %d", len(cfg.Payloads))
-	}
-	iter, err := NewIterator(cfg.Payloads[0])
+	vecIter, err := NewVectorIterator(cfg.Mode, cfg.Payloads)
 	if err != nil {
 		return nil, err
 	}
@@ -55,10 +51,10 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 	// payloads is unbuffered so the dispatcher gates on worker readiness;
 	// this lets ctx cancellation drain quickly without piling up work.
 	// results is buffered so a slow consumer doesn't stall a fast worker.
-	payloads := make(chan payloadJob)
+	payloads := make(chan vectorJob)
 	results := make(chan Result, cfg.Concurrency*2)
 
-	// Dispatcher: pull payloads from the iterator and feed workers.
+	// Dispatcher: pull payload vectors from the iterator and feed workers.
 	go func() {
 		defer close(payloads)
 		idx := 0
@@ -66,14 +62,14 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 			if idx >= cfg.MaxRequests {
 				return
 			}
-			p, ok := iter.Next()
+			vec, ok := vecIter.Next()
 			if !ok {
 				return
 			}
 			select {
 			case <-ctx.Done():
 				return
-			case payloads <- payloadJob{Index: idx, Payload: p}:
+			case payloads <- vectorJob{Index: idx, Vector: vec}:
 				idx++
 			}
 		}
@@ -101,12 +97,12 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 					return
 				default:
 				}
-				req := ApplyPayload(cfg.Template, job.Payload)
+				req := ApplyPayloads(cfg.Template, job.Vector)
 				start := time.Now()
 				resp, err := do(req)
 				r := Result{
 					Index:      job.Index,
-					Payload:    job.Payload,
+					Payload:    joinVector(job.Vector),
 					DurationMs: time.Since(start).Milliseconds(),
 				}
 				if err != nil {
@@ -137,9 +133,22 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 	return results, nil
 }
 
-type payloadJob struct {
-	Index   int
-	Payload string
+// vectorJob carries one per-position payload vector along with the
+// send-order index for the eventual Result row.
+type vectorJob struct {
+	Index  int
+	Vector []string
+}
+
+// joinVector renders a payload vector as the display string used for
+// the result-table row and CSV/JSON exports. For Sniper (length 1) the
+// raw value is preserved unchanged so v1.2.x consumers see no diff;
+// for Pitchfork / ClusterBomb positions are " | "-separated.
+func joinVector(v []string) string {
+	if len(v) == 1 {
+		return v[0]
+	}
+	return strings.Join(v, " | ")
 }
 
 // stripContentTypeParams returns just the media type, dropping any

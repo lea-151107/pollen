@@ -34,10 +34,6 @@ func (m *Model) intruderTemplate() history.Request {
 // is set and nil cmd is returned (the modal stays open).
 func (m *Model) startIntruderRun() tea.Cmd {
 	template := m.intruderTemplate()
-	if !intruderpkg.HasMarker(template) {
-		m.intruder.SetFormErr("request has no {{$payload}} marker — add one to URL, body, or a header first")
-		return nil
-	}
 	payload, conc, delay, max, errMsg := m.intruder.BuildConfig()
 	if errMsg != "" {
 		m.intruder.SetFormErr(errMsg)
@@ -50,6 +46,10 @@ func (m *Model) startIntruderRun() tea.Cmd {
 		Concurrency: conc,
 		DelayMs:     delay,
 		MaxRequests: max,
+	}
+	if err := intruderpkg.HasMarkers(template, cfg.Mode, len(cfg.Payloads)); err != nil {
+		m.intruder.SetFormErr(err.Error() + " — add a marker to URL, body, or a header first")
+		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := intruderpkg.Start(ctx, cfg)
