@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-05-29
+
+### Fixed
+
+- **`go install` now works**. The module path declared in `go.mod`
+  (`github.com/lea/pollen`) did not match this repository's location on
+  GitHub (`github.com/lea-151107/pollen`), so
+  `go install github.com/lea-151107/pollen@latest` failed with a module
+  path mismatch error. The module declaration and every internal import
+  have been renamed to `github.com/lea-151107/pollen`, and the ldflags
+  example in the README and the `-X` flag in `.goreleaser.yml` now use
+  the corrected `github.com/lea-151107/pollen/internal/version.Version`
+  path.
+
+### Notes
+
+- Source-only change: the produced binary's runtime behaviour is
+  unchanged from v1.0.1.
+- v1.0.1 and earlier remain uninstallable via `go install` because their
+  embedded `go.mod` still carries the old module declaration. Use
+  v1.0.2 or later for `go install`, or build from source.
+
+[1.0.2]: https://github.com/lea-151107/pollen/releases/tag/v1.0.2
+
 ## [1.0.1] - 2026-05-27
 
 ### Fixed
