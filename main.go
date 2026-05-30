@@ -11,6 +11,7 @@ import (
 
 	"crypto/x509"
 	"net/http/cookiejar"
+	"net/url"
 	"time"
 
 	"github.com/lea-151107/pollen/internal/app"
@@ -199,6 +200,15 @@ func main() {
 		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
 		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
 		httpx.ProxyURL = cfg.ProxyURL
+		if cfg.ProxyURL != "" {
+			// Warn loudly at startup if proxy_url is malformed. httpx.Do
+			// also force-falls-through to direct on parse failure, but
+			// surfacing the problem here means the user sees it before
+			// they send a request.
+			if _, err := url.Parse(cfg.ProxyURL); err != nil {
+				fmt.Fprintf(os.Stderr, "pollen: invalid proxy_url %q: %v (requests will go direct)\n", cfg.ProxyURL, err)
+			}
+		}
 		httpx.DisableRedirects = cfg.DisableRedirects
 		if cfg.CACertFile != "" {
 			data, err := os.ReadFile(cfg.CACertFile)

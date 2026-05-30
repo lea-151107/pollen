@@ -163,6 +163,34 @@ func TestDo_TLSVerify(t *testing.T) {
 	}
 }
 
+func TestDo_MalformedProxyURLFallsThroughToDirect(t *testing.T) {
+	// A malformed proxy_url used to fall through to http.DefaultTransport's
+	// ProxyFromEnvironment, silently routing via $HTTP_PROXY when set —
+	// the opposite of what the user asked for. After the fix Do() must
+	// force tr.Proxy = nil so the request goes direct.
+	//
+	// The localhost httptest server typically bypasses env proxies anyway
+	// (NO_PROXY), so this test mainly pins the "malformed proxy doesn't
+	// break basic requests" invariant rather than catching env-proxy leak
+	// directly. The behaviour change is in client.go around line 82.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	oldProxy := ProxyURL
+	ProxyURL = "://invalid" // url.Parse rejects empty scheme
+	defer func() { ProxyURL = oldProxy }()
+
+	resp, err := Do(history.Request{Method: "GET", URL: srv.URL})
+	if err != nil {
+		t.Fatalf("expected success with malformed proxy_url, got %v", err)
+	}
+	if resp.Status != 200 || resp.Body != "ok" {
+		t.Errorf("unexpected response: %+v", resp)
+	}
+}
+
 func TestDo_InvalidURL(t *testing.T) {
 	_, err := Do(history.Request{Method: "GET", URL: "://bad"})
 	if err == nil {

@@ -82,6 +82,15 @@ func Do(req history.Request) (*history.Response, error) {
 	if ProxyURL != "" {
 		if u, err := url.Parse(ProxyURL); err == nil {
 			tr.Proxy = http.ProxyURL(u)
+		} else {
+			// Malformed proxy_url: the user clearly intended to send via
+			// a specific proxy. Falling through to http.DefaultTransport's
+			// ProxyFromEnvironment would silently route via $HTTP_PROXY
+			// (or direct) instead, which is the opposite of what they
+			// asked for. Force tr.Proxy = nil so the request goes direct
+			// and the failure is at least loud (DNS / connect error) rather
+			// than wrong-proxy.
+			tr.Proxy = nil
 		}
 	}
 	client := &http.Client{Timeout: RequestTimeout, Transport: tr, Jar: CookieJar}
