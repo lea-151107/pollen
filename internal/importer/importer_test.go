@@ -210,6 +210,63 @@ func TestImportPostman_GraphQLBody(t *testing.T) {
 	}
 }
 
+func TestImportPostman_GraphQLVariablesObjectForm(t *testing.T) {
+	// Insomnia and some hand-edited Postman files emit
+	// "variables": {...} as a JSON object instead of the canonical
+	// string form. v1.4.0 used `Variables string` so the whole
+	// collection unmarshal failed. v1.4.1 accepts both forms.
+	const collection = `{
+	  "info": {"name": "C"},
+	  "item": [{
+	    "name": "Users",
+	    "request": {
+	      "method": "POST",
+	      "url": {"raw": "https://api.example.com/graphql"},
+	      "body": {
+	        "mode": "graphql",
+	        "graphql": {
+	          "query": "query { users { id } }",
+	          "variables": {"limit": 10, "active": true}
+	        }
+	      }
+	    }
+	  }]
+	}`
+	path := writeTemp(t, "collection.json", collection)
+	entries, err := Import(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	got := entries[0].Request.GraphQLVariables
+	// JSON object form: preserved as its raw JSON representation.
+	if got != `{"limit": 10, "active": true}` {
+		t.Errorf("GraphQLVariables (object form): got %q", got)
+	}
+}
+
+func TestNormalisePostmanGraphQLVariables(t *testing.T) {
+	cases := []struct {
+		raw, want string
+	}{
+		{``, ""},
+		{`null`, ""},
+		{`"{\"id\": 1}"`, `{"id": 1}`},
+		{`"plain string"`, "plain string"},
+		{`{"id": 1}`, `{"id": 1}`},
+		{`{"a":[1,2]}`, `{"a":[1,2]}`},
+		{`[1,2,3]`, `[1,2,3]`},
+	}
+	for _, c := range cases {
+		got := normalisePostmanGraphQLVariables([]byte(c.raw))
+		if got != c.want {
+			t.Errorf("normalise(%q): got %q, want %q", c.raw, got, c.want)
+		}
+	}
+}
+
 // TestExportImportRoundtripFormBody is the regression test for the bug where
 // Pollen exported form bodies as {"mode": "urlencoded", "raw": "..."} while
 // the importer only accepted mode=raw, so a form body survived export but

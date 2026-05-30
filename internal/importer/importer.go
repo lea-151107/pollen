@@ -207,8 +207,14 @@ type postmanReq struct {
 			Value string `json:"value"`
 		} `json:"urlencoded"`
 		GraphQL *struct {
-			Query     string `json:"query"`
-			Variables string `json:"variables"`
+			Query string `json:"query"`
+			// Variables is raw JSON so we accept both the Postman
+			// canonical string form ("variables": "{...}") and the
+			// object form ("variables": {...}) emitted by some
+			// third-party tools (Insomnia, hand-written collections).
+			// Normalised to a JSON string when populating
+			// history.Request.GraphQLVariables.
+			Variables json.RawMessage `json:"variables"`
 		} `json:"graphql"`
 	} `json:"body"`
 }
@@ -232,6 +238,30 @@ func walkPostman(items []postmanItem, out *[]collections.Entry) {
 			walkPostman(item.Item, out)
 		}
 	}
+}
+
+// normalisePostmanGraphQLVariables takes a raw JSON value from a
+// Postman collection's body.graphql.variables field and returns the
+// JSON-string representation pollen stores in
+// history.Request.GraphQLVariables. The Postman v2.1 spec says
+// variables is a string, but real-world files (Insomnia exports,
+// hand-edited collections) sometimes use the object form — handle
+// both rather than failing the whole collection import.
+func normalisePostmanGraphQLVariables(raw json.RawMessage) string {
+	s := strings.TrimSpace(string(raw))
+	if s == "" || s == "null" {
+		return ""
+	}
+	// String form: parsed JSON string, unwrap to the inner content.
+	if s[0] == '"' {
+		var inner string
+		if err := json.Unmarshal(raw, &inner); err == nil {
+			return inner
+		}
+		return ""
+	}
+	// Object / array / number / bool: keep as the raw JSON value.
+	return s
 }
 
 func postmanItemToEntry(item postmanItem) collections.Entry {
@@ -271,7 +301,7 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 		case "graphql":
 			if req.Body.GraphQL != nil {
 				body = req.Body.GraphQL.Query
-				graphqlVariables = req.Body.GraphQL.Variables
+				graphqlVariables = normalisePostmanGraphQLVariables(req.Body.GraphQL.Variables)
 				bodyType = history.BodyGraphQL
 			}
 		}
