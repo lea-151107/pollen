@@ -41,6 +41,49 @@ func TestToCurl_POST_JSON(t *testing.T) {
 	}
 }
 
+func TestToCurl_Multipart(t *testing.T) {
+	req := history.Request{
+		Method:   "POST",
+		URL:      "https://example.com/upload",
+		BodyType: history.BodyMultipart,
+		Body:     "meta=hello\nimg=@/tmp/x.png;type=image/png",
+	}
+	got := ToCurl(req)
+	if !strings.Contains(got, "-F 'meta=hello'") {
+		t.Errorf("missing text -F: %s", got)
+	}
+	if !strings.Contains(got, "-F 'img=@/tmp/x.png;type=image/png'") {
+		t.Errorf("missing file -F: %s", got)
+	}
+	// Multipart must NOT add --data or a manual Content-Type — cURL
+	// derives the boundary itself.
+	if strings.Contains(got, "--data") {
+		t.Errorf("should not use --data for multipart: %s", got)
+	}
+	if strings.Contains(got, "Content-Type: multipart") {
+		t.Errorf("should not pre-set multipart Content-Type: %s", got)
+	}
+}
+
+func TestToFetch_MultipartUsesFormData(t *testing.T) {
+	req := history.Request{
+		Method:   "POST",
+		URL:      "https://example.com/upload",
+		BodyType: history.BodyMultipart,
+		Body:     "name=alice\nfile=@/tmp/x.png",
+	}
+	got := ToFetch(req)
+	if !strings.Contains(got, "new FormData()") {
+		t.Errorf("FormData missing: %s", got)
+	}
+	if !strings.Contains(got, `fd.append("name", "alice")`) {
+		t.Errorf("text part missing: %s", got)
+	}
+	if !strings.Contains(got, "/* File */") {
+		t.Errorf("file placeholder missing: %s", got)
+	}
+}
+
 func TestToCurl_GraphQL(t *testing.T) {
 	req := history.Request{
 		Method:           "POST",

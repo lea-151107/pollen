@@ -25,6 +25,26 @@ func ToCurl(req history.Request) string {
 		b.WriteString(shellQuote(h.Key + ": " + h.Value))
 	}
 
+	// Multipart bodies use -F flags rather than --data so the cURL
+	// command actually performs file uploads. cURL builds the
+	// Content-Type with the right boundary itself.
+	if req.BodyType == history.BodyMultipart {
+		for _, p := range ParseMultipartLines(req.Body) {
+			arg := p.Name + "="
+			if p.File != "" {
+				arg += "@" + p.File
+				if p.ContentType != "" {
+					arg += ";type=" + p.ContentType
+				}
+			} else {
+				arg += p.Value
+			}
+			b.WriteString(" \\\n  -F ")
+			b.WriteString(shellQuote(arg))
+		}
+		return b.String()
+	}
+
 	body, contentType, _ := buildBody(req)
 	if body != nil {
 		bodyStr := readerToString(req)
@@ -41,7 +61,15 @@ func ToCurl(req history.Request) string {
 }
 
 // ToFetch renders the request as a JavaScript fetch() call.
+//
+// Multipart bodies render as an IIFE that builds a FormData object;
+// file parts emit a `/* File from <path> */` placeholder because
+// the browser fetch() API needs a real File handle, which the user
+// must wire up to a file input in their final code.
 func ToFetch(req history.Request) string {
+	if req.BodyType == history.BodyMultipart {
+		return toFetchMultipart(req)
+	}
 	opts := map[string]any{
 		"method": req.Method,
 	}
@@ -72,6 +100,56 @@ func ToFetch(req history.Request) string {
 	return fmt.Sprintf("fetch(%s, %s)", urlJSON, optsJSON)
 }
 
+func toFetchMultipart(req history.Request) string {
+	var b strings.Builder
+	urlJSON := marshalNoEscape(req.URL)
+	b.WriteString("fetch(")
+	b.WriteString(urlJSON)
+	b.WriteString(", {\n  method: ")
+	b.WriteString(marshalNoEscape(req.Method))
+	if len(req.Headers) > 0 {
+		// Content-Type is intentionally omitted — the browser sets
+		// it from the FormData object so the right boundary is used.
+		headers := map[string]string{}
+		for _, h := range req.Headers {
+			if h.Key == "" || strings.EqualFold(h.Key, "Content-Type") {
+				continue
+			}
+			headers[h.Key] = h.Value
+		}
+		if len(headers) > 0 {
+			b.WriteString(",\n  headers: ")
+			b.WriteString(marshalIndentNoEscape(headers))
+		}
+	}
+	b.WriteString(",\n  body: (() => {\n    const fd = new FormData();\n")
+	for _, p := range ParseMultipartLines(req.Body) {
+		if p.File != "" {
+			b.WriteString("    // For ")
+			b.WriteString(p.Name)
+			b.WriteString(", attach a File from a real <input> — pollen\n")
+			b.WriteString("    // can't materialise a Blob from the literal path:\n    // ")
+			b.WriteString(p.File)
+			if p.ContentType != "" {
+				b.WriteString("  (")
+				b.WriteString(p.ContentType)
+				b.WriteString(")")
+			}
+			b.WriteString("\n    fd.append(")
+			b.WriteString(marshalNoEscape(p.Name))
+			b.WriteString(", /* File */ null);\n")
+		} else {
+			b.WriteString("    fd.append(")
+			b.WriteString(marshalNoEscape(p.Name))
+			b.WriteString(", ")
+			b.WriteString(marshalNoEscape(p.Value))
+			b.WriteString(");\n")
+		}
+	}
+	b.WriteString("    return fd;\n  })()\n})")
+	return b.String()
+}
+
 func marshalIndentNoEscape(v any) string {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -90,6 +168,9 @@ func marshalNoEscape(v any) string {
 }
 
 func readerToString(req history.Request) string {
+	// Multipart is special-cased in ToCurl / ToFetch (it emits -F or
+	// FormData rather than reading the buffer back out), so this
+	// helper never sees BodyMultipart in practice.
 	switch req.BodyType {
 	case history.BodyForm, history.BodyGraphQL:
 		// Reformat through buildBody so the exported cURL / fetch
