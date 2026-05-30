@@ -11,7 +11,6 @@ import (
 
 	"crypto/x509"
 	"net/http/cookiejar"
-	"net/url"
 	"time"
 
 	"github.com/lea-151107/pollen/internal/app"
@@ -91,6 +90,24 @@ func main() {
 	postmanTarget := exportPostman
 	if postmanTarget == "" {
 		postmanTarget = exportColls
+	}
+	// Each run dispatches at most one export. Refuse to silently drop the
+	// later flags when multiple --export-* are passed; the user almost
+	// certainly meant a sequence of runs, not "first wins".
+	exportGroups := 0
+	if postmanTarget != "" {
+		exportGroups++
+	}
+	if exportOpenAPI != "" {
+		exportGroups++
+	}
+	if exportIntruder != "" {
+		exportGroups++
+	}
+	if exportGroups > 1 {
+		fmt.Fprintln(os.Stderr,
+			"pollen: specify only one of --export-postman / --export-collections / --export-openapi / --export-intruder per run")
+		os.Exit(2)
 	}
 	if postmanTarget != "" {
 		collStore, err := collections.Open()
@@ -200,15 +217,6 @@ func main() {
 		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
 		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
 		httpx.ProxyURL = cfg.ProxyURL
-		if cfg.ProxyURL != "" {
-			// Warn loudly at startup if proxy_url is malformed. httpx.Do
-			// also force-falls-through to direct on parse failure, but
-			// surfacing the problem here means the user sees it before
-			// they send a request.
-			if _, err := url.Parse(cfg.ProxyURL); err != nil {
-				fmt.Fprintf(os.Stderr, "pollen: invalid proxy_url %q: %v (requests will go direct)\n", cfg.ProxyURL, err)
-			}
-		}
 		httpx.DisableRedirects = cfg.DisableRedirects
 		if cfg.CACertFile != "" {
 			data, err := os.ReadFile(cfg.CACertFile)
