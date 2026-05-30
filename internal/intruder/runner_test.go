@@ -199,6 +199,82 @@ func fakeDoerOK(req history.Request) (*history.Response, error) {
 	return &history.Response{Status: 200, StatusText: "200 OK"}, nil
 }
 
+func TestStart_StoresResponseBodyWithinCap(t *testing.T) {
+	ctx := context.Background()
+	// 1 KiB body, run with cap = 256 bytes.
+	bigBody := make([]byte, 1024)
+	for i := range bigBody {
+		bigBody[i] = 'A'
+	}
+	doer := func(req history.Request) (*history.Response, error) {
+		return &history.Response{
+			Status:    200,
+			StatusText: "200 OK",
+			Body:      string(bigBody),
+			BodyBytes: bigBody,
+			SizeBytes: 1024,
+		}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Template:        makeTemplate(),
+		Payloads:        []PayloadConfig{{Kind: PayloadRange, From: 1, To: 1}},
+		Concurrency:     1,
+		ResponseBodyCap: 256,
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	var results []Result
+	for r := range ch {
+		results = append(results, r)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Response == nil {
+		t.Fatalf("Response should be stored")
+	}
+	if len(r.Response.BodyBytes) != 256 {
+		t.Errorf("BodyBytes should be capped to 256, got %d", len(r.Response.BodyBytes))
+	}
+	if !r.Response.Truncated {
+		t.Errorf("Response.Truncated should be true after cap")
+	}
+	// Original response struct from the doer must not be mutated.
+	if len(bigBody) != 1024 {
+		t.Errorf("the original body slice was mutated: len=%d", len(bigBody))
+	}
+}
+
+func TestStart_NoBodyCapKeepsFullResponse(t *testing.T) {
+	ctx := context.Background()
+	body := []byte("hello world")
+	doer := func(req history.Request) (*history.Response, error) {
+		return &history.Response{
+			Status:    200,
+			StatusText: "200 OK",
+			Body:      string(body),
+			BodyBytes: body,
+			SizeBytes: len(body),
+		}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Template:    makeTemplate(),
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 1}},
+		Concurrency: 1,
+		// ResponseBodyCap defaults to 0 → no extra cap.
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for r := range ch {
+		if r.Response == nil || string(r.Response.BodyBytes) != "hello world" {
+			t.Errorf("expected full body retained, got %+v", r.Response)
+		}
+	}
+}
+
 func TestStart_PitchforkRunsZipped(t *testing.T) {
 	ctx := context.Background()
 	var seen sync.Map

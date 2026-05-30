@@ -112,8 +112,9 @@ type Model struct {
 	// intruder owns the Intruder overlay (config modal + result table). The
 	// runner channel intruderCh stays non-nil while a run is in flight so
 	// Update knows to schedule a follow-up nextResultCmd after each Result.
-	intruder   ui.Intruder
-	intruderCh <-chan intruder.Result
+	intruder             ui.Intruder
+	intruderCh           <-chan intruder.Result
+	intruderBodyCapBytes int // forwarded into RunConfig.ResponseBodyCap
 }
 
 type pendingUndo struct {
@@ -190,13 +191,16 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	m.tlsInsecure = httpx.SkipTLSVerify.Load()
 	// Load per-panel settings (defaults applied inside settings.Load).
 	intruderConc, intruderDelay, intruderMax := 5, 0, 1000
+	intruderBodyCapBytes := 64 * 1024
 	if s, err := settings.Load(); err == nil {
 		m.responsePanelRatio = s.ResponsePanelRatio
 		m.sidebarMaxWidth = s.SidebarMaxWidth
 		intruderConc = s.IntruderConcurrency
 		intruderDelay = s.IntruderDelayMs
 		intruderMax = s.IntruderMaxRequests
+		intruderBodyCapBytes = s.IntruderResponseBodyCapKiB * 1024
 	}
+	m.intruderBodyCapBytes = intruderBodyCapBytes
 	m.intruder = ui.NewIntruder(intruderConc, intruderDelay, intruderMax)
 	if m.responsePanelRatio <= 0 || m.responsePanelRatio >= 1 {
 		m.responsePanelRatio = 0.5

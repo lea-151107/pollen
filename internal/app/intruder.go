@@ -40,12 +40,13 @@ func (m *Model) startIntruderRun() tea.Cmd {
 		return nil
 	}
 	cfg := intruderpkg.RunConfig{
-		Mode:        mode,
-		Payloads:    payloads,
-		Template:    template,
-		Concurrency: conc,
-		DelayMs:     delay,
-		MaxRequests: max,
+		Mode:            mode,
+		Payloads:        payloads,
+		Template:        template,
+		Concurrency:     conc,
+		DelayMs:         delay,
+		MaxRequests:     max,
+		ResponseBodyCap: m.intruderBodyCapBytes,
 	}
 	if err := intruderpkg.HasMarkers(template, cfg.Mode, len(cfg.Payloads)); err != nil {
 		m.intruder.SetFormErr(err.Error() + " — add a marker to URL, body, or a header first")

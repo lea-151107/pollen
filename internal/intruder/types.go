@@ -80,9 +80,21 @@ type RunConfig struct {
 	Concurrency int
 	DelayMs     int
 	MaxRequests int
+
+	// ResponseBodyCap is the per-result body cap applied before stowing
+	// the response into Result.Response. 0 means "no cap beyond what
+	// httpx already enforces". Set by the caller from
+	// settings.IntruderResponseBodyCapKiB * 1024.
+	ResponseBodyCap int
 }
 
 // Result is one row in the result table.
+//
+// Response is the full HTTP response for the in-app Enter→detail view.
+// It is body-capped by RunConfig.ResponseBodyCap so a 1000-payload run
+// doesn't pin gigabytes of memory. The CSV / JSON exporters ignore
+// this field; the on-disk run cache (intruder_last.json) writes only
+// the lightweight fields above.
 type Result struct {
 	Index       int
 	Payload     string
@@ -92,6 +104,8 @@ type Result struct {
 	DurationMs  int64
 	ContentType string
 	Error       string
+
+	Response *history.Response `json:"-"`
 }
 
 // Run is the rolling state of a single Intruder execution. Results is

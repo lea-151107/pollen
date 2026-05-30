@@ -112,6 +112,7 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 					r.StatusText = resp.StatusText
 					r.Size = resp.SizeBytes
 					r.ContentType = stripContentTypeParams(resp.ContentType)
+					r.Response = capResponseBody(resp, cfg.ResponseBodyCap)
 				}
 				select {
 				case <-ctx.Done():
@@ -149,6 +150,26 @@ func joinVector(v []string) string {
 		return v[0]
 	}
 	return strings.Join(v, " | ")
+}
+
+// capResponseBody returns a shallow copy of resp with its BodyBytes
+// (and Body string) trimmed to cap bytes. cap == 0 means "no extra
+// trimming". The returned pointer is safe to retain in Result even
+// when the runner reuses the original *resp.
+func capResponseBody(resp *history.Response, cap int) *history.Response {
+	if resp == nil {
+		return nil
+	}
+	out := *resp
+	if cap <= 0 || len(out.BodyBytes) <= cap {
+		return &out
+	}
+	out.BodyBytes = append([]byte(nil), out.BodyBytes[:cap]...)
+	if !out.IsBinary {
+		out.Body = string(out.BodyBytes)
+	}
+	out.Truncated = true
+	return &out
 }
 
 // stripContentTypeParams returns just the media type, dropping any
