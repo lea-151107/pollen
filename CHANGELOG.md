@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-05-30
+
+### Fixed
+
+- **`--import-curl` silently dropped when combined with any
+  `--export-*` flag.** Running, for example,
+  `pollen --import-curl 'curl ...' --export-postman foo.json`
+  ran the export, called `os.Exit(0)`, and silently skipped
+  the curl import — the same kind of silent-drop hazard the
+  v1.3.2 multi-export check addressed. pollen now refuses any
+  combination of two single-shot CLI actions with exit code 2
+  and a stderr message listing all five flags involved
+  (`--export-postman` / `--export-collections` /
+  `--export-openapi` / `--export-intruder` / `--import-curl`).
+- **OAuth token preview could break multi-byte UTF-8.** The
+  authorization panel sliced the token's preview on byte
+  boundaries (`tok[:8]`, `tok[len(tok)-4:]`), which would
+  chop a multi-byte rune mid-sequence and produce invalid
+  UTF-8 for a non-ASCII access_token. Mainstream IdPs return
+  ASCII tokens, but RFC 6749 does not require it; the
+  renderer now rune-slices so the preview always lands on
+  rune boundaries.
+
+### Notes
+
+- v1.x SemVer-frozen surface is unchanged: this patch only
+  tightens an existing CLI guard and a rendering helper.
+- Authorization Code with PKCE remains on track for v1.6.
+
 ## [1.5.1] - 2026-05-30
 
 ### Added
