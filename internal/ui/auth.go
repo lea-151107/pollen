@@ -1,12 +1,17 @@
 package ui
 
 import (
+	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/lea-151107/pollen/internal/oauth"
 )
 
 type AuthType int
@@ -15,9 +20,10 @@ const (
 	AuthNone AuthType = iota
 	AuthBearer
 	AuthBasic
+	AuthOAuth
 )
 
-var authTypes = []AuthType{AuthNone, AuthBearer, AuthBasic}
+var authTypes = []AuthType{AuthNone, AuthBearer, AuthBasic, AuthOAuth}
 
 func (t AuthType) String() string {
 	switch t {
@@ -25,20 +31,44 @@ func (t AuthType) String() string {
 		return "Bearer"
 	case AuthBasic:
 		return "Basic"
+	case AuthOAuth:
+		return "OAuth"
 	default:
 		return "None"
 	}
 }
 
+// AuthOAuthTokenMsg signals a successful OAuth token fetch back to the
+// app's Update loop. The app calls Auth.SetOAuthToken to store it.
+type AuthOAuthTokenMsg struct{ Token *oauth.Token }
+
+// AuthOAuthErrorMsg signals an OAuth flow failure.
+type AuthOAuthErrorMsg struct{ Err string }
+
 // Auth holds the user-selected authentication scheme and its inputs. When
-// non-None, HeaderValue returns the value to inject as `Authorization`.
+// non-None, the app's buildAuthFromPanel returns the Authorization header
+// value to inject.
 type Auth struct {
 	authType AuthType
 	token    textinput.Model // Bearer
 	user     textinput.Model // Basic
 	pass     textinput.Model // Basic
-	focused  bool
-	// cursor: 0 = type selector row, 1 = first input, 2 = second input (Basic only)
+
+	// OAuth Client Credentials fields and fetched token. The token is
+	// session-only — not persisted to disk in v1.5.0.
+	oauthTokenURL textinput.Model
+	oauthClientID textinput.Model
+	oauthSecret   textinput.Model
+	oauthScope    textinput.Model
+	oauthToken    *oauth.Token
+	oauthError    string
+	oauthFetching bool
+
+	focused bool
+	// cursor positions per type:
+	//   Bearer: 0=type, 1=token
+	//   Basic:  0=type, 1=user, 2=pass
+	//   OAuth:  0=type, 1=URL, 2=ID, 3=secret, 4=scope, 5=action row
 	cursor int
 }
 
@@ -57,11 +87,26 @@ func NewAuth() Auth {
 	pass.EchoMode = textinput.EchoPassword
 	pass.EchoCharacter = '•'
 
+	mkInput := func(placeholder string, mask bool) textinput.Model {
+		ti := textinput.New()
+		ti.Placeholder = placeholder
+		ti.CharLimit = 1024
+		if mask {
+			ti.EchoMode = textinput.EchoPassword
+			ti.EchoCharacter = '•'
+		}
+		return ti
+	}
+
 	return Auth{
-		authType: AuthNone,
-		token:    token,
-		user:     user,
-		pass:     pass,
+		authType:      AuthNone,
+		token:         token,
+		user:          user,
+		pass:          pass,
+		oauthTokenURL: mkInput("https://issuer.example.com/oauth/token", false),
+		oauthClientID: mkInput("client id", false),
+		oauthSecret:   mkInput("client secret", true),
+		oauthScope:    mkInput("space-separated scopes (optional)", false),
 	}
 }
 
@@ -78,6 +123,25 @@ func (a Auth) Credentials() (user, pass string) {
 	return a.user.Value(), a.pass.Value()
 }
 
+// OAuthToken returns the currently-fetched OAuth token (or nil). Used
+// by the app's buildAuthFromPanel to assemble the Authorization
+// header when AuthOAuth is selected.
+func (a Auth) OAuthToken() *oauth.Token { return a.oauthToken }
+
+// SetOAuthToken stores a freshly-fetched token (called from the app's
+// Update loop when AuthOAuthTokenMsg arrives).
+func (a *Auth) SetOAuthToken(t *oauth.Token) {
+	a.oauthToken = t
+	a.oauthError = ""
+	a.oauthFetching = false
+}
+
+// SetOAuthError records a failed fetch so the panel can display it.
+func (a *Auth) SetOAuthError(err string) {
+	a.oauthError = err
+	a.oauthFetching = false
+}
+
 // Reset clears state, called when a history entry is loaded so the previous
 // session's Auth doesn't accidentally apply to an unrelated restored request.
 func (a *Auth) Reset() {
@@ -85,6 +149,13 @@ func (a *Auth) Reset() {
 	a.token.SetValue("")
 	a.user.SetValue("")
 	a.pass.SetValue("")
+	a.oauthTokenURL.SetValue("")
+	a.oauthClientID.SetValue("")
+	a.oauthSecret.SetValue("")
+	a.oauthScope.SetValue("")
+	a.oauthToken = nil
+	a.oauthError = ""
+	a.oauthFetching = false
 	a.cursor = 0
 	a.refreshFocus()
 }
@@ -99,6 +170,10 @@ func (a *Auth) Blur() {
 	a.token.Blur()
 	a.user.Blur()
 	a.pass.Blur()
+	a.oauthTokenURL.Blur()
+	a.oauthClientID.Blur()
+	a.oauthSecret.Blur()
+	a.oauthScope.Blur()
 }
 
 func (a Auth) Focused() bool { return a.focused }
@@ -107,6 +182,10 @@ func (a *Auth) refreshFocus() {
 	a.token.Blur()
 	a.user.Blur()
 	a.pass.Blur()
+	a.oauthTokenURL.Blur()
+	a.oauthClientID.Blur()
+	a.oauthSecret.Blur()
+	a.oauthScope.Blur()
 	if !a.focused {
 		return
 	}
@@ -122,7 +201,33 @@ func (a *Auth) refreshFocus() {
 		case 2:
 			a.pass.Focus()
 		}
+	case AuthOAuth:
+		switch a.cursor {
+		case 1:
+			a.oauthTokenURL.Focus()
+		case 2:
+			a.oauthClientID.Focus()
+		case 3:
+			a.oauthSecret.Focus()
+		case 4:
+			a.oauthScope.Focus()
+		}
+		// cursor == 5 is the action row, no input to focus.
 	}
+}
+
+// authLastCursor returns the last valid cursor index for the current
+// auth type. Used by Update's up/down navigation.
+func (a Auth) authLastCursor() int {
+	switch a.authType {
+	case AuthBearer:
+		return 1
+	case AuthBasic:
+		return 2
+	case AuthOAuth:
+		return 5
+	}
+	return 0
 }
 
 func indexOfAuth(t AuthType) int {
@@ -173,19 +278,41 @@ func (a Auth) Update(msg tea.Msg) (Auth, tea.Cmd) {
 		a.refreshFocus()
 		return a, nil
 	case "up":
-		if a.cursor == 2 {
-			a.cursor = 1
+		if a.cursor > 1 {
+			a.cursor--
 		} else {
 			a.cursor = 0
 		}
 		a.refreshFocus()
 		return a, nil
 	case "down":
-		if a.authType == AuthBasic && a.cursor == 1 {
-			a.cursor = 2
+		if a.cursor < a.authLastCursor() {
+			a.cursor++
 			a.refreshFocus()
 			return a, nil
 		}
+	}
+
+	// OAuth-specific action: G on the action row triggers a Client
+	// Credentials fetch. The Cmd is dispatched up to the app's Update
+	// loop, which on AuthOAuthTokenMsg calls SetOAuthToken.
+	if a.authType == AuthOAuth && a.cursor == 5 && (km.String() == "g" || km.String() == "G") {
+		if a.oauthFetching {
+			return a, nil
+		}
+		cfg := oauth.ClientCredentialsConfig{
+			TokenURL:     strings.TrimSpace(a.oauthTokenURL.Value()),
+			ClientID:     strings.TrimSpace(a.oauthClientID.Value()),
+			ClientSecret: strings.TrimSpace(a.oauthSecret.Value()),
+			Scope:        strings.TrimSpace(a.oauthScope.Value()),
+		}
+		if cfg.TokenURL == "" || cfg.ClientID == "" {
+			a.oauthError = "fill in token URL and client id first"
+			return a, nil
+		}
+		a.oauthFetching = true
+		a.oauthError = ""
+		return a, oauthFetchCmd(cfg)
 	}
 
 	var cmd tea.Cmd
@@ -196,8 +323,72 @@ func (a Auth) Update(msg tea.Msg) (Auth, tea.Cmd) {
 		a.user, cmd = a.user.Update(msg)
 	case a.authType == AuthBasic && a.cursor == 2:
 		a.pass, cmd = a.pass.Update(msg)
+	case a.authType == AuthOAuth && a.cursor == 1:
+		a.oauthTokenURL, cmd = a.oauthTokenURL.Update(msg)
+	case a.authType == AuthOAuth && a.cursor == 2:
+		a.oauthClientID, cmd = a.oauthClientID.Update(msg)
+	case a.authType == AuthOAuth && a.cursor == 3:
+		a.oauthSecret, cmd = a.oauthSecret.Update(msg)
+	case a.authType == AuthOAuth && a.cursor == 4:
+		a.oauthScope, cmd = a.oauthScope.Update(msg)
 	}
 	return a, cmd
+}
+
+// renderOAuthStatus formats the action / status line that sits below
+// the OAuth input fields. The line shows the current token (truncated
+// + expiry) when one's been fetched, the last error if any, the
+// "fetching" spinner when in flight, or a prompt to press G.
+func (a Auth) renderOAuthStatus() string {
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	ok := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	bad := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	hi := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+
+	cursorMark := ""
+	if a.focused && a.cursor == 5 {
+		cursorMark = hi.Render("▶ ")
+	}
+	switch {
+	case a.oauthFetching:
+		return cursorMark + dim.Render("fetching token…")
+	case a.oauthError != "":
+		return cursorMark + bad.Render("error: "+a.oauthError) + dim.Render("  (press g to retry)")
+	case a.oauthToken != nil && a.oauthToken.AccessToken != "":
+		tok := a.oauthToken.AccessToken
+		var preview string
+		if len(tok) > 16 {
+			preview = tok[:8] + "…" + tok[len(tok)-4:]
+		} else {
+			preview = tok
+		}
+		expiry := ""
+		if !a.oauthToken.ExpiresAt.IsZero() {
+			remaining := time.Until(a.oauthToken.ExpiresAt).Round(time.Second)
+			if remaining > 0 {
+				expiry = fmt.Sprintf("  (expires in %s)", remaining)
+			} else {
+				expiry = "  (expired)"
+			}
+		}
+		return cursorMark + ok.Render("Bearer "+preview) + dim.Render(expiry+"  · press g to refresh")
+	default:
+		return cursorMark + dim.Render("press g to fetch token (Client Credentials)")
+	}
+}
+
+// oauthFetchCmd runs the Client Credentials flow off the main loop and
+// emits an AuthOAuthTokenMsg / AuthOAuthErrorMsg back to Update.
+func oauthFetchCmd(cfg oauth.ClientCredentialsConfig) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		tok, err := oauth.ClientCredentials(ctx, cfg, nil)
+		if err != nil {
+			return AuthOAuthErrorMsg{Err: err.Error()}
+		}
+		return AuthOAuthTokenMsg{Token: tok}
+	}
 }
 
 func (a Auth) View(width int) string {
@@ -252,18 +443,34 @@ func (a Auth) View(width int) string {
 		sb.WriteString(a.user.View())
 		sb.WriteString("\n  Pass:  ")
 		sb.WriteString(a.pass.View())
+	case AuthOAuth:
+		a.oauthTokenURL.Width = inputW
+		a.oauthClientID.Width = inputW
+		a.oauthSecret.Width = inputW
+		a.oauthScope.Width = inputW
+		sb.WriteString("\n  Token URL:    ")
+		sb.WriteString(a.oauthTokenURL.View())
+		sb.WriteString("\n  Client ID:    ")
+		sb.WriteString(a.oauthClientID.View())
+		sb.WriteString("\n  Client Secret:")
+		sb.WriteString(a.oauthSecret.View())
+		sb.WriteString("\n  Scope:        ")
+		sb.WriteString(a.oauthScope.View())
+		sb.WriteString("\n  ")
+		sb.WriteString(a.renderOAuthStatus())
 	}
 
 	var hint string
 	if a.focused {
-		if a.cursor == 0 {
-			if a.authType == AuthNone {
-				hint = "  ←/→: select type"
-			} else {
-				hint = "  ←/→: type  ·  Enter/↓: edit"
-			}
-		} else {
-			hint = "  Esc/↑: back to type"
+		switch {
+		case a.cursor == 0 && a.authType == AuthNone:
+			hint = "  ←/→: select type"
+		case a.cursor == 0:
+			hint = "  ←/→: type  ·  Enter/↓: edit"
+		case a.authType == AuthOAuth && a.cursor == 5:
+			hint = "  g: fetch token (Client Credentials)  ·  Esc/↑: back"
+		default:
+			hint = "  Esc/↑: back to type  ·  ↓: next field"
 		}
 	}
 	sb.WriteString("\n")

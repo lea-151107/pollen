@@ -57,6 +57,10 @@ func buildAuthFromPanel(a ui.Auth) string {
 	case ui.AuthBasic:
 		u, p := a.Credentials()
 		return httpx.BuildAuthHeader(httpx.AuthBasic, "", u, p)
+	case ui.AuthOAuth:
+		if tok := a.OAuthToken(); tok != nil && tok.AccessToken != "" {
+			return httpx.BuildAuthHeader(httpx.AuthBearer, tok.AccessToken, "", "")
+		}
 	}
 	return ""
 }

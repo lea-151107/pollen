@@ -154,6 +154,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ui.AuthOAuthTokenMsg:
+		m.auth.SetOAuthToken(msg.Token)
+		m.setStatus(statusOK, "OAuth token acquired")
+		return m, m.statusTick(2 * time.Second)
+
+	case ui.AuthOAuthErrorMsg:
+		m.auth.SetOAuthError(msg.Err)
+		m.setStatus(statusError, "OAuth: "+msg.Err)
+		return m, m.statusTick(4 * time.Second)
+
 	case ui.IntruderDoneMsg:
 		m.intruder.MarkDone("")
 		m.intruderCh = nil
