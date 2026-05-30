@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-05-30
+
+### Added
+
+- **GraphQL body support.** A new `GraphQL` tab joins the body
+  editor's `JSON / Form / Raw` rotation. The editor area splits
+  into a top **query** pane and a bottom **variables (JSON)**
+  pane; `Ctrl+G` toggles focus between them in editor mode.
+  Pollen wraps the two panes in the canonical `{"query":"...",
+  "variables":{...}}` envelope and POSTs as
+  `application/json`. Variables that don't parse are silently
+  omitted from the envelope (the server reports the error).
+- **GraphQL through the rest of pollen.** Env expansion and
+  response chaining cover the variables pane; Intruder markers
+  (`{{$payload}}`, `{{$payload1..N}}`) work inside variables so
+  fuzzing GraphQL inputs is just an ordinary Intruder run. The
+  cURL / fetch exports build the envelope into `--data` /
+  `body`; Postman v2.1 export and import round-trip GraphQL
+  using the spec's native `{"mode":"graphql","graphql":{...}}`
+  shape.
+- **Per-row response detail in Intruder.** Pressing `Enter` on
+  a result row now opens an in-overlay detail view (status,
+  headers, body) for that single request. `Esc` returns to the
+  results table; `↑/↓ PgUp/PgDn` scroll the body. Response
+  bodies are body-cap truncated by the new
+  `intruder_response_body_cap_kib` setting (default 64 KiB) so
+  a 1000-payload run doesn't pin GiBs of RAM just to support
+  the detail view.
+- **In-app CSV export in Intruder.** `e` in the results table
+  opens a path prompt with a timestamped default
+  (`intruder-YYYYMMDD-HHMMSS.csv`); `Enter` writes the same
+  format as the `--export-intruder` CLI flag.
+- **Filter DSL in Intruder.** `/` now accepts a small AND-
+  composed token DSL on top of the existing payload substring
+  match: `size:>1000`, `size:50-100`, `dur:>500`, `dur:<10`,
+  `s:4xx`, `s:>=500`, `s:200-299`. Bare tokens still match
+  payload substring. Tokens combine: `/admin size:>=1000
+  s:4xx` keeps rows where payload contains "admin", size ≥
+  1000, and status is 4xx.
+- **Size median outlier highlight.** Result rows whose size
+  deviates by more than 50% from the median (of the currently
+  visible / filtered set) get a `!` marker on the size cell.
+- **`intruder_response_body_cap_kib` setting** (default 64,
+  clamped to [1, 10240]) controls how many KiB of each
+  response are retained for the detail view.
+
+### Changed
+
+- **4xx and 5xx rows now use different colors.** 4xx is
+  yellow, 5xx and network errors are red, 2xx / 3xx use the
+  terminal default. Previously every non-2xx row shared the
+  same red.
+- **The Intruder result cursor is now a separate row pointer
+  from the scroll offset.** `↑/↓` moves the cursor; the
+  window only scrolls when the cursor would leave the visible
+  band. `g` / `G` jump to first / last row. The focused row
+  shows a `▶` prefix and bold text.
+- **`history.Request` gains a `GraphQLVariables` field**
+  (`json:"graphql_variables,omitempty"`). Pre-v1.4 history /
+  collection JSON files load unchanged via `omitempty`; the
+  field is only populated when `body_type` is `graphql`.
+
 ## [1.3.2] - 2026-05-30
 
 ### Changed

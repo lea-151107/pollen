@@ -401,16 +401,36 @@ parameters. Format strings appear inline below the input.
 `settings.json`. Press `Enter` to start; the modal becomes a live table
 that streams in as workers complete each request:
 
-- `↑/↓ PgUp/PgDn` scroll the table
-- 4xx, 5xx, and network-error rows are highlighted in red
+- `↑/↓ PgUp/PgDn` move the row cursor (the ▶-marked row); `g` / `G`
+  jump to the first / last row
+- **`Enter`** opens a per-result detail view showing the full HTTP
+  response (status, headers, body) for that row. `↑/↓ PgUp/PgDn`
+  scroll the body; `Esc` returns to the table. The body is body-cap
+  truncated by `intruder_response_body_cap_kib` (default 64 KiB)
+  so a 1000-payload run doesn't pin GiBs of RAM; when truncated a
+  hint at the bottom says so
+- 4xx rows are tinted yellow, 5xx and network-error rows red
+- Outlier rows whose size deviates by more than 50% from the
+  median (of the visible / filtered set) get a `!` marker on
+  their size cell
 - `s` cycles the sort column (`#` → `status` → `size` → `ms` → `#`).
   The active column shows a ▲ / ▼ marker. `Shift+S` reverses the
   current direction
-- `/` opens a payload-substring filter (case-insensitive). `Enter`
-  commits, `Esc` drops it. `f` cycles a status-class preset:
-  `All` → `Errors (4xx/5xx + network)` → `Success (2xx)` → `All`.
-  When a filter is active the header shows `(N/M shown · …)`; a
-  first `Esc` clears it, a second `Esc` aborts the run as below
+- **`/`** opens a filter prompt. The DSL is small but composable:
+
+  | Token | Meaning |
+  |-------|---------|
+  | `admin` | payload substring contains "admin" (case-insensitive) |
+  | `size:>1000`, `size:<100`, `size:1000-2000`, `size:>=1024` | size range |
+  | `dur:>500`, `dur:<10`, `dur:100-300` | duration in milliseconds |
+  | `s:404`, `s:4xx`, `s:>=500`, `s:200-299` | status range |
+
+  Tokens are AND-composed: `/admin size:>=1000 s:4xx` keeps rows
+  where payload contains "admin" AND size ≥ 1000 AND status is 4xx.
+  `Enter` commits, `Esc` drops. `f` cycles a status preset
+  (All → Errors → 2xx → All) independent of the DSL
+- **`e`** opens an in-app CSV export prompt with a timestamped
+  default path; `Enter` saves, `Esc` cancels
 - `Esc` (with no filter active) cancels the run and closes the
   overlay (the most recent run is still cached on disk for
   `--export-intruder`)
@@ -425,6 +445,46 @@ pollen --export-intruder -               # CSV on stdout
 
 If no Intruder run has ever finished in the same config directory, the
 command exits with status 2.
+
+## GraphQL
+
+Pollen has first-class support for GraphQL requests as one of the body
+tabs. In the Body panel, `←` / `→` cycle through `JSON / FORM / RAW /
+GRAPHQL`; on the GraphQL tab the editor area splits into a larger
+**query** pane on top and a smaller **variables (JSON)** pane below.
+
+`Ctrl+G` (in editor mode) toggles focus between query and variables.
+`Tab` indents inside whichever pane is focused; `Esc` leaves editor mode
+as usual.
+
+At send time pollen wraps the two panes in the canonical envelope:
+
+```json
+{
+  "query": "query ($id: ID!) { user(id: $id) { name email } }",
+  "variables": { "id": 42 }
+}
+```
+
+…and POSTs it with `Content-Type: application/json`. Variables that
+don't parse as JSON are silently omitted from the envelope (the server
+will surface the error). The query and variables both go through env
+expansion and response chaining, so you can write things like
+
+```
+variables: {"token": "{{authToken}}", "after": "{{response.body.cursor}}"}
+```
+
+…and they're resolved before the request leaves pollen.
+
+Intruder runs on GraphQL templates: the `{{$payload}}`, `{{$payload1}}`,
+… markers are recognised inside the variables pane too, so
+fuzzing GraphQL inputs is just an ordinary Intruder run.
+
+cURL / fetch exports build the envelope into the `--data` / `body`
+field; Postman v2.1 export/import round-trip the GraphQL body using
+the spec's native `{"mode": "graphql", "graphql": {"query": "...",
+"variables": "..."}}` shape.
 
 ## Versioning and stability
 
