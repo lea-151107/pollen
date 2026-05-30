@@ -182,11 +182,12 @@ func awaitCallback(ctx context.Context, ln net.Listener, path, wantState string,
 		}
 	}()
 
-	// Best-effort browser launch. If it fails, the URL is still
-	// available to the caller via the status line (printed to stderr
-	// here as a backstop — the TUI captures stderr-bound output
-	// during the session, but the user can always copy from the
-	// status line in the panel).
+	// Best-effort browser launch. The error is discarded because
+	// the fetch goroutine has no synchronous channel back to the
+	// panel to surface the constructed authURL — improving the
+	// recovery path (stashing authURL where the user can copy it
+	// out-of-band, or refactoring the API so the UI can build the
+	// URL up-front) is reserved for a future release.
 	if openBrowser != nil {
 		_ = openBrowser(authURL)
 	}
