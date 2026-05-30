@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+
+	"github.com/lea-151107/pollen/internal/ui"
 )
 
 type KeyMap struct {
@@ -43,27 +45,16 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// HelpItem is one row in the help overlay.
-type HelpItem struct {
-	Keys string
-	Desc string
-}
-
-// HelpSection groups related HelpItems under a title.
-type HelpSection struct {
-	Title string
-	Items []HelpItem
-}
-
 // HelpSections returns the canonical help content. Global section is derived
 // from KeyMap so adding a new global binding only needs updating one place.
 // Panel-specific sections are still listed inline because they live in
-// individual ui/* components.
-func (k KeyMap) HelpSections() []HelpSection {
-	return []HelpSection{
+// individual ui/* components. HelpItem / HelpSection live in package ui
+// alongside the Help overlay component.
+func (k KeyMap) HelpSections() []ui.HelpSection {
+	return []ui.HelpSection{
 		{
 			Title: "Global",
-			Items: []HelpItem{
+			Items: []ui.HelpItem{
 				{Keys: "Tab / Shift+Tab", Desc: "Move focus"},
 				{Keys: bindingKeys(k.Send), Desc: "Send request"},
 				{Keys: bindingKeys(k.Copy), Desc: "Copy as cURL / fetch"},
@@ -80,7 +71,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 				{Keys: "Ctrl+L", Desc: "Redraw screen"},
 			},
 		},
-		{Title: "History", Items: []HelpItem{
+		{Title: "History", Items: []ui.HelpItem{
 			{Keys: "↑/↓", Desc: "Move"},
 			{Keys: "G", Desc: "Jump to last"},
 			{Keys: "gg", Desc: "Jump to first"},
@@ -88,7 +79,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "d", Desc: "Delete entry"},
 			{Keys: "/", Desc: "Filter (Esc clears)"},
 		}},
-		{Title: "Collections", Items: []HelpItem{
+		{Title: "Collections", Items: []ui.HelpItem{
 			{Keys: "↑/↓", Desc: "Move"},
 			{Keys: "G", Desc: "Jump to last"},
 			{Keys: "gg", Desc: "Jump to first"},
@@ -97,22 +88,22 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "d", Desc: "Delete entry"},
 			{Keys: "/", Desc: "Filter (Esc clears)"},
 		}},
-		{Title: "Method", Items: []HelpItem{
+		{Title: "Method", Items: []ui.HelpItem{
 			{Keys: "↑/↓", Desc: "Cycle methods"},
 		}},
-		{Title: "Query", Items: []HelpItem{
+		{Title: "Query", Items: []ui.HelpItem{
 			{Keys: "↑/↓ ←/→", Desc: "Navigate rows / fields"},
 			{Keys: "Enter", Desc: "New row"},
 			{Keys: "Ctrl+D", Desc: "Delete row"},
 		}},
-		{Title: "Auth", Items: []HelpItem{
+		{Title: "Auth", Items: []ui.HelpItem{
 			{Keys: "←/→", Desc: "Select type (None / Bearer / Basic / OAuth)"},
 			{Keys: "Enter/↓", Desc: "Edit fields"},
 			{Keys: "↓ / ↑", Desc: "Move between fields"},
 			{Keys: "Esc/↑", Desc: "Back to type selector"},
 			{Keys: "g", Desc: "OAuth: fetch / refresh token (Client Credentials)"},
 		}},
-		{Title: "Dynamic variables", Items: []HelpItem{
+		{Title: "Dynamic variables", Items: []ui.HelpItem{
 			{Keys: "{{$timestamp}}", Desc: "Unix epoch seconds (fresh per request)"},
 			{Keys: "{{$timestamp_ms}}", Desc: "Unix epoch milliseconds"},
 			{Keys: "{{$datetime}}", Desc: "RFC3339 UTC timestamp"},
@@ -123,13 +114,13 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "{{$base64:VALUE}}", Desc: "base64-encode VALUE"},
 			{Keys: "{{$urlencode:VALUE}}", Desc: "URL-encode VALUE"},
 		}},
-		{Title: "Headers", Items: []HelpItem{
+		{Title: "Headers", Items: []ui.HelpItem{
 			{Keys: "↑/↓ ←/→", Desc: "Navigate rows / fields"},
 			{Keys: "Enter", Desc: "New row"},
 			{Keys: "Ctrl+D", Desc: "Delete row"},
 			{Keys: "Tab", Desc: "Accept suggestion"},
 		}},
-		{Title: "Body", Items: []HelpItem{
+		{Title: "Body", Items: []ui.HelpItem{
 			{Keys: "←/→", Desc: "Switch tab (JSON / Form / Raw / GraphQL / Multipart)"},
 			{Keys: "Enter", Desc: "Enter editor"},
 			{Keys: "Tab", Desc: "Indent (in editor)"},
@@ -137,7 +128,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Ctrl+G", Desc: "Toggle GraphQL query ↔ variables pane"},
 			{Keys: "name=@path", Desc: "Multipart file upload (optional ;type=ct)"},
 		}},
-		{Title: "Response", Items: []HelpItem{
+		{Title: "Response", Items: []ui.HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
 			{Keys: "s", Desc: "Save response"},
 			{Keys: "y", Desc: "Copy body to clipboard"},
@@ -145,11 +136,11 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Ctrl+F", Desc: "Search in body"},
 			{Keys: "D", Desc: "Toggle diff vs previous"},
 		}},
-		{Title: "Intruder — markers", Items: []HelpItem{
+		{Title: "Intruder — markers", Items: []ui.HelpItem{
 			{Keys: "{{$payload}}", Desc: "Position 1 marker (alias of {{$payload1}}); use in Sniper"},
 			{Keys: "{{$payload1..N}}", Desc: "Numbered marker for Pitchfork / ClusterBomb (N up to 8)"},
 		}},
-		{Title: "Intruder — config modal", Items: []HelpItem{
+		{Title: "Intruder — config modal", Items: []ui.HelpItem{
 			{Keys: "←/→ on Mode", Desc: "Switch attack mode: Sniper / Pitchfork / ClusterBomb"},
 			{Keys: "←/→ on Positions", Desc: "Adjust position count (Pitchfork / ClusterBomb only)"},
 			{Keys: "←/→ on Payload kind", Desc: "Switch generator: Range / List / Brute / CaseToggle"},
@@ -157,7 +148,7 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Enter", Desc: "Start run"},
 			{Keys: "Esc", Desc: "Cancel modal"},
 		}},
-		{Title: "Intruder — results table", Items: []HelpItem{
+		{Title: "Intruder — results table", Items: []ui.HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Move cursor (window follows)"},
 			{Keys: "g / G", Desc: "Jump to first / last row"},
 			{Keys: "Enter", Desc: "Open detail view for focused row"},
@@ -168,12 +159,12 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "e", Desc: "Export current results to CSV (path prompt)"},
 			{Keys: "Esc", Desc: "Clear filter, or (no filter) cancel run + close overlay"},
 		}},
-		{Title: "Intruder — result detail", Items: []HelpItem{
+		{Title: "Intruder — result detail", Items: []ui.HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll response body"},
 			{Keys: "g", Desc: "Jump to top"},
 			{Keys: "Esc", Desc: "Back to results table"},
 		}},
-		{Title: "Chaining", Items: []HelpItem{
+		{Title: "Chaining", Items: []ui.HelpItem{
 			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},
 			{Keys: "{{response.headers.<n>}}", Desc: "Response header value"},
 			{Keys: "{{response.status}}", Desc: "HTTP status code"},
