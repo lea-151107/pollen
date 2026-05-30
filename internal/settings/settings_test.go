@@ -78,6 +78,54 @@ func TestLoad_IntruderClampsOutOfRange(t *testing.T) {
 	}
 }
 
+func TestLoad_MalformedProxyURLIsReset(t *testing.T) {
+	withTempConfig(t)
+	// Write a settings.json with a proxy_url that url.Parse will reject.
+	// Using "://" alone is enough — empty scheme triggers "missing protocol
+	// scheme". The Load() path should reset ProxyURL to "" so httpx never
+	// sees an invalid value.
+	dir, err := userconfig.Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"proxy_url":"://invalid"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.ProxyURL != "" {
+		t.Errorf("expected ProxyURL reset to empty for malformed input, got %q", s.ProxyURL)
+	}
+}
+
+func TestLoad_ValidProxyURLIsPreserved(t *testing.T) {
+	withTempConfig(t)
+	dir, err := userconfig.Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"proxy_url":"http://proxy.example.com:8080"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.ProxyURL != "http://proxy.example.com:8080" {
+		t.Errorf("valid proxy_url should be preserved, got %q", s.ProxyURL)
+	}
+}
+
 func TestLoad_CorruptFileReturnsDefault(t *testing.T) {
 	withTempConfig(t)
 	path, _ := userconfig.Path("settings.json")

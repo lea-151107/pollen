@@ -65,6 +65,11 @@ func Load() (*Settings, error) {
 	}
 	if s.ProxyURL != "" {
 		if _, err := url.Parse(s.ProxyURL); err != nil {
+			// Surface the typo so the user notices instead of silently
+			// having their proxy setting dropped. (The httpx layer also
+			// defensively forces direct on parse failure, but that path
+			// is unreachable in practice because we reset to "" here.)
+			fmt.Fprintf(os.Stderr, "pollen: ignoring invalid proxy_url %q: %v\n", s.ProxyURL, err)
 			s.ProxyURL = ""
 		}
 	}
