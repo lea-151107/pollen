@@ -464,17 +464,25 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// Re-clamp the scroll offset on every input. If the view shrank
-	// since the last keystroke (a Result arrived that changes filter
-	// membership, or the user just narrowed via /f), scrollOffset can
-	// be stale; this catches it before the next nav key would silently
-	// no-op.
+	// Re-clamp scroll offset and cursor on every input. The view can
+	// shrink between keystrokes (filter narrowed via typing; new result
+	// arrived that changes filter membership; sort/preset reset). If we
+	// don't re-clamp, cursor can sit past the last visible row — the
+	// ▶ marker disappears AND down/j becomes a no-op (the < rows-1
+	// check fails), forcing the user to press Up many times before
+	// the cursor reappears.
 	max := m.maxScrollOffset()
 	if m.scrollOffset > max {
 		m.scrollOffset = max
 	}
 	idx := m.view()
 	rows := len(idx)
+	if m.cursor >= rows {
+		m.cursor = rows - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
 	visible := m.visibleRows()
 	switch keyMsg.String() {
 	case "esc":

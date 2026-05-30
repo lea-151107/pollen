@@ -676,6 +676,38 @@ func TestIntruder_EnterOnEmptyViewIsNoop(t *testing.T) {
 	}
 }
 
+func TestIntruder_CursorClampsToFilteredView(t *testing.T) {
+	// Reproduces a v1.4.0 UX bug: typing a filter narrowed the view
+	// but didn't update cursor, so the ▶ marker disappeared and the
+	// Down key became a no-op (the cursor sat past rows-1).
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in.height = 20
+	in.cursor = 4 // last row of the 5-row sample
+	// Apply a filter that narrows the view to a single matching row.
+	in.filter = "guest"
+	// Send any nav key (e.g., a no-op key); the clamp runs at the top.
+	in = sendKey(in, "down")
+	if in.cursor != 0 {
+		t.Errorf("cursor should have been clamped to last visible row, got %d", in.cursor)
+	}
+}
+
+func TestIntruder_CursorClampsAfterPresetNarrowing(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in.height = 20
+	in.cursor = 4
+	// Directly set preset to errors, simulating a state change that
+	// hasn't gone through the f-key reset path (also covers any future
+	// caller that sets preset directly).
+	in.preset = presetSuccess // narrows to 2 results: indices 0 and 2
+	in = sendKey(in, "down")  // triggers the clamp
+	if in.cursor > 1 {
+		t.Errorf("cursor should have been clamped to <=1, got %d", in.cursor)
+	}
+}
+
 func TestIntruder_ScrollClampsToFilteredView(t *testing.T) {
 	in := withResults(sampleResults())
 	in.state = IntruderResults
