@@ -588,7 +588,52 @@ type is selected. Errors (network, bad credentials, missing
 when present.
 
 Tokens are session-only — pollen does not write them to disk in
-v1.5.0. Authorization Code with PKCE is reserved for v1.6.
+v1.5.0.
+
+## OAuth 2.0 Authorization Code with PKCE
+
+The Auth panel's type selector adds a fifth option, **OAuth AC**, for
+the OAuth 2.0 Authorization Code grant with PKCE
+(RFC 6749 §4.1, RFC 7636, RFC 8252). It exposes six input rows —
+Auth URL, Token URL, Client ID, Client Secret (optional), Redirect
+URI, Scope — plus an action row.
+
+Pressing `g` on the action row generates a 256-bit `state` and a
+PKCE `code_verifier` / S256 `code_challenge`, starts a tiny HTTP
+server bound to the loopback host and port of the Redirect URI, then
+opens the user's default browser at the authorization endpoint.
+When the IdP redirects back to the loopback callback, pollen
+validates `state`, exchanges the `code` for an access token at the
+Token endpoint (sending `code_verifier`), and stores the resulting
+token. Esc cancels an in-flight flow. The whole flow has a 5-minute
+timeout.
+
+Redirect URI defaults to `http://127.0.0.1:8765/callback`, which
+matches what most IdPs let you register once and forget. Pollen
+only supports **loopback** redirects (`127.0.0.1`, `::1`,
+`localhost`) on `http://` with an explicit port — non-loopback
+hosts and custom schemes are refused. This follows RFC 8252's
+recommendation for native apps.
+
+Public clients (no Client Secret) are supported: when Secret is
+left blank, pollen omits HTTP Basic auth on the token exchange and
+includes `client_id` in the form body instead.
+
+Browser launch uses `open` on macOS, `rundll32 url.dll,…` on
+Windows, and `wslview` (if present) or `xdg-open` on Linux/WSL.
+If the launch fails the flow still runs; the URL is reachable
+manually if you copy it from the auth panel.
+
+### Auto-refresh on send
+
+When the active auth type is OAuth (CC) or OAuth AC, the current
+access token is within 30 seconds of expiry, and a refresh token
+was issued, pollen issues a refresh before sending and sends with
+the new token transparently. Refresh failure aborts the send and
+the status line prompts you to re-authorize. Skipped silently for
+non-OAuth auth types or tokens without a `refresh_token`.
+
+Tokens are session-only — pollen does not write them to disk.
 
 ## Versioning and stability
 
