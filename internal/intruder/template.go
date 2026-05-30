@@ -41,6 +41,7 @@ func ApplyPayloads(req history.Request, payloads []string) history.Request {
 	out := req
 	out.URL = apply(req.URL)
 	out.Body = apply(req.Body)
+	out.GraphQLVariables = apply(req.GraphQLVariables)
 	if len(req.Headers) > 0 {
 		out.Headers = make([]history.Header, len(req.Headers))
 		for i, h := range req.Headers {
@@ -75,6 +76,7 @@ func PositionsUsed(req history.Request) []int {
 	}
 	scan(req.URL)
 	scan(req.Body)
+	scan(req.GraphQLVariables)
 	for _, h := range req.Headers {
 		scan(h.Key)
 		scan(h.Value)

@@ -38,11 +38,12 @@ func (m Model) currentRequest() history.Request {
 		headers = append(filtered, history.Header{Key: "Authorization", Value: authVal})
 	}
 	return history.Request{
-		Method:   m.method.Value(),
-		URL:      composeURL(m.urlBar.Value(), m.query.Values()),
-		Headers:  headers,
-		Body:     m.body.Value(),
-		BodyType: m.body.Type(),
+		Method:           m.method.Value(),
+		URL:              composeURL(m.urlBar.Value(), m.query.Values()),
+		Headers:          headers,
+		Body:             m.body.Value(),
+		BodyType:         m.body.Type(),
+		GraphQLVariables: m.body.GraphQLVariables(),
 	}
 }
 
@@ -79,6 +80,9 @@ func (m *Model) applyEntry(e history.Entry) {
 	m.auth.Reset()
 	m.headers.Set(e.Request.Headers)
 	m.body.Set(e.Request.BodyType, e.Request.Body)
+	if e.Request.BodyType == history.BodyGraphQL {
+		m.body.SetGraphQLVariables(e.Request.GraphQLVariables)
+	}
 	if e.Response != nil {
 		m.response.SetResponse(e.Response, e.Request.URL)
 	} else if e.Error != "" {
@@ -101,6 +105,7 @@ func (m *Model) sendRequest() tea.Cmd {
 	}
 	req.URL = expand(req.URL)
 	req.Body = expand(req.Body)
+	req.GraphQLVariables = expand(req.GraphQLVariables)
 	for i := range req.Headers {
 		req.Headers[i].Value = expand(req.Headers[i].Value)
 	}
