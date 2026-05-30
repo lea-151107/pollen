@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 
+	"github.com/lea-151107/pollen/internal/dynvars"
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/ui"
@@ -100,8 +101,12 @@ func (m *Model) sendRequest() tea.Cmd {
 	// "what we sent" verbatim. (Trade-off: secrets stored in env leak to
 	// history.json — documented in README.)
 	lastResp := m.response.CurrentResponse()
+	// Expansion chain order: env vars → response chaining → dynamic
+	// vars ({{$timestamp}}, {{$uuid}}, ...). Dynamic last so any env
+	// var whose value contains a $-token gets evaluated at send time,
+	// and so each Send press gets fresh timestamps / UUIDs.
 	expand := func(s string) string {
-		return expandResponseVars(m.env.Expand(s), lastResp)
+		return dynvars.Expand(expandResponseVars(m.env.Expand(s), lastResp))
 	}
 	req.URL = expand(req.URL)
 	req.Body = expand(req.Body)
