@@ -49,7 +49,7 @@ func AuthorizationCode(ctx context.Context, cfg AuthCodeConfig, doer Doer, openB
 	if cfg.RedirectURI == "" {
 		return nil, fmt.Errorf("oauth: redirect_uri is required")
 	}
-	port, path, err := parseLoopback(cfg.RedirectURI)
+	host, port, path, err := parseLoopback(cfg.RedirectURI)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +63,15 @@ func AuthorizationCode(ctx context.Context, cfg AuthCodeConfig, doer Doer, openB
 		return nil, err
 	}
 
-	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	// Bind on the host the user actually wrote in their RedirectURI.
+	// For 127.0.0.1 / ::1 the listener is IPv4- or IPv6-only; for
+	// localhost the kernel resolves to whatever the host's dual-stack
+	// behaviour dictates. Hard-coding 127.0.0.1 (pre-v1.6.2) silently
+	// broke `http://[::1]:...` setups because the browser's IPv6
+	// callback never reached the IPv4-only listener.
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
-		return nil, fmt.Errorf("oauth: bind callback port %d: %w", port, err)
+		return nil, fmt.Errorf("oauth: bind callback %s: %w", net.JoinHostPort(host, strconv.Itoa(port)), err)
 	}
 
 	// Build the authorization URL.
@@ -176,11 +182,12 @@ func awaitCallback(ctx context.Context, ln net.Listener, path, wantState string,
 		}
 	}()
 
-	// Best-effort browser launch. If it fails, the URL is still
-	// available to the caller via the status line (printed to stderr
-	// here as a backstop — the TUI captures stderr-bound output
-	// during the session, but the user can always copy from the
-	// status line in the panel).
+	// Best-effort browser launch. The error is discarded because
+	// the fetch goroutine has no synchronous channel back to the
+	// panel to surface the constructed authURL — improving the
+	// recovery path (stashing authURL where the user can copy it
+	// out-of-band, or refactoring the API so the UI can build the
+	// URL up-front) is reserved for a future release.
 	if openBrowser != nil {
 		_ = openBrowser(authURL)
 	}
@@ -255,34 +262,37 @@ func generateState() (string, error) {
 }
 
 // parseLoopback validates that uri is an http loopback URL and
-// returns its port and path. Hosts other than 127.0.0.1 / ::1 /
-// localhost are rejected; RFC 8252 §7.3 endorses loopback HTTP and
-// pollen does not support custom-scheme redirects.
-func parseLoopback(uri string) (port int, path string, err error) {
+// returns its host, port, and path. Hosts other than 127.0.0.1 /
+// ::1 / localhost are rejected; RFC 8252 §7.3 endorses loopback
+// HTTP and pollen does not support custom-scheme redirects. The
+// host is returned in its url.Hostname() form (no IPv6 brackets) —
+// callers pair it with net.JoinHostPort which re-adds brackets
+// when binding.
+func parseLoopback(uri string) (host string, port int, path string, err error) {
 	u, err := url.Parse(uri)
 	if err != nil {
-		return 0, "", fmt.Errorf("oauth: parse redirect_uri: %w", err)
+		return "", 0, "", fmt.Errorf("oauth: parse redirect_uri: %w", err)
 	}
 	if u.Scheme != "http" {
-		return 0, "", fmt.Errorf("oauth: redirect_uri scheme must be http for loopback, got %q", u.Scheme)
+		return "", 0, "", fmt.Errorf("oauth: redirect_uri scheme must be http for loopback, got %q", u.Scheme)
 	}
-	host := u.Hostname()
+	host = u.Hostname()
 	if host != "127.0.0.1" && host != "::1" && host != "localhost" {
-		return 0, "", fmt.Errorf("oauth: redirect_uri host must be loopback (127.0.0.1 / ::1 / localhost), got %q", host)
+		return "", 0, "", fmt.Errorf("oauth: redirect_uri host must be loopback (127.0.0.1 / ::1 / localhost), got %q", host)
 	}
 	portStr := u.Port()
 	if portStr == "" {
-		return 0, "", fmt.Errorf("oauth: redirect_uri must include an explicit port")
+		return "", 0, "", fmt.Errorf("oauth: redirect_uri must include an explicit port")
 	}
 	port, err = strconv.Atoi(portStr)
 	if err != nil || port <= 0 || port > 65535 {
-		return 0, "", fmt.Errorf("oauth: redirect_uri port invalid: %q", portStr)
+		return "", 0, "", fmt.Errorf("oauth: redirect_uri port invalid: %q", portStr)
 	}
 	path = u.Path
 	if path == "" {
 		path = "/"
 	}
-	return port, path, nil
+	return host, port, path, nil
 }
 
 // OpenBrowser launches the user's default browser at url. Best-

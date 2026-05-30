@@ -97,11 +97,12 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 			{Keys: "Ctrl+D", Desc: "Delete row"},
 		}},
 		{Title: "Auth", Items: []ui.HelpItem{
-			{Keys: "←/→", Desc: "Select type (None / Bearer / Basic / OAuth)"},
+			{Keys: "←/→", Desc: "Select type (None / Bearer / Basic / OAuth / OAuth AC)"},
 			{Keys: "Enter/↓", Desc: "Edit fields"},
 			{Keys: "↓ / ↑", Desc: "Move between fields"},
 			{Keys: "Esc/↑", Desc: "Back to type selector"},
-			{Keys: "g", Desc: "OAuth: fetch / refresh token (Client Credentials)"},
+			{Keys: "g", Desc: "OAuth: fetch (CC) / authorize (AC) / refresh"},
+			{Keys: "Esc on action row", Desc: "OAuth AC: cancel in-flight authorization"},
 		}},
 		{Title: "Dynamic variables", Items: []ui.HelpItem{
 			{Keys: "{{$timestamp}}", Desc: "Unix epoch seconds (fresh per request)"},

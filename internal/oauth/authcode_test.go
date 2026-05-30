@@ -54,33 +54,37 @@ func TestGenerateState_Length(t *testing.T) {
 func TestParseLoopback_Variants(t *testing.T) {
 	cases := []struct {
 		in       string
+		wantHost string
 		wantPort int
 		wantPath string
 		wantErr  bool
 	}{
-		{"http://127.0.0.1:8765/callback", 8765, "/callback", false},
-		{"http://localhost:9000/cb", 9000, "/cb", false},
-		{"http://[::1]:8000/", 8000, "/", false},
-		{"http://127.0.0.1:8765", 8765, "/", false},
+		{"http://127.0.0.1:8765/callback", "127.0.0.1", 8765, "/callback", false},
+		{"http://localhost:9000/cb", "localhost", 9000, "/cb", false},
+		{"http://[::1]:8000/", "::1", 8000, "/", false},
+		{"http://127.0.0.1:8765", "127.0.0.1", 8765, "/", false},
 		// no port
-		{"http://127.0.0.1/callback", 0, "", true},
+		{"http://127.0.0.1/callback", "", 0, "", true},
 		// non-loopback host
-		{"http://example.com:8765/cb", 0, "", true},
+		{"http://example.com:8765/cb", "", 0, "", true},
 		// https
-		{"https://127.0.0.1:8765/cb", 0, "", true},
+		{"https://127.0.0.1:8765/cb", "", 0, "", true},
 		// bad URL
-		{"::not-a-url", 0, "", true},
+		{"::not-a-url", "", 0, "", true},
 		// port out of range
-		{"http://127.0.0.1:99999/", 0, "", true},
+		{"http://127.0.0.1:99999/", "", 0, "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
-			port, path, err := parseLoopback(tc.in)
+			host, port, path, err := parseLoopback(tc.in)
 			gotErr := err != nil
 			if gotErr != tc.wantErr {
 				t.Fatalf("parseLoopback(%q): err=%v wantErr=%v", tc.in, err, tc.wantErr)
 			}
 			if !tc.wantErr {
+				if host != tc.wantHost {
+					t.Errorf("host = %q, want %q", host, tc.wantHost)
+				}
 				if port != tc.wantPort {
 					t.Errorf("port = %d, want %d", port, tc.wantPort)
 				}
@@ -92,9 +96,22 @@ func TestParseLoopback_Variants(t *testing.T) {
 	}
 }
 
-// freeLoopbackPort returns a port that was free at the moment of
-// the call. There's a tiny race between Close and the caller's
-// re-bind but it's stable enough for unit tests.
+// freeLoopbackPortOn returns a port that was free on host at the
+// moment of the call. There's a tiny race between Close and the
+// caller's re-bind but it's stable enough for unit tests.
+func freeLoopbackPortOn(t *testing.T, host string) (int, bool) {
+	t.Helper()
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	if err != nil {
+		return 0, false
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+	return port, true
+}
+
+// freeLoopbackPort returns a free IPv4 loopback port. Used by tests
+// that don't care about IPv6 specifically.
 func freeLoopbackPort(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -207,6 +224,71 @@ func TestAuthorizationCode_EndToEnd(t *testing.T) {
 	}
 	if tok.ExpiresAt.IsZero() {
 		t.Errorf("ExpiresAt should be set from expires_in")
+	}
+}
+
+// TestAuthorizationCode_BindsIPv6Loopback pins the v1.6.2 fix: when
+// RedirectURI is http://[::1]:PORT/... the callback server must bind
+// to ::1 (not the hard-coded 127.0.0.1 of older releases) so the
+// browser's IPv6 redirect can actually reach it.
+func TestAuthorizationCode_BindsIPv6Loopback(t *testing.T) {
+	port, ok := freeLoopbackPortOn(t, "::1")
+	if !ok {
+		t.Skip("no IPv6 loopback support in this environment")
+	}
+	redirectURI := fmt.Sprintf("http://[::1]:%d/callback", port)
+
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"AT6","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer idp.Close()
+
+	cfg := AuthCodeConfig{
+		AuthURL:     "https://idp.example.com/authorize",
+		TokenURL:    idp.URL,
+		ClientID:    "test-client",
+		RedirectURI: redirectURI,
+	}
+
+	browserHit := make(chan struct{})
+	openBrowser := func(authURL string) error {
+		u, err := url.Parse(authURL)
+		if err != nil {
+			return err
+		}
+		state := u.Query().Get("state")
+		go func() {
+			defer close(browserHit)
+			callbackURL := fmt.Sprintf("%s?code=v6-code&state=%s", redirectURI, url.QueryEscape(state))
+			var resp *http.Response
+			var err error
+			for i := 0; i < 50; i++ {
+				resp, err = http.Get(callbackURL)
+				if err == nil {
+					_ = resp.Body.Close()
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			t.Errorf("could not hit IPv6 callback: %v", err)
+		}()
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tok, err := AuthorizationCode(ctx, cfg, nil, openBrowser)
+	if err != nil {
+		t.Fatalf("AuthorizationCode over IPv6: %v", err)
+	}
+	<-browserHit
+	if tok.AccessToken != "AT6" {
+		t.Errorf("access_token = %q, want AT6", tok.AccessToken)
 	}
 }
 
