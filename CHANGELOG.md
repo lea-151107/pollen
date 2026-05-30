@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-05-30
+
+### Fixed
+
+- **Intruder template validation now rejects markers that reference
+  payload positions beyond the configured count.** Previously, a
+  Sniper run with `{{$payload}}` and a stray `{{$payload2}}` in the
+  same URL passed pre-flight validation and dispatched a request
+  with `{{$payload2}}` left in as a literal — the same silent
+  failure could happen in Pitchfork / ClusterBomb when a template
+  referenced `{{$payload5}}` but only 3 positions were configured.
+  The runner now returns a clear pre-flight error naming the
+  offending marker. The most common trigger was switching modes or
+  reducing Positions without cleaning up the template.
+- **HTTP requests no longer silently fall through to the env
+  proxy when `proxy_url` in settings.json is malformed.** A typo
+  in `proxy_url` used to be swallowed by `url.Parse`, leaving the
+  default transport's `ProxyFromEnvironment` in place — so a
+  non-empty `HTTP_PROXY` / `HTTPS_PROXY` would route the request
+  via the env proxy, the opposite of what the user configured.
+  Pollen now forces a direct connection on parse failure, and
+  emits a clear stderr warning at startup so the parse error is
+  visible before the first request goes out.
+
 ## [1.3.0] - 2026-05-29
 
 ### Added
