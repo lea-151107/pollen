@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,9 @@ import (
 	"github.com/lea-151107/pollen/internal/app"
 	"github.com/lea-151107/pollen/internal/exporter"
 	"github.com/lea-151107/pollen/internal/version"
+	"github.com/google/uuid"
 	"github.com/lea-151107/pollen/internal/collections"
+	"github.com/lea-151107/pollen/internal/curlparse"
 	"github.com/lea-151107/pollen/internal/env"
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
@@ -25,6 +28,29 @@ import (
 	"github.com/lea-151107/pollen/internal/ui"
 	"github.com/lea-151107/pollen/internal/userconfig"
 )
+
+// readCurlSource resolves the --import-curl flag's value to the raw
+// command text. "-" reads stdin, "@<path>" reads the file, anything
+// else is the literal command.
+func readCurlSource(arg string) (string, error) {
+	switch {
+	case arg == "-":
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("read stdin: %w", err)
+		}
+		return string(data), nil
+	case strings.HasPrefix(arg, "@"):
+		path := strings.TrimPrefix(arg, "@")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read %s: %w", path, err)
+		}
+		return string(data), nil
+	default:
+		return arg, nil
+	}
+}
 
 func main() {
 	var (
@@ -37,6 +63,7 @@ func main() {
 		exportPostman  string
 		exportOpenAPI  string
 		exportIntruder string
+		importCurl     string
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
@@ -47,6 +74,7 @@ func main() {
 	flag.StringVar(&exportColls, "export-collections", "", "alias for --export-postman (kept for backwards compatibility)")
 	flag.StringVar(&exportOpenAPI, "export-openapi", "", "export collections as OpenAPI 3.x (.json / .yaml / .yml; use - for stdout JSON)")
 	flag.StringVar(&exportIntruder, "export-intruder", "", "export the last Intruder run (.csv / .json; use - for stdout CSV)")
+	flag.StringVar(&importCurl, "import-curl", "", "parse a curl command and add it to collections (literal, @file, or - for stdin)")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintln(out, "Usage: pollen [--option ...]\n\nOptions:")
@@ -191,6 +219,36 @@ func main() {
 			}
 			fmt.Println("exported", len(results), "rows to", exportIntruder)
 		}
+		os.Exit(0)
+	}
+
+	if importCurl != "" {
+		cmd, err := readCurlSource(importCurl)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: import-curl: %v\n", err)
+			os.Exit(1)
+		}
+		req, err := curlparse.Parse(cmd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: import-curl: %v\n", err)
+			os.Exit(1)
+		}
+		collStore, err := collections.Open()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: %v\n", err)
+			os.Exit(1)
+		}
+		name := req.Method + " " + req.URL
+		collStore.Add(collections.Entry{
+			ID:      uuid.NewString(),
+			Name:    name,
+			Request: req,
+		})
+		if err := collStore.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: import-curl: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "imported as", name)
 		os.Exit(0)
 	}
 
