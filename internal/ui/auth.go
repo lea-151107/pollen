@@ -412,23 +412,43 @@ func (a Auth) View(width int) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("Auth"))
-	sb.WriteString("  ")
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	prefix := dim.Render("Auth") + "  "
+
+	// Build the full bar first so we can measure it. Collapse to the
+	// selected tab wrapped in ‹ › when it would overflow `inner` and
+	// wrap onto a second line (which pushes the input fields below out
+	// of the panel).
+	var tabsBuf strings.Builder
+	selStyle := lipgloss.NewStyle().Padding(0, 1)
 	for i, t := range authTypes {
 		label := t.String()
 		s := lipgloss.NewStyle().Padding(0, 1)
 		switch {
 		case t == a.authType && a.focused && a.cursor == 0:
 			s = s.Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
+			selStyle = selStyle.Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
 		case t == a.authType:
 			s = s.Background(lipgloss.Color("240")).Foreground(lipgloss.Color("230"))
+			if !(a.focused && a.cursor == 0) {
+				selStyle = selStyle.Background(lipgloss.Color("240")).Foreground(lipgloss.Color("230"))
+			}
 		default:
 			s = s.Foreground(lipgloss.Color("244"))
 		}
-		sb.WriteString(s.Render(label))
+		tabsBuf.WriteString(s.Render(label))
 		if i < len(authTypes)-1 {
-			sb.WriteString(" ")
+			tabsBuf.WriteString(" ")
 		}
+	}
+	fullBar := prefix + tabsBuf.String()
+	if lipgloss.Width(fullBar) > inner {
+		sb.WriteString(prefix)
+		sb.WriteString(dim.Render("‹"))
+		sb.WriteString(selStyle.Render(a.authType.String()))
+		sb.WriteString(dim.Render("›"))
+	} else {
+		sb.WriteString(fullBar)
 	}
 
 	inputW := inner - 12

@@ -41,6 +41,40 @@ func TestAuth_Credentials(t *testing.T) {
 	}
 }
 
+func TestAuth_View_CollapsesTabsAtNarrowWidth(t *testing.T) {
+	a := NewAuth()
+	a.authType = AuthBearer
+	got := a.View(20)
+	if !strings.Contains(got, "‹") || !strings.Contains(got, "›") {
+		t.Errorf("expected collapsed bar with ‹ ›, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Bearer") {
+		t.Errorf("collapsed bar should still show selected label Bearer, got:\n%s", got)
+	}
+	// The "Auth" orientation label is kept.
+	if !strings.Contains(got, "Auth") {
+		t.Errorf("collapsed bar should still show Auth label, got:\n%s", got)
+	}
+	// Other tabs must NOT appear.
+	if strings.Contains(got, "OAuth") || strings.Contains(got, "Basic") {
+		t.Errorf("collapsed bar should NOT include other tabs, got:\n%s", got)
+	}
+}
+
+func TestAuth_View_FullTabsAtWideWidth(t *testing.T) {
+	a := NewAuth()
+	a.authType = AuthBearer
+	got := a.View(120)
+	for _, label := range []string{"None", "Bearer", "Basic", "OAuth"} {
+		if !strings.Contains(got, label) {
+			t.Errorf("wide-width bar missing %q, got:\n%s", label, got)
+		}
+	}
+	if strings.Contains(got, "‹") || strings.Contains(got, "›") {
+		t.Errorf("wide-width bar should NOT collapse with ‹ ›, got:\n%s", got)
+	}
+}
+
 func TestAuth_OAuthPreview_RuneSliceMultibyte(t *testing.T) {
 	// "桜" is a 3-byte rune. If the preview chops at byte index 8 it
 	// would split a rune mid-sequence and produce invalid UTF-8.
