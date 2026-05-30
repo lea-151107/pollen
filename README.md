@@ -486,6 +486,53 @@ field; Postman v2.1 export/import round-trip the GraphQL body using
 the spec's native `{"mode": "graphql", "graphql": {"query": "...",
 "variables": "..."}}` shape.
 
+## Dynamic variables
+
+Pollen expands a small set of pollen-computed `{{$name}}` tokens at
+send time. Unknown names are passed through unchanged, so the existing
+intruder marker `{{$payload}}` continues to work alongside these.
+
+| Token | Replaced with |
+|-------|---------------|
+| `{{$timestamp}}` | Unix epoch seconds |
+| `{{$timestamp_ms}}` | Unix epoch milliseconds |
+| `{{$datetime}}` | RFC3339 UTC timestamp |
+| `{{$uuid}}` | UUID v4 |
+| `{{$random}}` | random uint32 |
+| `{{$random:N}}` | random 0..N-1 |
+| `{{$random:M-N}}` | random M..N (inclusive) |
+| `{{$base64:VALUE}}` | base64-encode VALUE |
+| `{{$urlencode:VALUE}}` | URL-encode VALUE |
+
+Each request gets fresh values, so `{{$uuid}}` in an Intruder template
+yields a different UUID per iteration (the runner expands dynvars in
+the worker loop, not at template build time). Useful for
+correlation IDs, idempotency keys, timestamp-based queries, and
+rate-limit testing.
+
+Expansion order is **env vars → response chaining → dynamic vars**, so
+an env value that embeds `{{$uuid}}` resolves correctly at send time.
+
+## OAuth 2.0 (Client Credentials)
+
+The Auth panel's type selector now includes **OAuth**. Selecting it
+exposes four input rows — Token URL, Client ID, Client Secret, Scope —
+plus an action row at the bottom showing the current token state.
+Pressing `g` on the action row runs the OAuth 2.0 Client Credentials
+flow (RFC 6749 §4.4): pollen POSTs `grant_type=client_credentials` to
+the token URL with the credentials in a Basic-Auth header and parses
+the JSON response.
+
+On success, the action row shows the masked token, time-to-expiry, and
+"press g to refresh". Pollen then injects
+`Authorization: Bearer <access_token>` on every Send while the OAuth
+type is selected. Errors (network, bad credentials, missing
+`access_token`) surface inline with the server's `error_description`
+when present.
+
+Tokens are session-only — pollen does not write them to disk in
+v1.5.0. Authorization Code with PKCE is reserved for v1.6.
+
 ## Versioning and stability
 
 Pollen follows [Semantic Versioning](https://semver.org). Starting at v1.0.0,

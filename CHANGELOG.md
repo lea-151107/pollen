@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-05-30
+
+### Added
+
+- **Dynamic variables.** A small built-in set of `{{$name}}` /
+  `{{$name:arg}}` tokens that pollen evaluates at send time:
+  `{{$timestamp}}`, `{{$timestamp_ms}}`, `{{$datetime}}`,
+  `{{$uuid}}`, `{{$random}}`, `{{$random:N}}`,
+  `{{$random:M-N}}`, `{{$base64:VALUE}}`, `{{$urlencode:VALUE}}`.
+  Unknown `{{$name}}` tokens are passed through verbatim so the
+  existing intruder marker `{{$payload}}` continues to compose.
+  In Intruder runs, dynamic variables are expanded **per
+  request** inside the worker loop, so `{{$uuid}}` yields a
+  different value per iteration.
+- **OAuth 2.0 Client Credentials in the Auth panel.** The
+  ←/→ type selector now cycles
+  None / Bearer / Basic / **OAuth**. Selecting OAuth shows
+  four input rows (Token URL, Client ID, Client Secret,
+  Scope) and an action row that fetches the token on `g`.
+  On success, pollen injects
+  `Authorization: Bearer <access_token>` on every Send. The
+  action row shows the masked token, time-to-expiry, and
+  "press g to refresh". Errors surface the server's
+  `error_description` when present (RFC 6749 §5.2).
+
+### Changed
+
+- Send-time expansion chain is now **env → response chaining
+  → dynamic vars**. The dynamic step runs last so an env
+  value that embeds a `{{$name}}` token resolves at send
+  time and so each Send press receives fresh
+  timestamps / UUIDs.
+
+### Notes
+
+- OAuth tokens are session-only — v1.5.0 does not write them
+  to disk (keyring integration is reserved for v1.6+ along
+  with Authorization Code with PKCE).
+- The dynamic-variable namespace (`{{$...}}`), built-in
+  names, and OAuth's `g` action key join the v1.x
+  SemVer-frozen surface alongside the v1.4 additions.
+
 ## [1.4.2] - 2026-05-30
 
 ### Fixed
