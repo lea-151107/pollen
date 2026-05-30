@@ -106,9 +106,22 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Ctrl+D", Desc: "Delete row"},
 		}},
 		{Title: "Auth", Items: []HelpItem{
-			{Keys: "←/→", Desc: "Select type (None/Bearer/Basic)"},
+			{Keys: "←/→", Desc: "Select type (None / Bearer / Basic / OAuth)"},
 			{Keys: "Enter/↓", Desc: "Edit fields"},
+			{Keys: "↓ / ↑", Desc: "Move between fields"},
 			{Keys: "Esc/↑", Desc: "Back to type selector"},
+			{Keys: "g", Desc: "OAuth: fetch / refresh token (Client Credentials)"},
+		}},
+		{Title: "Dynamic variables", Items: []HelpItem{
+			{Keys: "{{$timestamp}}", Desc: "Unix epoch seconds (fresh per request)"},
+			{Keys: "{{$timestamp_ms}}", Desc: "Unix epoch milliseconds"},
+			{Keys: "{{$datetime}}", Desc: "RFC3339 UTC timestamp"},
+			{Keys: "{{$uuid}}", Desc: "UUID v4"},
+			{Keys: "{{$random}}", Desc: "random uint32"},
+			{Keys: "{{$random:N}}", Desc: "random 0..N-1"},
+			{Keys: "{{$random:M-N}}", Desc: "random M..N inclusive"},
+			{Keys: "{{$base64:VALUE}}", Desc: "base64-encode VALUE"},
+			{Keys: "{{$urlencode:VALUE}}", Desc: "URL-encode VALUE"},
 		}},
 		{Title: "Headers", Items: []HelpItem{
 			{Keys: "↑/↓ ←/→", Desc: "Navigate rows / fields"},
