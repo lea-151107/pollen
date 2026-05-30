@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-05-30
+
+### Changed
+
+- `settings.Load` now prints a clear stderr warning when
+  `proxy_url` in settings.json is malformed before resetting
+  the value, instead of dropping the bad URL silently. The user
+  can now tell whether their proxy setting was honoured at
+  startup. The v1.3.1 startup warning in `main.go` was a
+  duplicate of this path and has been removed.
+- The Intruder help overlay (`Ctrl+/`) is now split into three
+  sub-sections — markers, config modal, results table — and
+  documents every key bound by the Intruder UI, including the
+  v1.2.1 sort / filter (`s`, `Shift+S`, `/`, `f`) and the v1.3.0
+  Mode / Positions / multi-position markers
+  (`{{$payload1..N}}`).
+
+### Fixed
+
+- Passing multiple `--export-*` flags in a single run no longer
+  silently drops every flag past the first. Pollen previously
+  exited zero after writing only the first target, which made
+  scripts that intended to produce all three formats fail
+  silently. The combination is now refused at startup with
+  exit code 2 and an explanatory stderr line, matching the
+  existing alias-collision check between `--export-postman` and
+  `--export-collections`.
+
+### Removed
+
+- Unused `KeyMap.Cancel` binding. It was defined in `app/keys.go`
+  but never matched against — all `esc` handling in the TUI
+  uses the `"esc"` string literal directly. No user-visible
+  change.
+
 ## [1.3.1] - 2026-05-30
 
 ### Fixed
