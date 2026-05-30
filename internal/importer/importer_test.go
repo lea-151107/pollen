@@ -247,6 +247,41 @@ func TestImportPostman_GraphQLVariablesObjectForm(t *testing.T) {
 	}
 }
 
+func TestImportPostman_FormDataBody(t *testing.T) {
+	const collection = `{
+	  "info": {"name": "C"},
+	  "item": [{
+	    "name": "Upload",
+	    "request": {
+	      "method": "POST",
+	      "url": {"raw": "https://api.example.com/upload"},
+	      "body": {
+	        "mode": "formdata",
+	        "formdata": [
+	          {"key": "meta", "type": "text", "value": "hello"},
+	          {"key": "img", "type": "file", "src": "/tmp/x.png", "contentType": "image/png"}
+	        ]
+	      }
+	    }
+	  }]
+	}`
+	path := writeTemp(t, "collection.json", collection)
+	entries, err := Import(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	if string(entries[0].Request.BodyType) != "multipart" {
+		t.Errorf("BodyType: %q", entries[0].Request.BodyType)
+	}
+	want := "meta=hello\nimg=@/tmp/x.png;type=image/png"
+	if got := entries[0].Request.Body; got != want {
+		t.Errorf("Body: got %q want %q", got, want)
+	}
+}
+
 func TestNormalisePostmanGraphQLVariables(t *testing.T) {
 	cases := []struct {
 		raw, want string

@@ -206,6 +206,13 @@ type postmanReq struct {
 			Key   string `json:"key"`
 			Value string `json:"value"`
 		} `json:"urlencoded"`
+		FormData []struct {
+			Key         string `json:"key"`
+			Type        string `json:"type"`
+			Value       string `json:"value"`
+			Src         string `json:"src"`
+			ContentType string `json:"contentType"`
+		} `json:"formdata"`
 		GraphQL *struct {
 			Query string `json:"query"`
 			// Variables is raw JSON so we accept both the Postman
@@ -298,6 +305,34 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 			}
 			body = sb.String()
 			bodyType = history.BodyForm
+		case "formdata":
+			// Convert Postman's array form back into pollen's
+			// line-based multipart DSL.
+			var sb strings.Builder
+			first := true
+			for _, p := range req.Body.FormData {
+				if p.Key == "" {
+					continue
+				}
+				if !first {
+					sb.WriteString("\n")
+				}
+				first = false
+				sb.WriteString(p.Key)
+				sb.WriteString("=")
+				if p.Type == "file" || (p.Type == "" && p.Src != "") {
+					sb.WriteString("@")
+					sb.WriteString(p.Src)
+					if p.ContentType != "" {
+						sb.WriteString(";type=")
+						sb.WriteString(p.ContentType)
+					}
+				} else {
+					sb.WriteString(p.Value)
+				}
+			}
+			body = sb.String()
+			bodyType = history.BodyMultipart
 		case "graphql":
 			if req.Body.GraphQL != nil {
 				body = req.Body.GraphQL.Query

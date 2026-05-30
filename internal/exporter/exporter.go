@@ -32,10 +32,19 @@ type postmanExportReq struct {
 }
 
 type postmanExportBody struct {
-	Mode       string                   `json:"mode"`
-	Raw        string                   `json:"raw,omitempty"`
-	URLEncoded []postmanExportFormParam `json:"urlencoded,omitempty"`
-	GraphQL    *postmanGraphQLBody      `json:"graphql,omitempty"`
+	Mode       string                       `json:"mode"`
+	Raw        string                       `json:"raw,omitempty"`
+	URLEncoded []postmanExportFormParam     `json:"urlencoded,omitempty"`
+	FormData   []postmanExportFormDataParam `json:"formdata,omitempty"`
+	GraphQL    *postmanGraphQLBody          `json:"graphql,omitempty"`
+}
+
+type postmanExportFormDataParam struct {
+	Key         string `json:"key"`
+	Type        string `json:"type"`                  // "text" or "file"
+	Value       string `json:"value,omitempty"`       // text body
+	Src         string `json:"src,omitempty"`         // file path
+	ContentType string `json:"contentType,omitempty"` // optional per-part Content-Type
 }
 
 type postmanGraphQLBody struct {
@@ -90,6 +99,9 @@ func entryToItem(e collections.Entry) postmanExportItem {
 		case history.BodyForm:
 			body.Mode = "urlencoded"
 			body.URLEncoded = parseFormPairs(req.Body)
+		case history.BodyMultipart:
+			body.Mode = "formdata"
+			body.FormData = parseMultipartPairs(req.Body)
 		case history.BodyGraphQL:
 			// Postman v2.1 stores GraphQL variables as a string in the
 			// "variables" field; pollen already keeps it that way.
@@ -105,6 +117,43 @@ func entryToItem(e collections.Entry) postmanExportItem {
 		item.Request.Body = body
 	}
 	return item
+}
+
+// parseMultipartPairs splits the multipart body DSL into Postman's
+// formdata array. Mirrors httpx.ParseMultipartLines so an export
+// roundtrips the same parts the runtime would send.
+func parseMultipartPairs(body string) []postmanExportFormDataParam {
+	var out []postmanExportFormDataParam
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimRight(line, "\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		p := postmanExportFormDataParam{Key: k}
+		if strings.HasPrefix(v, "@") {
+			rest := v[1:]
+			if i := strings.Index(rest, ";type="); i >= 0 {
+				p.ContentType = strings.TrimSpace(rest[i+len(";type="):])
+				rest = rest[:i]
+			}
+			p.Type = "file"
+			p.Src = strings.TrimSpace(rest)
+		} else {
+			p.Type = "text"
+			p.Value = v
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // parseFormPairs splits Pollen's internal "key=value\nkey=value" form body

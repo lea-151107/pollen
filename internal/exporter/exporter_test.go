@@ -41,6 +41,40 @@ func TestExportPostman_EmptyItemArray(t *testing.T) {
 	}
 }
 
+func TestExportPostman_MultipartBody(t *testing.T) {
+	entries := []collections.Entry{{
+		ID:   "1",
+		Name: "Upload",
+		Request: history.Request{
+			Method:   "POST",
+			URL:      "https://api.example.com/upload",
+			Body:     "meta=hello\nfile=@/tmp/x.png;type=image/png",
+			BodyType: history.BodyMultipart,
+		},
+	}}
+	data, err := ExportPostman(entries, "c")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got postmanExportCollection
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("export not valid JSON: %v", err)
+	}
+	body := got.Item[0].Request.Body
+	if body == nil || body.Mode != "formdata" {
+		t.Fatalf("expected mode=formdata, got %+v", body)
+	}
+	if len(body.FormData) != 2 {
+		t.Fatalf("expected 2 form parts, got %d", len(body.FormData))
+	}
+	if body.FormData[0].Type != "text" || body.FormData[0].Value != "hello" {
+		t.Errorf("text part: %+v", body.FormData[0])
+	}
+	if body.FormData[1].Type != "file" || body.FormData[1].Src != "/tmp/x.png" || body.FormData[1].ContentType != "image/png" {
+		t.Errorf("file part: %+v", body.FormData[1])
+	}
+}
+
 func TestExportPostman_GraphQLBody(t *testing.T) {
 	entries := []collections.Entry{
 		{
