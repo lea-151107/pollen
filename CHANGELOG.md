@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-05-30
+
+### Added
+
+- **OAuth 2.0 Authorization Code with PKCE.** The Auth panel
+  gains a fifth type, "OAuth AC", driving the Authorization
+  Code grant with PKCE (RFC 6749 §4.1, RFC 7636, RFC 8252).
+  Fields: Auth URL, Token URL, Client ID, Client Secret
+  (optional for public clients), Redirect URI, Scope.
+  Pressing `g` on the action row generates a 256-bit state
+  and a PKCE verifier + S256 challenge, starts a loopback
+  callback server on the Redirect URI's port, opens the
+  user's default browser at the auth endpoint, validates
+  state on callback, exchanges the code (with
+  `code_verifier`) at the token endpoint, and stores the
+  resulting token. Esc cancels an in-flight flow; the whole
+  thing has a 5-minute timeout.
+  Browser launch uses `open` (macOS), `rundll32 url.dll,…`
+  (Windows), or `wslview` / `xdg-open` (Linux/WSL). Redirect
+  URI defaults to `http://127.0.0.1:8765/callback`; pollen
+  only accepts loopback redirects (RFC 8252 §7.3).
+- **Auto-refresh on send.** When the active auth type is
+  OAuth (CC) or OAuth AC, the current access token is within
+  30 seconds of expiry, and a refresh token was issued,
+  pollen now issues an OAuth 2.0 refresh request before
+  sending and sends with the new token transparently.
+  Refresh failure aborts the send and prompts re-auth via a
+  red status line. Skipped silently for non-OAuth auth types
+  or tokens without a `refresh_token`.
+
+### Notes
+
+- v1.x SemVer-frozen surface gains `AuthOAuthAC` as a new
+  auth type. Existing `collections.json` entries with
+  `"auth_type": "oauth"` continue to load as Client
+  Credentials unchanged.
+- OAuth tokens (CC and AC) remain session-only — disk
+  persistence is intentionally deferred.
+
 ## [1.5.3] - 2026-05-30
 
 ### Fixed

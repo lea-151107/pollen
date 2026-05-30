@@ -164,6 +164,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(statusError, "OAuth: "+msg.Err)
 		return m, m.statusTick(4 * time.Second)
 
+	case ui.AuthOAuthACTokenMsg:
+		m.auth.SetOAuthACToken(msg.Token)
+		m.setStatus(statusOK, "OAuth AC token acquired")
+		return m, m.statusTick(2 * time.Second)
+
+	case ui.AuthOAuthACErrorMsg:
+		m.auth.SetOAuthACError(msg.Err)
+		m.setStatus(statusError, "OAuth AC: "+msg.Err)
+		return m, m.statusTick(4 * time.Second)
+
+	case authRefreshedSendMsg:
+		m.auth.ApplyRefreshedToken(msg.Token)
+		cmd := m.sendRequest()
+		return m, cmd
+
+	case authRefreshFailedMsg:
+		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")
+		return m, m.statusTick(5 * time.Second)
+
 	case ui.IntruderDoneMsg:
 		m.intruder.MarkDone("")
 		m.intruderCh = nil
@@ -372,6 +391,14 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.statusTick(2 * time.Second)
 
 	case key.Matches(km, m.keys.Send):
+		// When the active auth is OAuth (CC or AC), the current token
+		// is near expiry, and a refresh_token is available, run the
+		// refresh first and chain to send via authRefreshedSendMsg.
+		// Skipped silently for all other auth types.
+		if cfg, ok := needsRefresh(m.auth); ok {
+			m.setStatus(statusOK, "refreshing OAuth token…")
+			return m, refreshThenSendCmd(cfg)
+		}
 		// Split into two statements: `return m, m.sendRequest()` would rely on
 		// undefined evaluation order between `m` and the pointer-receiver call
 		// that mutates m. Current gc happens to evaluate the call first, but
