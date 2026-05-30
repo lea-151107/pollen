@@ -98,6 +98,47 @@ func TestSetResponse_NilDoesNotPanic(t *testing.T) {
 	r.SetResponse(nil, "")
 }
 
+func TestSetError_ResetsFilterAndSearchState(t *testing.T) {
+	// Pre-error: response present, filter / search / diff all active
+	// from the previous successful response. After SetError these
+	// view-only states must all clear so the error message isn't
+	// rendered under leftover prompts and badges.
+	r := NewResponse()
+	r.Focus()
+	r.SetResponse(&history.Response{Body: `{"ok":true}`, ContentType: "application/json"}, "url1")
+	r.filterActive = true
+	r.filteredBody = "stale"
+	r.filterErr = "stale jq error"
+	r.searchActive = true
+	r.searchQuery = "needle"
+	r.diffMode = true
+	r.diffBody = "stale diff"
+
+	r.SetError("boom")
+
+	if r.filterActive {
+		t.Error("filterActive should be false after SetError")
+	}
+	if r.filteredBody != "" {
+		t.Errorf("filteredBody should be empty, got %q", r.filteredBody)
+	}
+	if r.filterErr != "" {
+		t.Errorf("filterErr should be empty, got %q", r.filterErr)
+	}
+	if r.searchActive {
+		t.Error("searchActive should be false after SetError")
+	}
+	if r.searchQuery != "" {
+		t.Errorf("searchQuery should be empty, got %q", r.searchQuery)
+	}
+	if r.diffMode {
+		t.Error("diffMode should be false after SetError")
+	}
+	if r.diffBody != "" {
+		t.Errorf("diffBody should be empty, got %q", r.diffBody)
+	}
+}
+
 func TestResponse_SearchActiveAccessor(t *testing.T) {
 	r := NewResponse()
 	if r.SearchActive() {

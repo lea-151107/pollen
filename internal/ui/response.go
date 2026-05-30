@@ -78,6 +78,21 @@ func (r *Response) SetError(err string) {
 	r.resp = nil
 	r.err = err
 	r.loading = false
+	// Drop any leftover view state — without this, an error response
+	// would land under a still-visible jq filter bar, a search bar, or
+	// a stale "diff" badge from the previous successful response. Keep
+	// in sync with resetFilter; searchActive and diffMode need their
+	// own clear because the user can't dismiss them once the error
+	// view replaces the body.
+	r.filterActive = false
+	r.filterInput.SetValue("")
+	r.filterInput.Blur()
+	r.filterErr = ""
+	r.filteredBody = ""
+	r.searchActive = false
+	r.searchQuery = ""
+	r.diffMode = false
+	r.diffBody = ""
 	// Sanitize: err strings can contain server-influenced text (TLS Subject,
 	// redirect URL, etc.) and are also re-displayed from history via
 	// applyEntry, so a stored injection could fire later.
