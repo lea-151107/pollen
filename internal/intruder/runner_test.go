@@ -317,6 +317,23 @@ func TestStart_ClusterBombRespectsMaxRequests(t *testing.T) {
 	}
 }
 
+func TestStart_SniperRejectsTemplateWithExtraPosition(t *testing.T) {
+	// Verify the runner's pre-flight HasMarkers call catches the
+	// out-of-range marker case end-to-end — the v1.3.0 bug would
+	// have let this through and silently dispatched a request with
+	// {{$payload2}} as a URL literal.
+	ctx := context.Background()
+	_, err := startWithDoer(ctx, RunConfig{
+		Mode:        Sniper,
+		Template:    history.Request{URL: "/{{$payload}}/{{$payload2}}"},
+		Payloads:    []PayloadConfig{{Kind: PayloadList, Words: []string{"a"}}},
+		Concurrency: 1,
+	}, fakeDoerOK)
+	if err == nil {
+		t.Errorf("expected error for sniper template referencing position 2")
+	}
+}
+
 func TestStart_PitchforkRejectsMissingMarker(t *testing.T) {
 	ctx := context.Background()
 	_, err := startWithDoer(ctx, RunConfig{

@@ -106,6 +106,18 @@ func PositionsUsed(req history.Request) []int {
 //     missing positions.
 func HasMarkers(req history.Request, mode AttackMode, nPositions int) error {
 	used := PositionsUsed(req)
+	// Reject markers that reference a position beyond nPositions.
+	// ApplyPayloads would otherwise leave them as literals in the
+	// dispatched request, silently sending bad data on the wire — the
+	// most common cause is the user switching modes (or reducing
+	// Positions) and forgetting to delete a marker from the template.
+	for _, p := range used {
+		if p > nPositions {
+			return fmt.Errorf(
+				"%s: marker {{$payload%d}} references position %d but only %d payload list(s) configured",
+				modeName(mode), p, p, nPositions)
+		}
+	}
 	switch mode {
 	case Sniper:
 		if nPositions != 1 {

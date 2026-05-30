@@ -157,3 +157,40 @@ func TestHasMarkers_ClusterBombRequiresMin2Lists(t *testing.T) {
 		t.Errorf("expected error for ClusterBomb with 1 list")
 	}
 }
+
+func TestHasMarkers_SniperRejectsExtraPosition(t *testing.T) {
+	// Common pitfall: user marked two positions, then switched to
+	// Sniper (or just forgot to delete the second marker). Without the
+	// range check, ApplyPayloads would leave {{$payload2}} as a literal
+	// in the URL and the run would silently send broken requests.
+	req := history.Request{URL: "/{{$payload}}/{{$payload2}}"}
+	err := HasMarkers(req, Sniper, 1)
+	if err == nil {
+		t.Fatalf("expected error for sniper template referencing position 2")
+	}
+	if !strings.Contains(err.Error(), "{{$payload2}}") {
+		t.Errorf("error should name the offending marker; got %v", err)
+	}
+}
+
+func TestHasMarkers_PitchforkRejectsExtraPosition(t *testing.T) {
+	req := history.Request{URL: "/{{$payload1}}&p={{$payload2}}&extra={{$payload5}}"}
+	err := HasMarkers(req, Pitchfork, 2)
+	if err == nil {
+		t.Fatalf("expected error for pitchfork referencing position 5 with 2 lists")
+	}
+	if !strings.Contains(err.Error(), "{{$payload5}}") {
+		t.Errorf("error should name the offending marker; got %v", err)
+	}
+}
+
+func TestHasMarkers_ClusterBombRejectsExtraPosition(t *testing.T) {
+	req := history.Request{URL: "/{{$payload1}}&{{$payload2}}&{{$payload3}}"}
+	err := HasMarkers(req, ClusterBomb, 2)
+	if err == nil {
+		t.Fatalf("expected error for cluster bomb referencing position 3 with 2 lists")
+	}
+	if !strings.Contains(err.Error(), "{{$payload3}}") {
+		t.Errorf("error should name the offending marker; got %v", err)
+	}
+}
