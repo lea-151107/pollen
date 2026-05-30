@@ -605,6 +605,180 @@ func defaultExportPath() string {
 	return fmt.Sprintf("intruder-%s.csv", time.Now().Format("20060102-150405"))
 }
 
+// rowPredicate decides whether a result row passes one filter token.
+type rowPredicate func(intruder.Result) bool
+
+// parseFilter splits a filter string into AND-composed predicates.
+// Recognised tokens (whitespace-separated):
+//
+//	size:N        size == N
+//	size:>N       size > N
+//	size:<N       size < N
+//	size:>=N      size >= N
+//	size:<=N      size <= N
+//	size:N-M      N <= size <= M
+//	dur:...       same operators on DurationMs (milliseconds)
+//	s:N           status == N
+//	s:NXX         status class (e.g. 4xx → 400..499)
+//	s:N-M, s:>N…  same operators on status
+//	<bare token>  case-insensitive payload substring
+//
+// Unparseable tokens fall back to a payload-substring predicate so
+// the user sees their typo land somewhere (rather than dropping the
+// query silently).
+func parseFilter(s string) []rowPredicate {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var preds []rowPredicate
+	for _, tok := range strings.Fields(s) {
+		preds = append(preds, parseFilterToken(tok))
+	}
+	return preds
+}
+
+func matchPredicates(r intruder.Result, preds []rowPredicate) bool {
+	for _, p := range preds {
+		if !p(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseFilterToken(tok string) rowPredicate {
+	field, expr, ok := strings.Cut(tok, ":")
+	if !ok {
+		needle := strings.ToLower(tok)
+		return func(r intruder.Result) bool {
+			return strings.Contains(strings.ToLower(r.Payload), needle)
+		}
+	}
+	switch field {
+	case "size":
+		return numericPredicate(expr, func(r intruder.Result) int { return r.Size })
+	case "dur":
+		return numericPredicate(expr, func(r intruder.Result) int { return int(r.DurationMs) })
+	case "s", "status":
+		return statusPredicate(expr)
+	default:
+		// Unknown prefix: fall back to substring of the whole raw token.
+		needle := strings.ToLower(tok)
+		return func(r intruder.Result) bool {
+			return strings.Contains(strings.ToLower(r.Payload), needle)
+		}
+	}
+}
+
+func numericPredicate(expr string, get func(intruder.Result) int) rowPredicate {
+	lo, hi, op, ok := parseNumExpr(expr)
+	if !ok {
+		// Unparseable expression: never matches, so the user can tell
+		// their DSL didn't work (rows disappear).
+		return func(intruder.Result) bool { return false }
+	}
+	return func(r intruder.Result) bool {
+		v := get(r)
+		return applyNumOp(v, lo, hi, op)
+	}
+}
+
+func statusPredicate(expr string) rowPredicate {
+	// Special-case the NXX class form before falling through to the
+	// generic numeric parser.
+	if len(expr) == 3 && (expr[1] == 'x' || expr[1] == 'X') && (expr[2] == 'x' || expr[2] == 'X') {
+		if d := int(expr[0] - '0'); d >= 1 && d <= 9 {
+			lo := d * 100
+			hi := lo + 99
+			return func(r intruder.Result) bool {
+				return r.Status >= lo && r.Status <= hi
+			}
+		}
+	}
+	lo, hi, op, ok := parseNumExpr(expr)
+	if !ok {
+		return func(intruder.Result) bool { return false }
+	}
+	return func(r intruder.Result) bool {
+		return applyNumOp(r.Status, lo, hi, op)
+	}
+}
+
+// parseNumExpr parses one of:
+//
+//	123       (op = "eq",   lo=123, hi=0)
+//	>123      (op = "gt",   lo=123)
+//	>=123     (op = "ge",   lo=123)
+//	<123      (op = "lt",   lo=123)
+//	<=123     (op = "le",   lo=123)
+//	10-20     (op = "range",lo=10, hi=20)
+func parseNumExpr(s string) (lo, hi int, op string, ok bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, 0, "", false
+	}
+	switch {
+	case strings.HasPrefix(s, ">="):
+		n, err := strconv.Atoi(strings.TrimSpace(s[2:]))
+		if err != nil {
+			return 0, 0, "", false
+		}
+		return n, 0, "ge", true
+	case strings.HasPrefix(s, "<="):
+		n, err := strconv.Atoi(strings.TrimSpace(s[2:]))
+		if err != nil {
+			return 0, 0, "", false
+		}
+		return n, 0, "le", true
+	case strings.HasPrefix(s, ">"):
+		n, err := strconv.Atoi(strings.TrimSpace(s[1:]))
+		if err != nil {
+			return 0, 0, "", false
+		}
+		return n, 0, "gt", true
+	case strings.HasPrefix(s, "<"):
+		n, err := strconv.Atoi(strings.TrimSpace(s[1:]))
+		if err != nil {
+			return 0, 0, "", false
+		}
+		return n, 0, "lt", true
+	}
+	// Range "M-N"? Beware of negative-looking strings; we don't
+	// support negative bounds here so a leading "-" is treated as a
+	// parse failure.
+	if a, b, found := strings.Cut(s, "-"); found && a != "" {
+		al, err1 := strconv.Atoi(strings.TrimSpace(a))
+		bl, err2 := strconv.Atoi(strings.TrimSpace(b))
+		if err1 == nil && err2 == nil {
+			return al, bl, "range", true
+		}
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, 0, "", false
+	}
+	return n, 0, "eq", true
+}
+
+func applyNumOp(v, lo, hi int, op string) bool {
+	switch op {
+	case "eq":
+		return v == lo
+	case "gt":
+		return v > lo
+	case "ge":
+		return v >= lo
+	case "lt":
+		return v < lo
+	case "le":
+		return v <= lo
+	case "range":
+		return v >= lo && v <= hi
+	}
+	return false
+}
+
 // sizeMedian returns the median Size of the results referenced by idx.
 // Returns 0 when idx is empty. The output is used to mark outlier rows
 // (Size deviating by more than 50% from the median).
@@ -644,7 +818,8 @@ func isSizeOutlier(r intruder.Result, median int) bool {
 func (m Intruder) filterDescription() string {
 	parts := []string{}
 	if m.filter != "" {
-		parts = append(parts, "payload~"+m.filter)
+		// Show the user's raw DSL — they typed it, they recognise it.
+		parts = append(parts, m.filter)
 	}
 	switch m.preset {
 	case presetErrors:
@@ -661,9 +836,9 @@ func (m Intruder) filterDescription() string {
 // safely keep streaming in send-order while the user sorts and filters.
 func (m Intruder) view() []int {
 	out := make([]int, 0, len(m.results))
-	needle := strings.ToLower(m.filter)
+	preds := parseFilter(m.filter)
 	for i, r := range m.results {
-		if needle != "" && !strings.Contains(strings.ToLower(r.Payload), needle) {
+		if !matchPredicates(r, preds) {
 			continue
 		}
 		switch m.preset {

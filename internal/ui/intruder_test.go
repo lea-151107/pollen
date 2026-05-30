@@ -443,6 +443,107 @@ func TestIntruder_DownStopsAtLastRow(t *testing.T) {
 	}
 }
 
+func TestParseNumExpr(t *testing.T) {
+	cases := []struct {
+		in     string
+		op     string
+		lo, hi int
+		ok     bool
+	}{
+		{"42", "eq", 42, 0, true},
+		{">100", "gt", 100, 0, true},
+		{">=200", "ge", 200, 0, true},
+		{"<50", "lt", 50, 0, true},
+		{"<=99", "le", 99, 0, true},
+		{"100-200", "range", 100, 200, true},
+		{"abc", "", 0, 0, false},
+		{">", "", 0, 0, false},
+		{"", "", 0, 0, false},
+	}
+	for _, c := range cases {
+		lo, hi, op, ok := parseNumExpr(c.in)
+		if ok != c.ok || op != c.op || lo != c.lo || hi != c.hi {
+			t.Errorf("%q: got (%d,%d,%q,%v), want (%d,%d,%q,%v)",
+				c.in, lo, hi, op, ok, c.lo, c.hi, c.op, c.ok)
+		}
+	}
+}
+
+func TestIntruder_FilterSizeRange(t *testing.T) {
+	in := withResults(sampleResults())
+	in.filter = "size:>=100"
+	idx := in.view()
+	// sizes: 100, 50, 200, 80, 60 → keep 100, 200 (indices 0 and 2)
+	want := []int{0, 2}
+	if !equalInts(idx, want) {
+		t.Errorf("size:>=100 view: got %v, want %v", idx, want)
+	}
+}
+
+func TestIntruder_FilterSizeRangeMinMax(t *testing.T) {
+	in := withResults(sampleResults())
+	in.filter = "size:50-100"
+	idx := in.view()
+	// indices with size in [50,100]: 0 (100), 1 (50), 3 (80), 4 (60)
+	want := []int{0, 1, 3, 4}
+	if !equalInts(idx, want) {
+		t.Errorf("size:50-100 view: got %v, want %v", idx, want)
+	}
+}
+
+func TestIntruder_FilterDurRange(t *testing.T) {
+	in := withResults(sampleResults())
+	in.filter = "dur:>20"
+	// durations: 30, 20, 10, 40, 25 → >20 keeps 30, 40, 25 → indices 0, 3, 4
+	idx := in.view()
+	want := []int{0, 3, 4}
+	if !equalInts(idx, want) {
+		t.Errorf("dur:>20 view: got %v, want %v", idx, want)
+	}
+}
+
+func TestIntruder_FilterStatusClass(t *testing.T) {
+	in := withResults(sampleResults())
+	in.filter = "s:4xx"
+	// statuses: 200, 401, 200, 500, 404 → 4xx keeps 401 (1), 404 (4)
+	idx := in.view()
+	want := []int{1, 4}
+	if !equalInts(idx, want) {
+		t.Errorf("s:4xx view: got %v, want %v", idx, want)
+	}
+}
+
+func TestIntruder_FilterStatusExact(t *testing.T) {
+	in := withResults(sampleResults())
+	in.filter = "s:500"
+	idx := in.view()
+	want := []int{3}
+	if !equalInts(idx, want) {
+		t.Errorf("s:500 view: got %v, want %v", idx, want)
+	}
+}
+
+func TestIntruder_FilterComposes(t *testing.T) {
+	in := withResults(sampleResults())
+	// admin AND size>=100 → indices 0 (admin/100) only (4 is adminuser/60)
+	in.filter = "admin size:>=100"
+	idx := in.view()
+	want := []int{0}
+	if !equalInts(idx, want) {
+		t.Errorf("composed filter: got %v, want %v", idx, want)
+	}
+}
+
+func TestIntruder_FilterBareSubstring(t *testing.T) {
+	in := withResults(sampleResults())
+	in.filter = "guest"
+	idx := in.view()
+	want := []int{2}
+	if !equalInts(idx, want) {
+		t.Errorf("bare filter: got %v, want %v", idx, want)
+	}
+}
+
 func TestSizeMedian_OddCount(t *testing.T) {
 	rs := []intruder.Result{
 		{Size: 10}, {Size: 20}, {Size: 30}, {Size: 40}, {Size: 50},
