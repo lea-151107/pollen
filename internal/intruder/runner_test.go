@@ -411,6 +411,49 @@ func TestStart_SniperRejectsTemplateWithExtraPosition(t *testing.T) {
 	}
 }
 
+func TestStart_MultipartBodyAcceptsPayloadMarker(t *testing.T) {
+	// {{$payload}} inside a multipart text part should be substituted
+	// per iteration. The runner's existing ApplyPayloads operates on
+	// req.Body (the line-based DSL), so multipart "just works" via the
+	// same path as JSON / raw bodies. This test pins that behaviour.
+	ctx := context.Background()
+	var bodies []string
+	var mu sync.Mutex
+	doer := func(req history.Request) (*history.Response, error) {
+		mu.Lock()
+		bodies = append(bodies, req.Body)
+		mu.Unlock()
+		return &history.Response{Status: 200, StatusText: "200 OK"}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Template: history.Request{
+			URL:      "https://example.com/upload",
+			Body:     "field=user_{{$payload}}",
+			BodyType: history.BodyMultipart,
+		},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 3}},
+		Concurrency: 1,
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for range ch {
+	}
+	want := []string{
+		"field=user_1",
+		"field=user_2",
+		"field=user_3",
+	}
+	if len(bodies) != 3 {
+		t.Fatalf("expected 3 bodies, got %d", len(bodies))
+	}
+	for i, w := range want {
+		if bodies[i] != w {
+			t.Errorf("body[%d]: got %q want %q", i, bodies[i], w)
+		}
+	}
+}
+
 func TestStart_DynamicVarsExpandedPerRequest(t *testing.T) {
 	// {{$uuid}} in the template must produce a *different* value for
 	// each Intruder iteration — that's the whole point of evaluating
