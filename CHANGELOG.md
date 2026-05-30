@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-05-30
+
+### Fixed
+
+- **Intruder result-table cursor now stays inside the visible
+  view.** v1.4.0's row cursor wasn't re-clamped when the
+  filter narrowed the view between keystrokes, so the cursor
+  could sit past the last row: the `▶` marker disappeared,
+  Down became a no-op, and the user had to press Up many
+  times before the cursor reappeared. The clamp now runs
+  alongside the existing scroll-offset clamp at the top of
+  every keystroke so any path that shrinks the view (filter,
+  preset, sort) self-heals.
+- **Intruder detail view no longer lets the user scroll past
+  EOF into a blank window.** The Down / PgDown keys now stop
+  at `len(body) - visibleRows`; an `end` / `G` key jumps to
+  that bottom. Implementation extracts a shared
+  `detailBodyLines` helper so the view (rendering) and the
+  update loop (scroll clamp) agree on what "end of body"
+  means.
+- **Misleading binary-body hint in the Intruder detail view.**
+  The hint used to say "see hex preview in the main Response
+  panel" but the main Response panel shows the live
+  single-request response, not the selected Intruder result —
+  there's no path to view this particular binary through that
+  panel. Trim to "(binary, N bytes — body not rendered here)"
+  to avoid the bad pointer.
+- **Postman v2.1 import now accepts both string and object
+  forms of `body.graphql.variables`.** The spec calls for the
+  string form, but Insomnia and some hand-written collections
+  emit the object form (`"variables": {"id": 1}`). v1.4.0
+  declared the importer's Variables field as `string`, so an
+  object-form file failed to unmarshal and the whole
+  collection import errored. v1.4.1 reads it as
+  `json.RawMessage` and normalises into the JSON-string shape
+  pollen stores internally.
+
 ## [1.4.0] - 2026-05-30
 
 ### Added
