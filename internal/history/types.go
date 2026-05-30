@@ -8,10 +8,11 @@ import "time"
 type BodyType string
 
 const (
-	BodyJSON    BodyType = "json"
-	BodyForm    BodyType = "form"
-	BodyRaw     BodyType = "raw"
-	BodyGraphQL BodyType = "graphql"
+	BodyJSON      BodyType = "json"
+	BodyForm      BodyType = "form"
+	BodyRaw       BodyType = "raw"
+	BodyGraphQL   BodyType = "graphql"
+	BodyMultipart BodyType = "multipart"
 )
 
 type Header struct {

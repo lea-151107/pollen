@@ -9,9 +9,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -152,6 +157,9 @@ func buildBody(req history.Request) (io.Reader, string, error) {
 	if req.BodyType == history.BodyGraphQL {
 		return buildGraphQLBody(req)
 	}
+	if req.BodyType == history.BodyMultipart {
+		return buildMultipartBody(req)
+	}
 	if req.Body == "" {
 		return nil, "", nil
 	}
@@ -176,6 +184,114 @@ func buildBody(req history.Request) (io.Reader, string, error) {
 	default:
 		return strings.NewReader(req.Body), "text/plain", nil
 	}
+}
+
+// MultipartPart is one entry parsed from a BodyMultipart body string.
+// Value is used when File is empty; otherwise File is read off disk
+// and streamed into the form. ContentType is optional (file parts
+// default to application/octet-stream).
+type MultipartPart struct {
+	Name        string
+	Value       string
+	File        string
+	ContentType string
+}
+
+// ParseMultipartLines parses a BodyMultipart body string. Each non-blank
+// line describes one part in the format:
+//
+//	name=value             text part
+//	name=@/path/to/file    file part (defaults to application/octet-stream)
+//	name=@/path;type=ct    file part with explicit content-type
+//
+// Leading/trailing whitespace on the line is trimmed; whitespace inside
+// values is preserved (the user may want trailing spaces in a text
+// value). Lines that don't contain `=` are skipped.
+func ParseMultipartLines(body string) []MultipartPart {
+	var out []MultipartPart
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimRight(line, "\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		p := MultipartPart{Name: k}
+		if strings.HasPrefix(v, "@") {
+			rest := v[1:]
+			// Optional ";type=ct" suffix is split off before the path.
+			if i := strings.Index(rest, ";type="); i >= 0 {
+				p.ContentType = strings.TrimSpace(rest[i+len(";type="):])
+				rest = rest[:i]
+			}
+			p.File = strings.TrimSpace(rest)
+		} else {
+			p.Value = v
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// buildMultipartBody assembles a multipart/form-data body from req.Body's
+// line-based encoding. File parts stream their contents into the form
+// writer; text parts are written as-is.
+func buildMultipartBody(req history.Request) (io.Reader, string, error) {
+	parts := ParseMultipartLines(req.Body)
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for _, p := range parts {
+		if p.File != "" {
+			mh := textproto.MIMEHeader{}
+			mh.Set("Content-Disposition",
+				`form-data; name="`+escapeMimeQuoted(p.Name)+
+					`"; filename="`+escapeMimeQuoted(filepath.Base(p.File))+`"`)
+			ct := p.ContentType
+			if ct == "" {
+				ct = "application/octet-stream"
+			}
+			mh.Set("Content-Type", ct)
+			fw, err := w.CreatePart(mh)
+			if err != nil {
+				return nil, "", err
+			}
+			f, err := os.Open(p.File)
+			if err != nil {
+				return nil, "", fmt.Errorf("multipart: open %s: %w", p.File, err)
+			}
+			if _, err := io.Copy(fw, f); err != nil {
+				_ = f.Close()
+				return nil, "", err
+			}
+			if err := f.Close(); err != nil {
+				return nil, "", err
+			}
+		} else {
+			if err := w.WriteField(p.Name, p.Value); err != nil {
+				return nil, "", err
+			}
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, "", err
+	}
+	return &buf, w.FormDataContentType(), nil
+}
+
+// escapeMimeQuoted minimally escapes characters that would break a
+// `name="..."` parameter inside a multipart Content-Disposition header.
+// Production code typically copes with cleverer schemes (RFC 5987)
+// but for pollen's API-test use case escaping " and \ is enough.
+func escapeMimeQuoted(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+	return r.Replace(s)
 }
 
 // buildGraphQLBody assembles the JSON envelope GraphQL servers expect

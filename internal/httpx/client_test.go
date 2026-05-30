@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -161,6 +162,113 @@ func TestDo_TLSVerify(t *testing.T) {
 	}
 	if resp.Status != 200 || resp.Body != "ok" {
 		t.Errorf("unexpected response: %+v", resp)
+	}
+}
+
+func TestParseMultipartLines(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []MultipartPart
+	}{
+		{"empty", "", nil},
+		{"text part", "name=alice", []MultipartPart{{Name: "name", Value: "alice"}}},
+		{"file part", "upload=@/tmp/x.png", []MultipartPart{{Name: "upload", File: "/tmp/x.png"}}},
+		{"file with type", "img=@/tmp/x.png;type=image/png",
+			[]MultipartPart{{Name: "img", File: "/tmp/x.png", ContentType: "image/png"}}},
+		{"mixed",
+			"meta={\"k\":1}\nupload=@/etc/hosts;type=text/plain",
+			[]MultipartPart{
+				{Name: "meta", Value: `{"k":1}`},
+				{Name: "upload", File: "/etc/hosts", ContentType: "text/plain"},
+			},
+		},
+		{"blank lines skipped", "\n\nname=alice\n\n",
+			[]MultipartPart{{Name: "name", Value: "alice"}}},
+		{"empty key skipped", "=value\nname=alice",
+			[]MultipartPart{{Name: "name", Value: "alice"}}},
+		{"line without = skipped", "no-equals-sign\nname=alice",
+			[]MultipartPart{{Name: "name", Value: "alice"}}},
+	}
+	for _, c := range cases {
+		got := ParseMultipartLines(c.in)
+		if len(got) != len(c.want) {
+			t.Errorf("%s: len got %d want %d (got=%v)", c.name, len(got), len(c.want), got)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s[%d]: got %+v want %+v", c.name, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+func TestDo_MultipartFormDataAssemblesParts(t *testing.T) {
+	// Stage a small file to upload so the test exercises the file
+	// streaming path.
+	tmpdir := t.TempDir()
+	filePath := tmpdir + "/upload.txt"
+	if err := os.WriteFile(filePath, []byte("hello from a file"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var gotForm map[string][]string
+	var gotFiles map[string][]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Server-side multipart parse.
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("server ParseMultipartForm: %v", err)
+		}
+		gotForm = map[string][]string{}
+		for k, vs := range r.MultipartForm.Value {
+			gotForm[k] = vs
+		}
+		gotFiles = map[string][]string{}
+		for k, fhs := range r.MultipartForm.File {
+			for _, fh := range fhs {
+				f, _ := fh.Open()
+				b, _ := io.ReadAll(f)
+				gotFiles[k] = append(gotFiles[k], string(b))
+				_ = f.Close()
+			}
+		}
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	body := "meta=hello world\nfile=@" + filePath + ";type=text/plain"
+	_, err := Do(history.Request{
+		Method:   "POST",
+		URL:      srv.URL,
+		Body:     body,
+		BodyType: history.BodyMultipart,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if got := gotForm["meta"]; len(got) != 1 || got[0] != "hello world" {
+		t.Errorf("meta: %v", got)
+	}
+	if got := gotFiles["file"]; len(got) != 1 || got[0] != "hello from a file" {
+		t.Errorf("file content: %v", got)
+	}
+}
+
+func TestDo_MultipartMissingFileSurfacesError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	_, err := Do(history.Request{
+		Method:   "POST",
+		URL:      srv.URL,
+		Body:     "file=@/no/such/path/exists",
+		BodyType: history.BodyMultipart,
+	})
+	if err == nil {
+		t.Error("expected error for missing file")
+	}
+	if !strings.Contains(err.Error(), "multipart: open") {
+		t.Errorf("error should mention multipart open: %v", err)
 	}
 }
 
