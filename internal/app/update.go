@@ -113,7 +113,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ui.ResponseCopyMsg:
 		m.deliverCopy(msg.Text, "response body")
-		return m, nil
+		return m, m.statusTick(2 * time.Second)
 
 	case ui.HistoryDeleteMsg:
 		// Look up by ID so the operation works regardless of any active
@@ -177,8 +177,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case authRefreshedSendMsg:
 		m.auth.ApplyRefreshedToken(msg.Token)
-		cmd := m.sendRequest()
-		return m, cmd
+		// Replace the "refreshing OAuth token…" toast set in the Send
+		// handler with a positive confirmation. Without this, the
+		// "refreshing…" string would persist on screen past the
+		// completed refresh + send because sendResultMsg doesn't touch
+		// status. tea.Batch lets the actual send and the status tick
+		// fire independently.
+		m.setStatus(statusOK, "OAuth token refreshed")
+		return m, tea.Batch(m.sendRequest(), m.statusTick(2*time.Second))
 
 	case authRefreshFailedMsg:
 		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")
