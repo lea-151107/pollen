@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-05-30
+
+### Added
+
+- **multipart/form-data body support.** The body editor's
+  `←/→` tab cycle now includes `MULTIPART`. The body is a
+  line-based DSL — `name=value` for text parts,
+  `name=@/path/to/file` (optionally `;type=image/png`) for file
+  uploads. At send time pollen streams the file parts through
+  `mime/multipart` and sets `Content-Type:
+  multipart/form-data` with the right boundary. cURL export
+  emits `-F` arguments so the shared command actually
+  performs the upload; fetch export builds a `FormData` IIFE
+  with placeholder file references. Postman v2.1 export and
+  import round-trip the multipart body using the spec's
+  `{"mode": "formdata", "formdata": [...]}` shape. Intruder
+  markers and dynamic variables apply to the multipart DSL
+  string at send time.
+- **`--import-curl` CLI flag.** Convert a curl command into a
+  collections entry without launching the TUI. Three input
+  modes: `--import-curl 'curl ...'` (literal),
+  `--import-curl @file` (read from file), `--import-curl -`
+  (stdin). Supported flags: `-X / --request`, `-H / --header`,
+  `-d / --data / --data-raw / --data-binary`,
+  `--data-urlencode`, `-F / --form`, `-u / --user`,
+  `-A / --user-agent`, `-e / --referer`, `--cookie / -b`,
+  `-G / --get`. Transport flags (`-L`, `-k`, `-s`, `-v`, `-i`,
+  plus the clumped form `-sLv`) are silently dropped. Method
+  inference: explicit `-X` wins; `-G` forces GET; any data
+  flag implies POST.
+
+### Notes
+
+- This is a patch release (matching pollen's v1.2.1 precedent
+  for additive functionality in a patch). The new
+  `BodyMultipart` constant, the multipart line DSL, the
+  `--import-curl` flag, and the new `MULTIPART` body tab join
+  the v1.x SemVer-frozen surface alongside the v1.5.0
+  additions.
+- Authorization Code with PKCE is still on track for v1.6, as
+  reserved in the v1.5.0 release notes.
+
 ## [1.5.0] - 2026-05-30
 
 ### Added

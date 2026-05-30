@@ -486,6 +486,63 @@ field; Postman v2.1 export/import round-trip the GraphQL body using
 the spec's native `{"mode": "graphql", "graphql": {"query": "...",
 "variables": "..."}}` shape.
 
+## multipart/form-data
+
+Pollen's body editor has a `MULTIPART` tab alongside JSON / Form / Raw
+/ GraphQL. Each line describes one part:
+
+```
+name=value                  text part
+upload=@/path/to/file       file upload (default content-type)
+img=@/path/x.png;type=image/png   file upload with explicit content-type
+```
+
+At send time pollen streams the file parts through `mime/multipart`,
+auto-generating the boundary and setting `Content-Type:
+multipart/form-data; boundary=...` for you. cURL export uses `-F`
+flags (`-F 'meta=...' -F 'upload=@/tmp/x.png;type=image/png'`) so the
+exported command actually performs the upload. fetch export builds a
+`FormData` object with placeholder file references and a comment
+pointing at the original path (browser `fetch` needs a real `File`
+handle from an `<input>` that pollen can't materialise from a
+filesystem path).
+
+Postman v2.1 export and import roundtrip the multipart body using
+the spec's native `{"mode": "formdata", "formdata": [...]}` shape.
+
+Intruder markers (`{{$payload}}`, `{{$payload1..N}}`) and dynamic
+variables (`{{$uuid}}`, `{{$timestamp}}`, ...) work inside the
+multipart line-based DSL — typically in text values, but file paths
+can include them too if you want per-iteration file names.
+
+## cURL paste import
+
+A `--import-curl` flag converts a curl command into a collections
+entry without launching the TUI. Three input modes:
+
+```sh
+pollen --import-curl 'curl -X POST https://api.example.com -d body'    # literal
+pollen --import-curl @/tmp/cmd.txt                                     # file
+pollen --import-curl -                                                 # stdin
+```
+
+Supported curl flags: `-X / --request`, `-H / --header`, `-d /
+--data / --data-raw / --data-binary`, `--data-urlencode`, `-F /
+--form` (multipart), `-u / --user` (becomes a Basic-auth header),
+`-A / --user-agent`, `-e / --referer`, `--cookie / -b`, `-G /
+--get`. Transport flags (`-L`, `-k`, `-s`, `-v`, `-i`, plus the
+clumped form `-sLv`) are silently dropped. Unsupported flags exit
+1 with an error so the user knows to enter them by hand.
+
+Method inference: `-X` explicit wins; `-G` forces GET; any data
+flag implies POST; otherwise GET. A `Content-Type: application/json`
+header promotes the inferred body to BodyJSON so the editor opens
+on the right tab.
+
+The new entry is named `<METHOD> <URL>` and appended to
+`collections.json`. Successful import prints `imported as <name>`
+to stderr and exits 0.
+
 ## Dynamic variables
 
 Pollen expands a small set of pollen-computed `{{$name}}` tokens at

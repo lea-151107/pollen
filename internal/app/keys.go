@@ -130,11 +130,12 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Tab", Desc: "Accept suggestion"},
 		}},
 		{Title: "Body", Items: []HelpItem{
-			{Keys: "←/→", Desc: "Switch tab (JSON / Form / Raw / GraphQL)"},
+			{Keys: "←/→", Desc: "Switch tab (JSON / Form / Raw / GraphQL / Multipart)"},
 			{Keys: "Enter", Desc: "Enter editor"},
 			{Keys: "Tab", Desc: "Indent (in editor)"},
 			{Keys: "Esc", Desc: "Leave editor"},
 			{Keys: "Ctrl+G", Desc: "Toggle GraphQL query ↔ variables pane"},
+			{Keys: "name=@path", Desc: "Multipart file upload (optional ;type=ct)"},
 		}},
 		{Title: "Response", Items: []HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
