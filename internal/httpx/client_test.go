@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -160,6 +161,90 @@ func TestDo_TLSVerify(t *testing.T) {
 	}
 	if resp.Status != 200 || resp.Body != "ok" {
 		t.Errorf("unexpected response: %+v", resp)
+	}
+}
+
+func TestDo_GraphQLPostsJSONEnvelope(t *testing.T) {
+	var got struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected application/json, got %q", r.Header.Get("Content-Type"))
+		}
+		body, _ := io.ReadAll(r.Body)
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("server failed to parse envelope: %v (body=%q)", err, body)
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data":{"ok":true}}`))
+	}))
+	defer srv.Close()
+
+	resp, err := Do(history.Request{
+		Method:           "POST",
+		URL:              srv.URL,
+		Body:             "{ user(id: $id) { name } }",
+		BodyType:         history.BodyGraphQL,
+		GraphQLVariables: `{"id": 42}`,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Errorf("unexpected status: %d", resp.Status)
+	}
+	if got.Query != "{ user(id: $id) { name } }" {
+		t.Errorf("query in envelope: got %q", got.Query)
+	}
+	if v, _ := got.Variables["id"].(float64); v != 42 {
+		t.Errorf("variables.id: got %v", got.Variables["id"])
+	}
+}
+
+func TestDo_GraphQLEmptyVariablesOmitsField(t *testing.T) {
+	var raw map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &raw)
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	if _, err := Do(history.Request{
+		Method:   "POST",
+		URL:      srv.URL,
+		Body:     "{ ping }",
+		BodyType: history.BodyGraphQL,
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if _, present := raw["variables"]; present {
+		t.Errorf("variables key should be absent when GraphQLVariables is empty; got %v", raw)
+	}
+}
+
+func TestDo_GraphQLInvalidVariablesDropped(t *testing.T) {
+	var raw map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &raw)
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	// "not json" is invalid JSON → variables should be omitted, request
+	// still goes through. (Server will likely reject; pollen doesn't.)
+	if _, err := Do(history.Request{
+		Method:           "POST",
+		URL:              srv.URL,
+		Body:             "{ ping }",
+		BodyType:         history.BodyGraphQL,
+		GraphQLVariables: "not json",
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if _, present := raw["variables"]; present {
+		t.Errorf("invalid variables should be silently dropped; got %v", raw)
 	}
 }
 

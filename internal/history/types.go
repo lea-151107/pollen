@@ -8,9 +8,10 @@ import "time"
 type BodyType string
 
 const (
-	BodyJSON BodyType = "json"
-	BodyForm BodyType = "form"
-	BodyRaw  BodyType = "raw"
+	BodyJSON    BodyType = "json"
+	BodyForm    BodyType = "form"
+	BodyRaw     BodyType = "raw"
+	BodyGraphQL BodyType = "graphql"
 )
 
 type Header struct {
@@ -24,6 +25,12 @@ type Request struct {
 	Headers  []Header `json:"headers"`
 	Body     string   `json:"body"`
 	BodyType BodyType `json:"body_type"`
+
+	// GraphQLVariables holds the "variables" JSON object string for
+	// BodyType == BodyGraphQL. Body stores the query in that case; the
+	// runtime envelope sent on the wire is built in httpx.buildBody by
+	// merging Body and this field. Empty for non-GraphQL bodies.
+	GraphQLVariables string `json:"graphql_variables,omitempty"`
 }
 
 type Response struct {

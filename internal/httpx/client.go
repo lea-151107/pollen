@@ -5,8 +5,10 @@
 package httpx
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -147,6 +149,9 @@ func Do(req history.Request) (*history.Response, error) {
 }
 
 func buildBody(req history.Request) (io.Reader, string, error) {
+	if req.BodyType == history.BodyGraphQL {
+		return buildGraphQLBody(req)
+	}
 	if req.Body == "" {
 		return nil, "", nil
 	}
@@ -171,4 +176,24 @@ func buildBody(req history.Request) (io.Reader, string, error) {
 	default:
 		return strings.NewReader(req.Body), "text/plain", nil
 	}
+}
+
+// buildGraphQLBody assembles the JSON envelope GraphQL servers expect
+// from req.Body (the query) and req.GraphQLVariables (a JSON object
+// string). Invalid variables JSON is dropped silently — the server
+// will surface that as an error on its own and pollen doesn't want to
+// block the user from inspecting the response.
+func buildGraphQLBody(req history.Request) (io.Reader, string, error) {
+	envelope := map[string]any{"query": req.Body}
+	if v := strings.TrimSpace(req.GraphQLVariables); v != "" {
+		var parsed any
+		if err := json.Unmarshal([]byte(v), &parsed); err == nil {
+			envelope["variables"] = parsed
+		}
+	}
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, "", err
+	}
+	return bytes.NewReader(data), "application/json", nil
 }
