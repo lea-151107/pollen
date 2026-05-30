@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-05-30
+
+### Fixed
+
+- **Ctrl+/ help overlay overflowed standard terminals.** The
+  overlay had grown to 17 sections and ~80 item rows by
+  v1.6.0; rendered as a single centered string, the bottom
+  half clipped off-screen on 24-row terminals and could not
+  be scrolled. The overlay is now a navigable accordion: all
+  section titles are always visible in one column with
+  `▶`/`▼` glyphs, Enter (or Space) toggles the focused
+  section open / closed, ↑/↓ (j/k) move the cursor, g/G
+  jump to first/last, PgUp/PgDn jump by 5, and the viewport
+  follows the cursor so the focused section header is
+  always on screen. Multiple sections can be expanded
+  simultaneously. Global is pre-expanded on open so the
+  first Ctrl+/ press shows content immediately. Esc, q, or
+  Ctrl+/ closes.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged: Ctrl+/, Esc, q
+  still open/close the overlay. The new navigation keys
+  (↑/↓, j/k, Enter, Space, g, G, PgUp, PgDn) are additive
+  inside an overlay that previously accepted only the close
+  keys, so existing muscle memory is preserved.
+
 ## [1.6.0] - 2026-05-30
 
 ### Added
