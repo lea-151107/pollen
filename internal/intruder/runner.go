@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lea-151107/pollen/internal/dynvars"
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
 )
@@ -98,6 +99,12 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 				default:
 				}
 				req := ApplyPayloads(cfg.Template, job.Vector)
+				// Per-request dynamic expansion: tokens like
+				// {{$uuid}} or {{$timestamp}} have to be fresh per
+				// iteration, so they're evaluated inside the worker
+				// loop (the app-level expand chain that builds the
+				// template runs only once before Start).
+				req = applyDynamicVars(req)
 				start := time.Now()
 				resp, err := do(req)
 				r := Result{
@@ -150,6 +157,22 @@ func joinVector(v []string) string {
 		return v[0]
 	}
 	return strings.Join(v, " | ")
+}
+
+// applyDynamicVars expands dynvars tokens inside every request field a
+// worker would otherwise send verbatim. Headers are deep-copied here
+// rather than mutated in place because ApplyPayloads has already
+// produced a fresh slice; touching it again is safe but we still
+// avoid mutating the caller's template.
+func applyDynamicVars(req history.Request) history.Request {
+	req.URL = dynvars.Expand(req.URL)
+	req.Body = dynvars.Expand(req.Body)
+	req.GraphQLVariables = dynvars.Expand(req.GraphQLVariables)
+	for i := range req.Headers {
+		req.Headers[i].Value = dynvars.Expand(req.Headers[i].Value)
+		req.Headers[i].Key = dynvars.Expand(req.Headers[i].Key)
+	}
+	return req
 }
 
 // capResponseBody returns a shallow copy of resp with its BodyBytes

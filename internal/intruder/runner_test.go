@@ -3,6 +3,7 @@ package intruder
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -407,6 +408,50 @@ func TestStart_SniperRejectsTemplateWithExtraPosition(t *testing.T) {
 	}, fakeDoerOK)
 	if err == nil {
 		t.Errorf("expected error for sniper template referencing position 2")
+	}
+}
+
+func TestStart_DynamicVarsExpandedPerRequest(t *testing.T) {
+	// {{$uuid}} in the template must produce a *different* value for
+	// each Intruder iteration — that's the whole point of evaluating
+	// dynvars inside the worker loop rather than once when the
+	// template is built. Capture every URL the doer sees and assert
+	// the UUIDs differ.
+	ctx := context.Background()
+	var urls []string
+	var mu sync.Mutex
+	doer := func(req history.Request) (*history.Response, error) {
+		mu.Lock()
+		urls = append(urls, req.URL)
+		mu.Unlock()
+		return &history.Response{Status: 200, StatusText: "200 OK"}, nil
+	}
+	ch, err := startWithDoer(ctx, RunConfig{
+		Template:    history.Request{URL: "https://example.com/{{$uuid}}/{{$payload}}"},
+		Payloads:    []PayloadConfig{{Kind: PayloadRange, From: 1, To: 5}},
+		Concurrency: 1, // sequential so order is deterministic
+	}, doer)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for range ch {
+	}
+	if len(urls) != 5 {
+		t.Fatalf("expected 5 requests, got %d", len(urls))
+	}
+	seen := map[string]bool{}
+	for _, u := range urls {
+		// {{$payload}} substitution makes each URL different anyway,
+		// so extract just the uuid segment for the uniqueness check.
+		parts := strings.SplitN(strings.TrimPrefix(u, "https://example.com/"), "/", 2)
+		if len(parts) < 1 {
+			t.Fatalf("unexpected URL shape: %q", u)
+		}
+		uuidPart := parts[0]
+		if seen[uuidPart] {
+			t.Errorf("UUID %q appeared twice — should be per-request fresh", uuidPart)
+		}
+		seen[uuidPart] = true
 	}
 }
 
