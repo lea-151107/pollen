@@ -60,12 +60,20 @@ func TestLoad_IntruderDefaults(t *testing.T) {
 	if s.IntruderMaxRequests != 1000 {
 		t.Errorf("IntruderMaxRequests: want 1000, got %d", s.IntruderMaxRequests)
 	}
+	if s.IntruderResponseBodyCapKiB != 64 {
+		t.Errorf("IntruderResponseBodyCapKiB: want 64, got %d", s.IntruderResponseBodyCapKiB)
+	}
 }
 
 func TestLoad_IntruderClampsOutOfRange(t *testing.T) {
 	withTempConfig(t)
 	// Persist out-of-range values, reload, expect them clamped to defaults.
-	bad := &Settings{IntruderConcurrency: 9999, IntruderDelayMs: -5, IntruderMaxRequests: 0}
+	bad := &Settings{
+		IntruderConcurrency:        9999,
+		IntruderDelayMs:            -5,
+		IntruderMaxRequests:        0,
+		IntruderResponseBodyCapKiB: -1,
+	}
 	if err := bad.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -73,7 +81,7 @@ func TestLoad_IntruderClampsOutOfRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if s.IntruderConcurrency != 5 || s.IntruderDelayMs != 0 || s.IntruderMaxRequests != 1000 {
+	if s.IntruderConcurrency != 5 || s.IntruderDelayMs != 0 || s.IntruderMaxRequests != 1000 || s.IntruderResponseBodyCapKiB != 64 {
 		t.Errorf("clamped values wrong: %+v", s)
 	}
 }

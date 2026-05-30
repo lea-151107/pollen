@@ -28,9 +28,10 @@ type Settings struct {
 	DisableRedirects   bool    `json:"disable_redirects,omitempty"`
 	CACertFile         string  `json:"ca_cert_file,omitempty"`
 	EnableCookies      bool    `json:"enable_cookies,omitempty"`
-	IntruderConcurrency int    `json:"intruder_concurrency,omitempty"`
-	IntruderDelayMs    int     `json:"intruder_delay_ms,omitempty"`
-	IntruderMaxRequests int    `json:"intruder_max_requests,omitempty"`
+	IntruderConcurrency        int `json:"intruder_concurrency,omitempty"`
+	IntruderDelayMs            int `json:"intruder_delay_ms,omitempty"`
+	IntruderMaxRequests        int `json:"intruder_max_requests,omitempty"`
+	IntruderResponseBodyCapKiB int `json:"intruder_response_body_cap_kib,omitempty"`
 }
 
 // Load reads settings from disk. Missing or corrupt files fall back to
@@ -81,6 +82,12 @@ func Load() (*Settings, error) {
 	}
 	if s.IntruderMaxRequests < 1 || s.IntruderMaxRequests > 1000000 {
 		s.IntruderMaxRequests = 1000
+	}
+	// Per-result body cap for Intruder. Smaller than MaxResponseMiB so a
+	// 1000-payload run with 256 KiB responses doesn't pin GiBs of RAM
+	// just to support the Enter→Response detail view.
+	if s.IntruderResponseBodyCapKiB < 1 || s.IntruderResponseBodyCapKiB > 10240 {
+		s.IntruderResponseBodyCapKiB = 64
 	}
 	return s, nil
 }
