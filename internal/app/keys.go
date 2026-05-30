@@ -117,10 +117,11 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Tab", Desc: "Accept suggestion"},
 		}},
 		{Title: "Body", Items: []HelpItem{
-			{Keys: "←/→", Desc: "Switch tab"},
+			{Keys: "←/→", Desc: "Switch tab (JSON / Form / Raw / GraphQL)"},
 			{Keys: "Enter", Desc: "Enter editor"},
 			{Keys: "Tab", Desc: "Indent (in editor)"},
 			{Keys: "Esc", Desc: "Leave editor"},
+			{Keys: "Ctrl+G", Desc: "Toggle GraphQL query ↔ variables pane"},
 		}},
 		{Title: "Response", Items: []HelpItem{
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
@@ -143,12 +144,20 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Esc", Desc: "Cancel modal"},
 		}},
 		{Title: "Intruder — results table", Items: []HelpItem{
-			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
+			{Keys: "↑/↓ PgUp/PgDn", Desc: "Move cursor (window follows)"},
+			{Keys: "g / G", Desc: "Jump to first / last row"},
+			{Keys: "Enter", Desc: "Open detail view for focused row"},
 			{Keys: "s", Desc: "Cycle sort column (# → status → size → ms → #)"},
 			{Keys: "S", Desc: "Reverse sort direction on the current column"},
-			{Keys: "/", Desc: "Open payload-substring filter (Enter accept, Esc drop)"},
+			{Keys: "/", Desc: "Open filter prompt (DSL: payload substring; size:>N, dur:>N, s:4xx, …)"},
 			{Keys: "f", Desc: "Cycle status preset: All → Errors → 2xx → All"},
+			{Keys: "e", Desc: "Export current results to CSV (path prompt)"},
 			{Keys: "Esc", Desc: "Clear filter, or (no filter) cancel run + close overlay"},
+		}},
+		{Title: "Intruder — result detail", Items: []HelpItem{
+			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll response body"},
+			{Keys: "g", Desc: "Jump to top"},
+			{Keys: "Esc", Desc: "Back to results table"},
 		}},
 		{Title: "Chaining", Items: []HelpItem{
 			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},
