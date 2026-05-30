@@ -108,6 +108,45 @@ func TestAuth_OAuthPreview_ShortToken(t *testing.T) {
 	}
 }
 
+func TestAuth_OAuthAC_DefaultsAndCursorRange(t *testing.T) {
+	a := NewAuth()
+	if got := a.oauthACRedirect.Value(); got != "http://127.0.0.1:8765/callback" {
+		t.Errorf("default Redirect URI = %q, want loopback default", got)
+	}
+	a.authType = AuthOAuthAC
+	if got := a.authLastCursor(); got != 7 {
+		t.Errorf("OAuth AC authLastCursor = %d, want 7", got)
+	}
+}
+
+func TestAuth_OAuthAC_ResetClearsFlowState(t *testing.T) {
+	a := NewAuth()
+	a.authType = AuthOAuthAC
+	a.oauthACAuthURL.SetValue("https://x")
+	a.oauthACRedirect.SetValue("http://127.0.0.1:9000/cb")
+	a.oauthACError = "boom"
+	a.oauthACFetching = true
+	a.oauthACStatus = "fetching"
+	a.Reset()
+	if a.oauthACAuthURL.Value() != "" {
+		t.Errorf("Reset should clear Auth URL")
+	}
+	if a.oauthACRedirect.Value() != "http://127.0.0.1:8765/callback" {
+		t.Errorf("Reset should restore default Redirect URI, got %q", a.oauthACRedirect.Value())
+	}
+	if a.oauthACError != "" || a.oauthACFetching || a.oauthACStatus != "" {
+		t.Errorf("Reset should clear flow state")
+	}
+}
+
+func TestAuth_View_TabBarIncludesOAuthAC(t *testing.T) {
+	a := NewAuth()
+	got := a.View(120)
+	if !strings.Contains(got, "OAuth AC") {
+		t.Errorf("wide-width tab strip missing OAuth AC, got:\n%s", got)
+	}
+}
+
 func TestAuth_Reset(t *testing.T) {
 	a := NewAuth()
 	a.authType = AuthBearer
