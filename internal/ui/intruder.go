@@ -605,6 +605,40 @@ func defaultExportPath() string {
 	return fmt.Sprintf("intruder-%s.csv", time.Now().Format("20060102-150405"))
 }
 
+// sizeMedian returns the median Size of the results referenced by idx.
+// Returns 0 when idx is empty. The output is used to mark outlier rows
+// (Size deviating by more than 50% from the median).
+func sizeMedian(results []intruder.Result, idx []int) int {
+	if len(idx) == 0 {
+		return 0
+	}
+	sizes := make([]int, len(idx))
+	for i, k := range idx {
+		sizes[i] = results[k].Size
+	}
+	sort.Ints(sizes)
+	mid := len(sizes) / 2
+	if len(sizes)%2 == 1 {
+		return sizes[mid]
+	}
+	// Even count: average the two middle values, rounded down.
+	return (sizes[mid-1] + sizes[mid]) / 2
+}
+
+// isSizeOutlier reports whether r.Size deviates from median by more
+// than 50%. median == 0 means "not enough data", in which case nothing
+// is flagged.
+func isSizeOutlier(r intruder.Result, median int) bool {
+	if median <= 0 {
+		return false
+	}
+	delta := r.Size - median
+	if delta < 0 {
+		delta = -delta
+	}
+	return delta*2 > median // |Size - median| > median * 0.5
+}
+
 // filterDescription returns a short label for the currently active
 // filter, suitable for the header badge.
 func (m Intruder) filterDescription() string {
@@ -882,17 +916,27 @@ func (m Intruder) viewResults() string {
 	if end > len(idx) {
 		end = len(idx)
 	}
+	// Compute the size median once per render (over the filtered view,
+	// not the whole result set, so outliers reflect what the user is
+	// looking at).
+	median := sizeMedian(m.results, idx)
 	for i := start; i < end; i++ {
 		r := m.results[idx[i]]
 		statusCell := strconv.Itoa(r.Status)
 		if r.Error != "" {
 			statusCell = "ERR"
 		}
+		sizeCell := formatSize(r.Size)
+		if isSizeOutlier(r, median) {
+			// "!" marker keeps cells ASCII so column alignment via
+			// lipgloss.Width stays stable regardless of font width.
+			sizeCell += "!"
+		}
 		cells := []string{
 			strconv.Itoa(r.Index),
 			truncate(r.Payload, colW[1]),
 			statusCell,
-			formatSize(r.Size),
+			sizeCell,
 			strconv.FormatInt(r.DurationMs, 10),
 			truncate(r.ContentType, colW[5]),
 		}

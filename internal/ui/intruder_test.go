@@ -443,6 +443,52 @@ func TestIntruder_DownStopsAtLastRow(t *testing.T) {
 	}
 }
 
+func TestSizeMedian_OddCount(t *testing.T) {
+	rs := []intruder.Result{
+		{Size: 10}, {Size: 20}, {Size: 30}, {Size: 40}, {Size: 50},
+	}
+	idx := []int{0, 1, 2, 3, 4}
+	if got := sizeMedian(rs, idx); got != 30 {
+		t.Errorf("median of 5 sizes: got %d, want 30", got)
+	}
+}
+
+func TestSizeMedian_EvenCount(t *testing.T) {
+	rs := []intruder.Result{{Size: 10}, {Size: 20}, {Size: 30}, {Size: 40}}
+	if got := sizeMedian(rs, []int{0, 1, 2, 3}); got != 25 {
+		t.Errorf("median of 4 sizes: got %d, want 25", got)
+	}
+}
+
+func TestSizeMedian_EmptyZero(t *testing.T) {
+	if got := sizeMedian([]intruder.Result{{Size: 10}}, nil); got != 0 {
+		t.Errorf("empty idx should give median 0, got %d", got)
+	}
+}
+
+func TestIsSizeOutlier_50PercentRule(t *testing.T) {
+	cases := []struct {
+		name   string
+		size   int
+		median int
+		want   bool
+	}{
+		{"within band low", 600, 1000, false},  // 40% below
+		{"within band high", 1400, 1000, false}, // 40% above
+		{"on the edge low", 500, 1000, false},  // 50% exactly → not outlier
+		{"on the edge high", 1500, 1000, false}, // 50% exactly → not outlier
+		{"below band", 400, 1000, true},
+		{"above band", 1600, 1000, true},
+		{"zero median means no outliers", 5000, 0, false},
+	}
+	for _, c := range cases {
+		got := isSizeOutlier(intruder.Result{Size: c.size}, c.median)
+		if got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestStatusTint_4xxYellow5xxRed(t *testing.T) {
 	cases := []struct {
 		name string
