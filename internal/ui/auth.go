@@ -146,6 +146,15 @@ func NewAuth() Auth {
 // Type returns the current auth scheme.
 func (a Auth) Type() AuthType { return a.authType }
 
+// SetType sets the current auth scheme directly. Mainly useful for
+// tests in other packages that need to drive the panel into a known
+// state without simulating ←/→ key events.
+func (a *Auth) SetType(t AuthType) {
+	a.authType = t
+	a.cursor = 0
+	a.refreshFocus()
+}
+
 // Token returns the Bearer token raw input (trimmed of surrounding whitespace).
 // Meaningful only when Type() == AuthBearer.
 func (a Auth) Token() string { return strings.TrimSpace(a.token.Value()) }
