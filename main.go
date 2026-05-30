@@ -119,22 +119,28 @@ func main() {
 	if postmanTarget == "" {
 		postmanTarget = exportColls
 	}
-	// Each run dispatches at most one export. Refuse to silently drop the
-	// later flags when multiple --export-* are passed; the user almost
-	// certainly meant a sequence of runs, not "first wins".
-	exportGroups := 0
+	// Each run dispatches at most one one-shot operation. Refuse to
+	// silently drop the later flags when multiple --export-* / --import-curl
+	// are passed; the user almost certainly meant a sequence of runs,
+	// not "first wins". The export blocks below call os.Exit(0) on
+	// success, so without this check the --import-curl branch further
+	// down would silently never run.
+	oneShotGroups := 0
 	if postmanTarget != "" {
-		exportGroups++
+		oneShotGroups++
 	}
 	if exportOpenAPI != "" {
-		exportGroups++
+		oneShotGroups++
 	}
 	if exportIntruder != "" {
-		exportGroups++
+		oneShotGroups++
 	}
-	if exportGroups > 1 {
+	if importCurl != "" {
+		oneShotGroups++
+	}
+	if oneShotGroups > 1 {
 		fmt.Fprintln(os.Stderr,
-			"pollen: specify only one of --export-postman / --export-collections / --export-openapi / --export-intruder per run")
+			"pollen: specify only one of --export-postman / --export-collections / --export-openapi / --export-intruder / --import-curl per run")
 		os.Exit(2)
 	}
 	if postmanTarget != "" {
