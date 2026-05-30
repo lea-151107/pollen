@@ -224,20 +224,33 @@ func (b Body) View(width, height int) string {
 	}
 
 	tabs := make([]string, len(bodyTypes))
+	selStyle := lipgloss.NewStyle().Padding(0, 1)
 	for i, t := range bodyTypes {
 		label := strings.ToUpper(string(t))
 		s := lipgloss.NewStyle().Padding(0, 1)
 		switch {
 		case i == b.tabIdx && b.focused && b.tabFocus:
 			s = s.Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
+			selStyle = selStyle.Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
 		case i == b.tabIdx:
 			s = s.Background(lipgloss.Color("240")).Foreground(lipgloss.Color("230"))
+			if !(b.focused && b.tabFocus) {
+				selStyle = selStyle.Background(lipgloss.Color("240")).Foreground(lipgloss.Color("230"))
+			}
 		default:
 			s = s.Foreground(lipgloss.Color("244"))
 		}
 		tabs[i] = s.Render(label)
 	}
 	tabBar := strings.Join(tabs, " ")
+	// Collapse to ‹ {selected} › when the full strip would overflow and
+	// wrap onto a second line, which would push the editor area below
+	// out of the panel.
+	if lipgloss.Width(tabBar) > inner {
+		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+		selectedLabel := strings.ToUpper(string(bodyTypes[b.tabIdx]))
+		tabBar = dim.Render("‹") + selStyle.Render(selectedLabel) + dim.Render("›")
+	}
 
 	hint := " "
 	if b.focused {
