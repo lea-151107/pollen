@@ -357,8 +357,13 @@ func (a Auth) renderOAuthStatus() string {
 	case a.oauthToken != nil && a.oauthToken.AccessToken != "":
 		tok := a.oauthToken.AccessToken
 		var preview string
-		if len(tok) > 16 {
-			preview = tok[:8] + "…" + tok[len(tok)-4:]
+		// Rune-slice rather than byte-slice: RFC 6749 does not constrain
+		// access_token to ASCII, and a multi-byte token chopped at a
+		// byte boundary would produce invalid UTF-8 that lipgloss/
+		// terminal renderers handle poorly.
+		runes := []rune(tok)
+		if len(runes) > 16 {
+			preview = string(runes[:8]) + "…" + string(runes[len(runes)-4:])
 		} else {
 			preview = tok
 		}
