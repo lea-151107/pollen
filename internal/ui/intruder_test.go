@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/intruder"
 )
 
@@ -406,6 +407,32 @@ func TestIntruder_EnterTargetsCurrentCursor(t *testing.T) {
 	}
 	if in.detailIdx != 3 {
 		t.Errorf("expected detailIdx=3, got %d", in.detailIdx)
+	}
+}
+
+func TestIntruder_DetailScrollClampsAtEOF(t *testing.T) {
+	// A short body (just "--- body ---" header line + maybe one or two
+	// content lines) shouldn't let the user scroll arbitrarily far past
+	// EOF — pre-v1.4.1 down/PgDn had no upper bound, so the window
+	// silently went blank.
+	rs := []intruder.Result{{
+		Index:     0,
+		Payload:   "x",
+		Status:    200,
+		Response:  &history.Response{Status: 200, Body: "hi", BodyBytes: []byte("hi")},
+	}}
+	in := withResults(rs)
+	in.state = IntruderDetail
+	in.detailIdx = 0
+	in.height = 30
+	// Press PgDn 50 times — way more than the body has lines.
+	for i := 0; i < 50; i++ {
+		in = sendKey(in, "pgdown")
+	}
+	// maxDetailScroll is len(bodyLines) - visible; for the small body
+	// that's 0. detailScroll must be clamped accordingly.
+	if in.detailScroll != 0 {
+		t.Errorf("detailScroll should clamp to 0 for short body, got %d", in.detailScroll)
 	}
 }
 

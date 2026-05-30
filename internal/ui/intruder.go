@@ -578,11 +578,27 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 
 // updateDetail handles input while the per-result detail view is shown.
 // Esc returns to the results table; the body scrolls with arrows /
-// PgUp / PgDn.
+// PgUp / PgDn, clamped to the rendered body length so the user can't
+// scroll past EOF into a blank window.
 func (m Intruder) updateDetail(msg tea.Msg) (Intruder, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return m, nil
+	}
+	// Compute the max scroll once per input via the shared
+	// detailBodyLines helper, so updateDetail and viewDetail always
+	// agree on what "end of body" means.
+	var max int
+	if m.detailIdx >= 0 && m.detailIdx < len(m.results) {
+		max = m.maxDetailScroll(len(detailBodyLines(m.results[m.detailIdx])))
+	}
+	clamp := func() {
+		if m.detailScroll > max {
+			m.detailScroll = max
+		}
+		if m.detailScroll < 0 {
+			m.detailScroll = 0
+		}
 	}
 	switch keyMsg.String() {
 	case "esc":
@@ -593,17 +609,19 @@ func (m Intruder) updateDetail(msg tea.Msg) (Intruder, tea.Cmd) {
 			m.detailScroll--
 		}
 	case "down", "j":
-		m.detailScroll++
+		if m.detailScroll < max {
+			m.detailScroll++
+		}
 	case "pgup":
 		m.detailScroll -= 10
-		if m.detailScroll < 0 {
-			m.detailScroll = 0
-		}
 	case "pgdown":
 		m.detailScroll += 10
 	case "home", "g":
 		m.detailScroll = 0
+	case "end", "G":
+		m.detailScroll = max
 	}
+	clamp()
 	return m, nil
 }
 
@@ -1163,6 +1181,59 @@ func (m Intruder) viewResults() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
+// detailBodyLines renders the response-body lines for the IntruderDetail
+// view. Shared between viewDetail (rendering) and updateDetail (scroll
+// clamp) so both agree on the line count.
+func detailBodyLines(r intruder.Result) []string {
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	out := []string{}
+	if r.Response == nil {
+		out = append(out, dim.Render("(no response body retained)"))
+		return out
+	}
+	if len(r.Response.Headers) > 0 {
+		out = append(out, dim.Render("--- headers ---"))
+		for _, h := range r.Response.Headers {
+			out = append(out, h.Key+": "+h.Value)
+		}
+		out = append(out, "")
+	}
+	out = append(out, dim.Render("--- body ---"))
+	if r.Response.IsBinary {
+		out = append(out, dim.Render(fmt.Sprintf("(binary, %d bytes — body not rendered here)", len(r.Response.BodyBytes))))
+	} else {
+		for _, line := range strings.Split(r.Response.Body, "\n") {
+			out = append(out, line)
+		}
+	}
+	if r.Response.Truncated {
+		out = append(out, dim.Render(fmt.Sprintf("(body truncated at %d bytes — adjust intruder_response_body_cap_kib to see more)", len(r.Response.BodyBytes))))
+	}
+	return out
+}
+
+// detailVisible is the number of body rows the detail view can render
+// at the current terminal height. Mirrors visibleRows for the table
+// view but with the detail-specific chrome accounted for.
+func (m Intruder) detailVisible() int {
+	v := m.height - 8
+	if v < 5 {
+		v = 5
+	}
+	return v
+}
+
+// maxDetailScroll is the largest detailScroll that still keeps at
+// least one body line visible. Used by updateDetail to clamp down/PgDn
+// instead of letting the user scroll past EOF into a blank window.
+func (m Intruder) maxDetailScroll(bodyLineCount int) int {
+	n := bodyLineCount - m.detailVisible()
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
 // viewDetail renders the full HTTP response for the currently focused
 // result row (set by Enter from updateResults). Esc returns to the
 // table; up/down/PgUp/PgDn scroll the body.
@@ -1185,35 +1256,10 @@ func (m Intruder) viewDetail() string {
 		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("network error: " + r.Error)
 	}
 
-	bodyLines := []string{}
-	if r.Response != nil {
-		if len(r.Response.Headers) > 0 {
-			bodyLines = append(bodyLines, dim.Render("--- headers ---"))
-			for _, h := range r.Response.Headers {
-				bodyLines = append(bodyLines, h.Key+": "+h.Value)
-			}
-			bodyLines = append(bodyLines, "")
-		}
-		bodyLines = append(bodyLines, dim.Render("--- body ---"))
-		if r.Response.IsBinary {
-			bodyLines = append(bodyLines, dim.Render(fmt.Sprintf("(binary, %d bytes — see hex preview in the main Response panel)", len(r.Response.BodyBytes))))
-		} else {
-			for _, line := range strings.Split(r.Response.Body, "\n") {
-				bodyLines = append(bodyLines, line)
-			}
-		}
-		if r.Response.Truncated {
-			bodyLines = append(bodyLines, dim.Render(fmt.Sprintf("(body truncated at %d bytes — adjust intruder_response_body_cap_kib to see more)", len(r.Response.BodyBytes))))
-		}
-	} else {
-		bodyLines = append(bodyLines, dim.Render("(no response body retained)"))
-	}
+	bodyLines := detailBodyLines(r)
 
 	// Vertical windowing: respect detailScroll and the available height.
-	visible := m.height - 8
-	if visible < 5 {
-		visible = 5
-	}
+	visible := m.detailVisible()
 	start := m.detailScroll
 	if start < 0 {
 		start = 0
