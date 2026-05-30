@@ -41,6 +41,30 @@ func TestToCurl_POST_JSON(t *testing.T) {
 	}
 }
 
+func TestToCurl_GraphQL(t *testing.T) {
+	req := history.Request{
+		Method:           "POST",
+		URL:              "https://example.com/graphql",
+		BodyType:         history.BodyGraphQL,
+		Body:             "{ ping }",
+		GraphQLVariables: `{"id": 1}`,
+	}
+	got := ToCurl(req)
+	if !strings.Contains(got, "-X POST") {
+		t.Errorf("expected -X POST, got: %s", got)
+	}
+	if !strings.Contains(got, "Content-Type: application/json") {
+		t.Errorf("expected application/json content type, got: %s", got)
+	}
+	// The envelope must contain both "query" and "variables".
+	if !strings.Contains(got, `"query":"{ ping }"`) {
+		t.Errorf("envelope missing query, got: %s", got)
+	}
+	if !strings.Contains(got, `"variables":{"id":1}`) {
+		t.Errorf("envelope missing variables, got: %s", got)
+	}
+}
+
 func TestToCurl_QuoteEscape(t *testing.T) {
 	req := history.Request{
 		Method:   "POST",

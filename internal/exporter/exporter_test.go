@@ -41,6 +41,43 @@ func TestExportPostman_EmptyItemArray(t *testing.T) {
 	}
 }
 
+func TestExportPostman_GraphQLBody(t *testing.T) {
+	entries := []collections.Entry{
+		{
+			ID:   "1",
+			Name: "GQL",
+			Request: history.Request{
+				Method:           "POST",
+				URL:              "https://api.example.com/graphql",
+				Body:             "query { users { id } }",
+				BodyType:         history.BodyGraphQL,
+				GraphQLVariables: `{"limit": 10}`,
+			},
+		},
+	}
+	data, err := ExportPostman(entries, "c")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got postmanExportCollection
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("export not valid JSON: %v", err)
+	}
+	body := got.Item[0].Request.Body
+	if body == nil || body.Mode != "graphql" {
+		t.Fatalf("expected mode=graphql, got %+v", body)
+	}
+	if body.GraphQL == nil {
+		t.Fatal("graphql sub-body missing")
+	}
+	if body.GraphQL.Query != "query { users { id } }" {
+		t.Errorf("query: %q", body.GraphQL.Query)
+	}
+	if body.GraphQL.Variables != `{"limit": 10}` {
+		t.Errorf("variables: %q", body.GraphQL.Variables)
+	}
+}
+
 func TestExportPostman_RawBody(t *testing.T) {
 	entries := []collections.Entry{
 		{

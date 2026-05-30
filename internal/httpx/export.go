@@ -91,8 +91,10 @@ func marshalNoEscape(v any) string {
 
 func readerToString(req history.Request) string {
 	switch req.BodyType {
-	case history.BodyForm:
-		// Reformat through buildBody so it matches the actual sent body.
+	case history.BodyForm, history.BodyGraphQL:
+		// Reformat through buildBody so the exported cURL / fetch
+		// command sends exactly what pollen's runtime would send.
+		// GraphQL especially needs the JSON envelope assembly.
 		r, _, _ := buildBody(req)
 		if r == nil {
 			return ""

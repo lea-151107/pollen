@@ -206,6 +206,10 @@ type postmanReq struct {
 			Key   string `json:"key"`
 			Value string `json:"value"`
 		} `json:"urlencoded"`
+		GraphQL *struct {
+			Query     string `json:"query"`
+			Variables string `json:"variables"`
+		} `json:"graphql"`
 	} `json:"body"`
 }
 
@@ -246,6 +250,7 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 
 	var body string
 	var bodyType history.BodyType
+	var graphqlVariables string
 	if req.Body != nil {
 		switch req.Body.Mode {
 		case "raw":
@@ -263,6 +268,12 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 			}
 			body = sb.String()
 			bodyType = history.BodyForm
+		case "graphql":
+			if req.Body.GraphQL != nil {
+				body = req.Body.GraphQL.Query
+				graphqlVariables = req.Body.GraphQL.Variables
+				bodyType = history.BodyGraphQL
+			}
 		}
 	}
 
@@ -278,11 +289,12 @@ func postmanItemToEntry(item postmanItem) collections.Entry {
 		ID:   uuid.NewString(),
 		Name: name,
 		Request: history.Request{
-			Method:   method,
-			URL:      req.URL.Raw,
-			Headers:  headers,
-			Body:     body,
-			BodyType: bodyType,
+			Method:           method,
+			URL:              req.URL.Raw,
+			Headers:          headers,
+			Body:             body,
+			BodyType:         bodyType,
+			GraphQLVariables: graphqlVariables,
 		},
 	}
 }

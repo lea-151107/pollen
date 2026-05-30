@@ -173,6 +173,43 @@ func TestImportPostman_UrlencodedBody(t *testing.T) {
 	}
 }
 
+func TestImportPostman_GraphQLBody(t *testing.T) {
+	const collection = `{
+	  "info": {"name": "C"},
+	  "item": [{
+	    "name": "Users",
+	    "request": {
+	      "method": "POST",
+	      "url": {"raw": "https://api.example.com/graphql"},
+	      "body": {
+	        "mode": "graphql",
+	        "graphql": {
+	          "query": "query { users { id } }",
+	          "variables": "{\"limit\": 10}"
+	        }
+	      }
+	    }
+	  }]
+	}`
+	path := writeTemp(t, "collection.json", collection)
+	entries, err := Import(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	if got, want := string(entries[0].Request.BodyType), "graphql"; got != want {
+		t.Errorf("BodyType: got %q want %q", got, want)
+	}
+	if got, want := entries[0].Request.Body, "query { users { id } }"; got != want {
+		t.Errorf("Body (query): got %q want %q", got, want)
+	}
+	if got, want := entries[0].Request.GraphQLVariables, `{"limit": 10}`; got != want {
+		t.Errorf("GraphQLVariables: got %q want %q", got, want)
+	}
+}
+
 // TestExportImportRoundtripFormBody is the regression test for the bug where
 // Pollen exported form bodies as {"mode": "urlencoded", "raw": "..."} while
 // the importer only accepted mode=raw, so a form body survived export but

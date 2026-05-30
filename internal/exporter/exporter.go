@@ -35,6 +35,12 @@ type postmanExportBody struct {
 	Mode       string                   `json:"mode"`
 	Raw        string                   `json:"raw,omitempty"`
 	URLEncoded []postmanExportFormParam `json:"urlencoded,omitempty"`
+	GraphQL    *postmanGraphQLBody      `json:"graphql,omitempty"`
+}
+
+type postmanGraphQLBody struct {
+	Query     string `json:"query"`
+	Variables string `json:"variables,omitempty"`
 }
 
 type postmanExportFormParam struct {
@@ -78,12 +84,20 @@ func entryToItem(e collections.Entry) postmanExportItem {
 			"value": h.Value,
 		})
 	}
-	if req.Body != "" {
+	if req.Body != "" || req.BodyType == history.BodyGraphQL {
 		body := &postmanExportBody{}
 		switch req.BodyType {
 		case history.BodyForm:
 			body.Mode = "urlencoded"
 			body.URLEncoded = parseFormPairs(req.Body)
+		case history.BodyGraphQL:
+			// Postman v2.1 stores GraphQL variables as a string in the
+			// "variables" field; pollen already keeps it that way.
+			body.Mode = "graphql"
+			body.GraphQL = &postmanGraphQLBody{
+				Query:     req.Body,
+				Variables: req.GraphQLVariables,
+			}
 		default:
 			body.Mode = "raw"
 			body.Raw = req.Body
