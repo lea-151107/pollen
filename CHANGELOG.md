@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-05-30
+
+### Fixed
+
+- **Auth and Body tab strips wrapped onto a second line at
+  narrow terminal widths.** The auth-type selector
+  (`None / Bearer / Basic / OAuth`) and the body-type selector
+  (`JSON / FORM / RAW / GRAPHQL / MULTIPART`) rendered at a
+  fixed width regardless of the panel size, so shrinking the
+  terminal wrapped the bar and pushed the input fields /
+  editor area out of the panel border. Both selectors now
+  measure the assembled bar with `lipgloss.Width` and, when it
+  would overflow the available width, collapse to the single
+  selected label wrapped in dim `‹ ›` guillemets — matching
+  the `←/→` cycle hint on the line below. The threshold is
+  measured rather than hardcoded against the current tab set,
+  so future tab additions (e.g. v1.6 Authorization Code) do
+  not need follow-up tuning here.
+
+### Notes
+
+- v1.x SemVer-frozen surface is unchanged: this patch only
+  reflows two rendering helpers; no CLI, settings, or
+  keybinding changes.
+- Authorization Code with PKCE remains on track for v1.6.
+
 ## [1.5.2] - 2026-05-30
 
 ### Fixed
