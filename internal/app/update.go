@@ -163,6 +163,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_ = intruderpkg.SaveLastRun(m.intruder.Results())
 		return m, nil
 
+	case ui.IntruderExportMsg:
+		// In-app CSV export: render results via the same exporter the
+		// --export-intruder CLI uses, write to the path the user typed.
+		results := m.intruder.Results()
+		data, err := intruderpkg.CSV(results)
+		if err != nil {
+			m.setStatus(statusError, fmt.Sprintf("intruder export: %v", err))
+			return m, m.statusTick(4 * time.Second)
+		}
+		path := expandHome(msg.Path)
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			m.setStatus(statusError, fmt.Sprintf("intruder export: %v", err))
+			return m, m.statusTick(4 * time.Second)
+		}
+		m.setStatus(statusOK, fmt.Sprintf("exported %d rows to %s", len(results), path))
+		return m, m.statusTick(3 * time.Second)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

@@ -443,6 +443,58 @@ func TestIntruder_DownStopsAtLastRow(t *testing.T) {
 	}
 }
 
+func TestIntruder_ExportPromptOpensWithE(t *testing.T) {
+	in := withResults(sampleResults())
+	in = sendKey(in, "e")
+	if !in.exportMode {
+		t.Errorf("expected exportMode true after 'e' key")
+	}
+	if in.exportInput.Value() == "" {
+		t.Errorf("export input should have a default path suggestion")
+	}
+}
+
+func TestIntruder_ExportPromptIgnoredWhenNoResults(t *testing.T) {
+	in := withResults(nil)
+	in = sendKey(in, "e")
+	if in.exportMode {
+		t.Errorf("export prompt should not open with no results")
+	}
+}
+
+func TestIntruder_ExportPromptEscCancels(t *testing.T) {
+	in := withResults(sampleResults())
+	in = sendKey(in, "e")
+	if !in.exportMode {
+		t.Fatalf("setup: exportMode should be true")
+	}
+	in = sendKey(in, "esc")
+	if in.exportMode {
+		t.Errorf("Esc inside export prompt should cancel")
+	}
+}
+
+func TestIntruder_ExportPromptEnterEmitsCmd(t *testing.T) {
+	in := withResults(sampleResults())
+	in = sendKey(in, "e")
+	in.exportInput.SetValue("/tmp/test.csv")
+	out, cmd := in.Update(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+	if out.exportMode {
+		t.Errorf("Enter should leave export mode")
+	}
+	if cmd == nil {
+		t.Fatalf("Enter with non-empty path should emit a Cmd")
+	}
+	msg := cmd()
+	em, ok := msg.(IntruderExportMsg)
+	if !ok {
+		t.Fatalf("expected IntruderExportMsg, got %T", msg)
+	}
+	if em.Path != "/tmp/test.csv" {
+		t.Errorf("unexpected path: %q", em.Path)
+	}
+}
+
 func TestIntruder_EnterOnEmptyViewIsNoop(t *testing.T) {
 	// Filter excludes everything → Enter should not transition or panic.
 	in := withResults(sampleResults())

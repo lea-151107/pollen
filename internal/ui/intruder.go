@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -96,6 +97,12 @@ type Intruder struct {
 	filterMode bool
 	preset     filterPreset
 
+	// In-app CSV export prompt: `e` opens a path input modal at the
+	// bottom of the results overlay; Enter emits IntruderExportMsg so
+	// the app can write the file (file I/O stays at the app layer).
+	exportMode  bool
+	exportInput textinput.Model
+
 	// cursor is the focused row inside view(); scrollOffset is the
 	// topmost rendered row. up/down moves cursor, scrolling the window
 	// only when the cursor would otherwise leave the visible band.
@@ -120,6 +127,13 @@ type IntruderResultMsg struct {
 // IntruderDoneMsg signals the runner channel has closed.
 type IntruderDoneMsg struct{}
 
+// IntruderExportMsg is emitted when the user confirms an in-app CSV
+// export path. The app handles file I/O; ui.Intruder only collects the
+// path string.
+type IntruderExportMsg struct {
+	Path string
+}
+
 // NewIntruder constructs an Intruder UI with the given default values
 // (taken from settings.json).
 func NewIntruder(defaultConcurrency, defaultDelayMs, defaultMaxReq int) Intruder {
@@ -140,6 +154,10 @@ func NewIntruder(defaultConcurrency, defaultDelayMs, defaultMaxReq int) Intruder
 	max := mk("")
 	max.SetValue(strconv.Itoa(defaultMaxReq))
 
+	exportInput := mk("")
+	exportInput.CharLimit = 512
+	exportInput.Width = 60
+
 	return Intruder{
 		state:         IntruderHidden,
 		mode:          intruder.Sniper,
@@ -151,6 +169,7 @@ func NewIntruder(defaultConcurrency, defaultDelayMs, defaultMaxReq int) Intruder
 		focus:         2, // start at the first payload input (after mode + position-count)
 		sortCol:       sortIndex,
 		sortAsc:       true,
+		exportInput:   exportInput,
 	}
 }
 
@@ -392,6 +411,28 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	// Export-path input mode: similar three-layer Esc/Enter pattern as
+	// filter input. On Enter we emit IntruderExportMsg and let the app
+	// layer write the file.
+	if m.exportMode {
+		switch keyMsg.String() {
+		case "esc":
+			m.exportMode = false
+			m.exportInput.Blur()
+			return m, nil
+		case "enter":
+			path := strings.TrimSpace(m.exportInput.Value())
+			m.exportMode = false
+			m.exportInput.Blur()
+			if path == "" {
+				return m, nil
+			}
+			return m, func() tea.Msg { return IntruderExportMsg{Path: path} }
+		}
+		var cmd tea.Cmd
+		m.exportInput, cmd = m.exportInput.Update(msg)
+		return m, cmd
+	}
 	// Filter-input mode: swallow every key as filter editing until the
 	// user commits (Enter) or aborts (Esc). Mirrors the three-layer
 	// pattern in internal/ui/history.go so users get the same muscle
@@ -500,6 +541,16 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 		m.preset = (m.preset + 1) % numFilterPresets
 		m.scrollOffset = 0
 		m.cursor = 0
+	case "e":
+		// Open in-app CSV export prompt. No-op when there are no
+		// results yet — the prompt would be misleading.
+		if len(m.results) == 0 {
+			return m, nil
+		}
+		m.exportMode = true
+		m.exportInput.SetValue(defaultExportPath())
+		m.exportInput.CursorEnd()
+		return m, m.exportInput.Focus()
 	}
 	// Keep the cursor visible inside the rendered window.
 	if m.cursor < m.scrollOffset {
@@ -546,6 +597,12 @@ func (m Intruder) updateDetail(msg tea.Msg) (Intruder, tea.Cmd) {
 		m.detailScroll = 0
 	}
 	return m, nil
+}
+
+// defaultExportPath returns a timestamped suggestion for the in-app
+// CSV export prompt. The user can edit before committing.
+func defaultExportPath() string {
+	return fmt.Sprintf("intruder-%s.csv", time.Now().Format("20060102-150405"))
 }
 
 // filterDescription returns a short label for the currently active
@@ -842,15 +899,22 @@ func (m Intruder) viewResults() string {
 		rows = append(rows, renderRow(cells, colW, false, statusColor(r), i == m.cursor))
 	}
 
-	hintText := "↑/↓ move  ·  Enter detail  ·  s/S sort  ·  / filter  ·  f preset  ·  Esc abort"
-	if m.filterMode {
+	hintText := "↑/↓ move  ·  Enter detail  ·  s/S sort  ·  / filter  ·  f preset  ·  e export  ·  Esc abort"
+	switch {
+	case m.filterMode:
 		hintText = "type to filter payload  ·  Enter accept  ·  Esc cancel"
+	case m.exportMode:
+		hintText = "type a path to write CSV  ·  Enter save  ·  Esc cancel"
 	}
 	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(hintText)
 
 	bottomLines := []string{hint}
-	if m.filterMode {
+	switch {
+	case m.filterMode:
 		prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("/" + m.filter + "█")
+		bottomLines = append([]string{prompt}, bottomLines...)
+	case m.exportMode:
+		prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("export → " + m.exportInput.View())
 		bottomLines = append([]string{prompt}, bottomLines...)
 	}
 
