@@ -11,7 +11,7 @@ import (
 	"github.com/lea-151107/pollen/internal/history"
 )
 
-var bodyTypes = []history.BodyType{history.BodyJSON, history.BodyForm, history.BodyRaw, history.BodyGraphQL}
+var bodyTypes = []history.BodyType{history.BodyJSON, history.BodyForm, history.BodyRaw, history.BodyGraphQL, history.BodyMultipart}
 
 type Body struct {
 	tabIdx  int
@@ -43,6 +43,8 @@ func NewBody() Body {
 			ta.Placeholder = "raw text body"
 		case history.BodyGraphQL:
 			ta.Placeholder = "query { ... }"
+		case history.BodyMultipart:
+			ta.Placeholder = "name=value\nupload=@/path/to/file\nimg=@/path/x.png;type=image/png"
 		}
 		editors[t] = ta
 	}
