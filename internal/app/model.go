@@ -59,7 +59,7 @@ type Model struct {
 	showCollections bool
 
 	copyMenuOpen      bool
-	helpOpen          bool
+	help              ui.Help
 	envSwitcherOpen   bool
 	envSwitcherCursor int // selected index in env switcher menu
 
@@ -181,6 +181,7 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 		saveCollInput:   saveInput,
 		renameInput:     renameInput,
 		importInput:     importInput,
+		help:            ui.NewHelp(),
 	}
 	m.history.SetEntries(store.Entries())
 	m.collUI.SetEntries(collStore.Entries())

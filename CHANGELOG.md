@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-05-30
+
+### Fixed
+
+- **Ctrl+/ help overlay overflowed standard terminals.** The
+  overlay had grown to 17 sections and ~80 item rows by
+  v1.6.0; rendered as a single centered string, the bottom
+  half clipped off-screen on 24-row terminals and could not
+  be scrolled. The overlay is now a navigable accordion: all
+  section titles are always visible in one column with
+  `▶`/`▼` glyphs, Enter (or Space) toggles the focused
+  section open / closed, ↑/↓ (j/k) move the cursor, g/G
+  jump to first/last, PgUp/PgDn jump by 5, and the viewport
+  follows the cursor so the focused section header is
+  always on screen. Multiple sections can be expanded
+  simultaneously. Global is pre-expanded on open so the
+  first Ctrl+/ press shows content immediately. Esc, q, or
+  Ctrl+/ closes.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged: Ctrl+/, Esc, q
+  still open/close the overlay. The new navigation keys
+  (↑/↓, j/k, Enter, Space, g, G, PgUp, PgDn) are additive
+  inside an overlay that previously accepted only the close
+  keys, so existing muscle memory is preserved.
+
+[1.6.1]: https://github.com/lea-151107/pollen/releases/tag/v1.6.1
+
 ## [1.6.0] - 2026-05-30
 
 ### Added
@@ -44,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OAuth tokens (CC and AC) remain session-only — disk
   persistence is intentionally deferred.
 
+[1.6.0]: https://github.com/lea-151107/pollen/releases/tag/v1.6.0
+
 ## [1.5.3] - 2026-05-30
 
 ### Fixed
@@ -69,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reflows two rendering helpers; no CLI, settings, or
   keybinding changes.
 - Authorization Code with PKCE remains on track for v1.6.
+
+[1.5.3]: https://github.com/lea-151107/pollen/releases/tag/v1.5.3
 
 ## [1.5.2] - 2026-05-30
 
@@ -98,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - v1.x SemVer-frozen surface is unchanged: this patch only
   tightens an existing CLI guard and a rendering helper.
 - Authorization Code with PKCE remains on track for v1.6.
+
+[1.5.2]: https://github.com/lea-151107/pollen/releases/tag/v1.5.2
 
 ## [1.5.1] - 2026-05-30
 
@@ -141,6 +176,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Authorization Code with PKCE is still on track for v1.6, as
   reserved in the v1.5.0 release notes.
 
+[1.5.1]: https://github.com/lea-151107/pollen/releases/tag/v1.5.1
+
 ## [1.5.0] - 2026-05-30
 
 ### Added
@@ -183,6 +220,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names, and OAuth's `g` action key join the v1.x
   SemVer-frozen surface alongside the v1.4 additions.
 
+[1.5.0]: https://github.com/lea-151107/pollen/releases/tag/v1.5.0
+
 ## [1.4.2] - 2026-05-30
 
 ### Fixed
@@ -199,6 +238,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SetError`, extended to cover `searchActive` / `searchQuery`
   / `diffMode` / `diffBody` so the error view replaces the
   body cleanly.
+
+[1.4.2]: https://github.com/lea-151107/pollen/releases/tag/v1.4.2
 
 ## [1.4.1] - 2026-05-30
 
@@ -236,6 +277,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collection import errored. v1.4.1 reads it as
   `json.RawMessage` and normalises into the JSON-string shape
   pollen stores internally.
+
+[1.4.1]: https://github.com/lea-151107/pollen/releases/tag/v1.4.1
 
 ## [1.4.0] - 2026-05-30
 
@@ -299,6 +342,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collection JSON files load unchanged via `omitempty`; the
   field is only populated when `body_type` is `graphql`.
 
+[1.4.0]: https://github.com/lea-151107/pollen/releases/tag/v1.4.0
+
 ## [1.3.2] - 2026-05-30
 
 ### Changed
@@ -334,6 +379,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uses the `"esc"` string literal directly. No user-visible
   change.
 
+[1.3.2]: https://github.com/lea-151107/pollen/releases/tag/v1.3.2
+
 ## [1.3.1] - 2026-05-30
 
 ### Fixed
@@ -357,6 +404,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Pollen now forces a direct connection on parse failure, and
   emits a clear stderr warning at startup so the parse error is
   visible before the first request goes out.
+
+[1.3.1]: https://github.com/lea-151107/pollen/releases/tag/v1.3.1
 
 ## [1.3.0] - 2026-05-29
 
@@ -407,6 +456,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `(waiting for first response…)` message, which previously made
   the run look stuck.
 
+[1.3.0]: https://github.com/lea-151107/pollen/releases/tag/v1.3.0
+
 ## [1.2.1] - 2026-05-29
 
 ### Added
@@ -438,6 +489,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (lipgloss.Width) instead of byte length, so the new ▲ / ▼
   header markers and any CJK characters in payloads or
   content-types display without cutting UTF-8 sequences in half.
+
+[1.2.1]: https://github.com/lea-151107/pollen/releases/tag/v1.2.1
 
 ## [1.2.0] - 2026-05-29
 

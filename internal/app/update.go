@@ -50,6 +50,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.intruder.SetSize(msg.Width, msg.Height)
+		m.help.SetSize(msg.Width, msg.Height)
 		return m, nil
 
 	case sendResultMsg:
@@ -366,11 +367,17 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case m.copyMenuOpen:
 		return m.handleCopyMenu(km)
 
-	case m.helpOpen:
-		if key.Matches(km, m.keys.Help) || km.String() == "esc" || km.String() == "q" {
-			m.helpOpen = false
+	case m.help.IsOpen():
+		// Ctrl+/ closes the overlay regardless of the panel state so
+		// the toggle stays symmetric. Other keys (↑/↓ j/k, Enter, g/G,
+		// PgUp/PgDn, Esc, q) are handled inside the Help component.
+		if key.Matches(km, m.keys.Help) {
+			m.help.Close()
+			return m, nil
 		}
-		return m, nil
+		var cmd tea.Cmd
+		m.help, cmd = m.help.Update(km)
+		return m, cmd
 
 	case m.envSwitcherOpen:
 		return m.handleEnvSwitcher(km)
@@ -378,7 +385,7 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.Help):
 		// Ctrl+/ is a non-printing key, so it doesn't conflict with text
 		// input — no isTextEditingFocus guard needed.
-		m.helpOpen = true
+		m.help.Open(m.keys.HelpSections())
 		return m, nil
 
 	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode(), m.response.FilterActive() || m.response.SearchActive()):

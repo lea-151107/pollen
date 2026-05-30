@@ -77,8 +77,8 @@ func (m Model) View() string {
 	if m.copyMenuOpen {
 		return copyMenuView(m.width, m.height)
 	}
-	if m.helpOpen {
-		return helpView(m.keys, m.width, m.height)
+	if m.help.IsOpen() {
+		return m.help.View()
 	}
 	if m.envSwitcherOpen {
 		return envSwitcherView(m.env.Names(), m.envSwitcherCursor, m.env.Current, m.width, m.height)
@@ -178,73 +178,6 @@ func (m Model) renderStatusBar() string {
 	}
 	content := left + strings.Repeat(" ", gap) + right
 	return style.Render(content)
-}
-
-func helpView(km KeyMap, w, h int) string {
-	body := buildHelpBody(km.HelpSections(), w)
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("205")).
-		Padding(1, 2).
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("230")).
-		Render(body)
-	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
-}
-
-// buildHelpBody renders the help sections, switching to a compact column-aligned
-// layout when the terminal is too narrow for the wide format.
-func buildHelpBody(sections []HelpSection, termWidth int) string {
-	var sb strings.Builder
-	sb.WriteString("Keybindings\n\n")
-
-	if termWidth < 70 {
-		// Compact: each section as "Title:\n  keys  desc" lines, key col 14.
-		for _, sec := range sections {
-			sb.WriteString(sec.Title)
-			sb.WriteString("\n")
-			for _, it := range sec.Items {
-				sb.WriteString("  ")
-				sb.WriteString(padRightHelp(it.Keys, 14))
-				sb.WriteString(it.Desc)
-				sb.WriteString("\n")
-			}
-			sb.WriteString("\n")
-		}
-	} else {
-		// Wide: Global section vertical, others as single-line "Title  k1 d1 · k2 d2".
-		for _, sec := range sections {
-			if sec.Title == "Global" {
-				sb.WriteString("Global\n")
-				for _, it := range sec.Items {
-					sb.WriteString("  ")
-					sb.WriteString(padRightHelp(it.Keys, 22))
-					sb.WriteString(it.Desc)
-					sb.WriteString("\n")
-				}
-				sb.WriteString("\n")
-				continue
-			}
-			sb.WriteString(padRightHelp(sec.Title, 10))
-			parts := make([]string, 0, len(sec.Items))
-			for _, it := range sec.Items {
-				parts = append(parts, it.Keys+" "+it.Desc)
-			}
-			sb.WriteString(strings.Join(parts, "  ·  "))
-			sb.WriteString("\n")
-		}
-	}
-
-	sb.WriteString("\nPress Ctrl+/ or Esc to close")
-	return sb.String()
-}
-
-func padRightHelp(s string, w int) string {
-	rs := []rune(s)
-	if len(rs) >= w {
-		return s + " "
-	}
-	return s + strings.Repeat(" ", w-len(rs))
 }
 
 func envSwitcherView(names []string, cursor int, current string, w, h int) string {
