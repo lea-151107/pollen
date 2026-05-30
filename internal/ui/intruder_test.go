@@ -443,6 +443,29 @@ func TestIntruder_DownStopsAtLastRow(t *testing.T) {
 	}
 }
 
+func TestStatusTint_4xxYellow5xxRed(t *testing.T) {
+	cases := []struct {
+		name string
+		r    intruder.Result
+		want string
+	}{
+		{"2xx no tint", intruder.Result{Status: 200}, ""},
+		{"3xx no tint", intruder.Result{Status: 301}, ""},
+		{"401 yellow", intruder.Result{Status: 401}, "11"},
+		{"404 yellow", intruder.Result{Status: 404}, "11"},
+		{"499 yellow", intruder.Result{Status: 499}, "11"},
+		{"500 red", intruder.Result{Status: 500}, "9"},
+		{"503 red", intruder.Result{Status: 503}, "9"},
+		{"network error red", intruder.Result{Status: 0, Error: "dial tcp"}, "9"},
+	}
+	for _, c := range cases {
+		got := string(statusTint(c.r))
+		if got != c.want {
+			t.Errorf("%s: got tint %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestIntruder_ExportPromptOpensWithE(t *testing.T) {
 	in := withResults(sampleResults())
 	in = sendKey(in, "e")

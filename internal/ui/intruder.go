@@ -861,7 +861,7 @@ func (m Intruder) viewResults() string {
 		colLabels[5],
 	}
 	colW := []int{4, 30, 9, 10, 8, 24}
-	headerRow := renderRow(cols, colW, true, false, false)
+	headerRow := renderRow(cols, colW, true, "", false)
 
 	rows := []string{headerRow}
 	idx := m.view()
@@ -896,7 +896,7 @@ func (m Intruder) viewResults() string {
 			strconv.FormatInt(r.DurationMs, 10),
 			truncate(r.ContentType, colW[5]),
 		}
-		rows = append(rows, renderRow(cells, colW, false, statusColor(r), i == m.cursor))
+		rows = append(rows, renderRow(cells, colW, false, statusTint(r), i == m.cursor))
 	}
 
 	hintText := "↑/↓ move  ·  Enter detail  ·  s/S sort  ·  / filter  ·  f preset  ·  e export  ·  Esc abort"
@@ -1019,7 +1019,7 @@ func (m Intruder) viewDetail() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
-func renderRow(cells []string, widths []int, header, highlight, cursor bool) string {
+func renderRow(cells []string, widths []int, header bool, tint lipgloss.Color, cursor bool) string {
 	parts := make([]string, len(cells))
 	for i, c := range cells {
 		s := c
@@ -1046,8 +1046,8 @@ func renderRow(cells []string, widths []int, header, highlight, cursor bool) str
 	switch {
 	case header:
 		style = style.Foreground(lipgloss.Color("244")).Bold(true)
-	case highlight:
-		style = style.Foreground(lipgloss.Color("9"))
+	case tint != "":
+		style = style.Foreground(tint)
 	}
 	if cursor && !header {
 		style = style.Bold(true)
@@ -1055,15 +1055,19 @@ func renderRow(cells []string, widths []int, header, highlight, cursor bool) str
 	return style.Render(row)
 }
 
-func statusColor(r intruder.Result) bool {
-	// Non-2xx / network errors get the highlight colour.
-	if r.Error != "" {
-		return true
+// statusTint picks a foreground colour for a result row. Empty string
+// means "no tint" (terminal default), preserving the v1.2.x behaviour
+// for 2xx rows. 4xx is yellow and 5xx + network errors are red so the
+// user can distinguish "the server said no" from "the server crashed
+// (or didn't answer)".
+func statusTint(r intruder.Result) lipgloss.Color {
+	if r.Error != "" || r.Status >= 500 {
+		return lipgloss.Color("9") // red
 	}
 	if r.Status >= 400 {
-		return true
+		return lipgloss.Color("11") // yellow
 	}
-	return false
+	return ""
 }
 
 func placeholderFor(k intruder.PayloadKind) string {
