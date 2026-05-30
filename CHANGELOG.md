@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-05-30
+
+### Fixed
+
+- **Status toasts no longer auto-cleared on two specific
+  paths.** The `y` (copy response body) shortcut left
+  "copied as response body" pinned to the status bar
+  indefinitely; every other copy/delete/save path schedules
+  a `statusTick` to dismiss the toast after a few seconds,
+  but the `ResponseCopyMsg` arm of Update was an arm-level
+  omission. Similarly, the auto-refresh-on-send path
+  (v1.6.0) set "refreshing OAuth token…" up front and the
+  success handler then ran the actual send, but
+  `sendResultMsg` never replaced that status — the
+  "refreshing…" string stayed on screen long after the
+  request had completed and the response was visible. Both
+  arms now follow the rest of the codebase's pattern: the
+  copy path returns a 2-second statusTick, and the OAuth
+  refresh success path replaces the in-flight string with
+  "OAuth token refreshed" + a 2-second tick using
+  `tea.Batch` so the send and the tick run independently.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged: no new keybindings,
+  no changes to settings/persistence formats.
+- The OAuth refresh-failure path (already in v1.6.0)
+  remained correct and is untouched.
+
+[1.6.3]: https://github.com/lea-151107/pollen/releases/tag/v1.6.3
+
 ## [1.6.2] - 2026-05-30
 
 ### Fixed
