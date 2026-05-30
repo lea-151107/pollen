@@ -1,6 +1,11 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/lea-151107/pollen/internal/oauth"
+)
 
 func TestAuth_Defaults(t *testing.T) {
 	a := NewAuth()
@@ -33,6 +38,39 @@ func TestAuth_Credentials(t *testing.T) {
 	u, p := a.Credentials()
 	if u != "alice" || p != "secret" {
 		t.Errorf("got %q/%q want alice/secret", u, p)
+	}
+}
+
+func TestAuth_OAuthPreview_RuneSliceMultibyte(t *testing.T) {
+	// "桜" is a 3-byte rune. If the preview chops at byte index 8 it
+	// would split a rune mid-sequence and produce invalid UTF-8.
+	tok := strings.Repeat("桜", 20)
+	a := NewAuth()
+	a.authType = AuthOAuth
+	a.oauthToken = &oauth.Token{AccessToken: tok}
+	got := a.renderOAuthStatus()
+	// 8-rune prefix + ellipsis + 4-rune suffix
+	wantPrefix := strings.Repeat("桜", 8)
+	wantSuffix := strings.Repeat("桜", 4)
+	if !strings.Contains(got, wantPrefix+"…"+wantSuffix) {
+		t.Errorf("preview did not rune-slice multi-byte token:\n got: %q", got)
+	}
+	if !strings.ContainsRune(got, '桜') {
+		t.Errorf("rendered preview lost the multi-byte rune entirely: %q", got)
+	}
+}
+
+func TestAuth_OAuthPreview_ShortToken(t *testing.T) {
+	// Tokens at or below 16 runes are shown verbatim.
+	a := NewAuth()
+	a.authType = AuthOAuth
+	a.oauthToken = &oauth.Token{AccessToken: "short"}
+	got := a.renderOAuthStatus()
+	if !strings.Contains(got, "short") {
+		t.Errorf("short token should appear verbatim, got: %q", got)
+	}
+	if strings.Contains(got, "…") {
+		t.Errorf("short token should not be elided, got: %q", got)
 	}
 }
 
