@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-05-30
+
+### Fixed
+
+- **`Response.SetError` now resets filter / search / diff
+  view state.** `SetResponse` cleared these via `resetFilter`,
+  but `SetError` didn't — so after a successful response with
+  the user having opened the jq filter prompt, the `Ctrl+F`
+  search bar, or `D` diff mode, a subsequent network error
+  would render the red error text **underneath** still-visible
+  prompts and the stale `[diff]` badge. The user couldn't
+  dismiss them either (their key handlers gate on
+  `r.resp != nil`). Mirror the `resetFilter` cleanup inside
+  `SetError`, extended to cover `searchActive` / `searchQuery`
+  / `diffMode` / `diffBody` so the error view replaces the
+  body cleanly.
+
 ## [1.4.1] - 2026-05-30
 
 ### Fixed
