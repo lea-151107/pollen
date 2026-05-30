@@ -25,11 +25,15 @@ func sampleResults() []intruder.Result {
 func withResults(rs []intruder.Result) Intruder {
 	in := NewIntruder(5, 0, 1000)
 	in.results = rs
+	in.state = IntruderResults // most tests want to drive the results table
 	return in
 }
 
 func sendKey(in Intruder, s string) Intruder {
-	out, _ := in.updateResults(tea.KeyMsg(tea.Key{Type: keyTypeFor(s), Runes: []rune(s)}))
+	// Dispatch through Update so the right per-state handler runs (results,
+	// detail, config). Tests can set in.state directly and the key will
+	// land in the correct branch.
+	out, _ := in.Update(tea.KeyMsg(tea.Key{Type: keyTypeFor(s), Runes: []rune(s)}))
 	return out
 }
 
@@ -375,6 +379,78 @@ func TestIntruder_EmptyViewMessageDistinguishesFilter(t *testing.T) {
 	}
 	if strings.Contains(out2, "waiting for first response") {
 		t.Errorf("filter-excludes-all should NOT show waiting message; got:\n%s", out2)
+	}
+}
+
+func TestIntruder_EnterTransitionsToDetail(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	// Default cursor=0 → idx=0 (admin). After Enter, state=IntruderDetail
+	// and detailIdx points at the original result index 0.
+	in = sendKey(in, "enter")
+	if in.state != IntruderDetail {
+		t.Errorf("expected IntruderDetail after Enter, got %v", in.state)
+	}
+	if in.detailIdx != 0 {
+		t.Errorf("expected detailIdx=0, got %d", in.detailIdx)
+	}
+}
+
+func TestIntruder_EnterTargetsCurrentCursor(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in.cursor = 3 // row 3 (test, status 500)
+	in = sendKey(in, "enter")
+	if in.state != IntruderDetail {
+		t.Errorf("expected IntruderDetail")
+	}
+	if in.detailIdx != 3 {
+		t.Errorf("expected detailIdx=3, got %d", in.detailIdx)
+	}
+}
+
+func TestIntruder_DetailEscReturnsToResults(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderDetail
+	in.detailIdx = 2
+	in = sendKey(in, "esc")
+	if in.state != IntruderResults {
+		t.Errorf("expected IntruderResults after Esc in detail, got %v", in.state)
+	}
+}
+
+func TestIntruder_DownAdvancesCursor(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in.height = 20
+	if in.cursor != 0 {
+		t.Fatalf("initial cursor: %d", in.cursor)
+	}
+	in = sendKey(in, "down")
+	if in.cursor != 1 {
+		t.Errorf("expected cursor 1 after Down, got %d", in.cursor)
+	}
+}
+
+func TestIntruder_DownStopsAtLastRow(t *testing.T) {
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in.height = 20
+	in.cursor = len(sampleResults()) - 1
+	in = sendKey(in, "down")
+	if in.cursor != len(sampleResults())-1 {
+		t.Errorf("cursor should not pass last row, got %d", in.cursor)
+	}
+}
+
+func TestIntruder_EnterOnEmptyViewIsNoop(t *testing.T) {
+	// Filter excludes everything → Enter should not transition or panic.
+	in := withResults(sampleResults())
+	in.state = IntruderResults
+	in.filter = "zzz-never-matches"
+	in = sendKey(in, "enter")
+	if in.state != IntruderResults {
+		t.Errorf("Enter on empty view should not change state, got %v", in.state)
 	}
 }
 

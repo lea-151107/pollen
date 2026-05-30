@@ -39,13 +39,19 @@ const (
 	numFilterPresets
 )
 
-// IntruderState is the three-way mode of the Intruder overlay.
+// IntruderState selects which view the Intruder overlay is rendering.
+//
+//	IntruderHidden  the overlay is not shown
+//	IntruderConfig  the config modal (mode / positions / payloads)
+//	IntruderResults the streaming result table
+//	IntruderDetail  one selected result's full response (Enter from results)
 type IntruderState int
 
 const (
 	IntruderHidden IntruderState = iota
 	IntruderConfig
 	IntruderResults
+	IntruderDetail
 )
 
 // maxPositions caps the number of payload positions a Pitchfork or
@@ -90,7 +96,17 @@ type Intruder struct {
 	filterMode bool
 	preset     filterPreset
 
+	// cursor is the focused row inside view(); scrollOffset is the
+	// topmost rendered row. up/down moves cursor, scrolling the window
+	// only when the cursor would otherwise leave the visible band.
+	cursor       int
 	scrollOffset int
+
+	// detailIdx is the m.results index of the row whose response is being
+	// shown in IntruderDetail state. detailScroll is the vertical scroll
+	// position within that detail view.
+	detailIdx    int
+	detailScroll int
 
 	width, height int
 }
@@ -274,6 +290,8 @@ func (m Intruder) Update(msg tea.Msg) (Intruder, tea.Cmd) {
 		return m.updateConfig(msg)
 	case IntruderResults:
 		return m.updateResults(msg)
+	case IntruderDetail:
+		return m.updateDetail(msg)
 	}
 	return m, nil
 }
@@ -414,6 +432,9 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 	if m.scrollOffset > max {
 		m.scrollOffset = max
 	}
+	idx := m.view()
+	rows := len(idx)
+	visible := m.visibleRows()
 	switch keyMsg.String() {
 	case "esc":
 		// Three-layer Esc: an active filter (substring or preset) is
@@ -422,29 +443,44 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 			m.filter = ""
 			m.preset = presetAll
 			m.scrollOffset = 0
+			m.cursor = 0
 			return m, nil
 		}
 		m.CancelRun()
 		m.Close()
 		return m, nil
 	case "up", "k":
-		if m.scrollOffset > 0 {
-			m.scrollOffset--
+		if m.cursor > 0 {
+			m.cursor--
 		}
 	case "down", "j":
-		if m.scrollOffset < max {
-			m.scrollOffset++
+		if m.cursor < rows-1 {
+			m.cursor++
 		}
 	case "pgup":
-		m.scrollOffset -= 10
-		if m.scrollOffset < 0 {
-			m.scrollOffset = 0
+		m.cursor -= 10
+		if m.cursor < 0 {
+			m.cursor = 0
 		}
 	case "pgdown":
-		m.scrollOffset += 10
-		if m.scrollOffset > max {
-			m.scrollOffset = max
+		m.cursor += 10
+		if m.cursor > rows-1 {
+			m.cursor = rows - 1
 		}
+	case "home", "g":
+		m.cursor = 0
+	case "end", "G":
+		if rows > 0 {
+			m.cursor = rows - 1
+		}
+	case "enter":
+		// Push the focused row's response into the detail view.
+		if rows > 0 && m.cursor >= 0 && m.cursor < rows {
+			m.detailIdx = idx[m.cursor]
+			m.detailScroll = 0
+			m.state = IntruderDetail
+		}
+		return m, nil
 	case "s":
 		// Cycle sort column; default direction is ascending for index
 		// (send-order), descending for the numeric metrics so the most
@@ -453,14 +489,61 @@ func (m Intruder) updateResults(msg tea.Msg) (Intruder, tea.Cmd) {
 		m.sortCol = (m.sortCol + 1) % numSortColumns
 		m.sortAsc = m.sortCol == sortIndex
 		m.scrollOffset = 0
+		m.cursor = 0
 	case "S":
 		m.sortAsc = !m.sortAsc
 		m.scrollOffset = 0
+		m.cursor = 0
 	case "/":
 		m.filterMode = true
 	case "f":
 		m.preset = (m.preset + 1) % numFilterPresets
 		m.scrollOffset = 0
+		m.cursor = 0
+	}
+	// Keep the cursor visible inside the rendered window.
+	if m.cursor < m.scrollOffset {
+		m.scrollOffset = m.cursor
+	}
+	if visible > 0 && m.cursor >= m.scrollOffset+visible {
+		m.scrollOffset = m.cursor - visible + 1
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+	if m.scrollOffset > max {
+		m.scrollOffset = max
+	}
+	return m, nil
+}
+
+// updateDetail handles input while the per-result detail view is shown.
+// Esc returns to the results table; the body scrolls with arrows /
+// PgUp / PgDn.
+func (m Intruder) updateDetail(msg tea.Msg) (Intruder, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch keyMsg.String() {
+	case "esc":
+		m.state = IntruderResults
+		return m, nil
+	case "up", "k":
+		if m.detailScroll > 0 {
+			m.detailScroll--
+		}
+	case "down", "j":
+		m.detailScroll++
+	case "pgup":
+		m.detailScroll -= 10
+		if m.detailScroll < 0 {
+			m.detailScroll = 0
+		}
+	case "pgdown":
+		m.detailScroll += 10
+	case "home", "g":
+		m.detailScroll = 0
 	}
 	return m, nil
 }
@@ -585,6 +668,8 @@ func (m Intruder) View() string {
 		return m.viewConfig()
 	case IntruderResults:
 		return m.viewResults()
+	case IntruderDetail:
+		return m.viewDetail()
 	}
 	return ""
 }
@@ -719,7 +804,7 @@ func (m Intruder) viewResults() string {
 		colLabels[5],
 	}
 	colW := []int{4, 30, 9, 10, 8, 24}
-	headerRow := renderRow(cols, colW, true, false)
+	headerRow := renderRow(cols, colW, true, false, false)
 
 	rows := []string{headerRow}
 	idx := m.view()
@@ -754,10 +839,10 @@ func (m Intruder) viewResults() string {
 			strconv.FormatInt(r.DurationMs, 10),
 			truncate(r.ContentType, colW[5]),
 		}
-		rows = append(rows, renderRow(cells, colW, false, statusColor(r)))
+		rows = append(rows, renderRow(cells, colW, false, statusColor(r), i == m.cursor))
 	}
 
-	hintText := "↑/↓ scroll  ·  s/S sort  ·  / filter  ·  f preset  ·  Esc abort"
+	hintText := "↑/↓ move  ·  Enter detail  ·  s/S sort  ·  / filter  ·  f preset  ·  Esc abort"
 	if m.filterMode {
 		hintText = "type to filter payload  ·  Enter accept  ·  Esc cancel"
 	}
@@ -787,7 +872,90 @@ func (m Intruder) viewResults() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
-func renderRow(cells []string, widths []int, header bool, highlight bool) string {
+// viewDetail renders the full HTTP response for the currently focused
+// result row (set by Enter from updateResults). Esc returns to the
+// table; up/down/PgUp/PgDn scroll the body.
+func (m Intruder) viewDetail() string {
+	if m.detailIdx < 0 || m.detailIdx >= len(m.results) {
+		return m.viewResults() // safety fallback
+	}
+	r := m.results[m.detailIdx]
+	bold := lipgloss.NewStyle().Bold(true)
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+
+	statusText := r.StatusText
+	if statusText == "" && r.Status > 0 {
+		statusText = strconv.Itoa(r.Status)
+	}
+	header := bold.Render(fmt.Sprintf("Intruder result #%d — payload: %s", r.Index, truncate(r.Payload, 60)))
+	statusLine := fmt.Sprintf("status: %s   size: %s   duration: %dms   content-type: %s",
+		statusText, formatSize(r.Size), r.DurationMs, r.ContentType)
+	if r.Error != "" {
+		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("network error: " + r.Error)
+	}
+
+	bodyLines := []string{}
+	if r.Response != nil {
+		if len(r.Response.Headers) > 0 {
+			bodyLines = append(bodyLines, dim.Render("--- headers ---"))
+			for _, h := range r.Response.Headers {
+				bodyLines = append(bodyLines, h.Key+": "+h.Value)
+			}
+			bodyLines = append(bodyLines, "")
+		}
+		bodyLines = append(bodyLines, dim.Render("--- body ---"))
+		if r.Response.IsBinary {
+			bodyLines = append(bodyLines, dim.Render(fmt.Sprintf("(binary, %d bytes — see hex preview in the main Response panel)", len(r.Response.BodyBytes))))
+		} else {
+			for _, line := range strings.Split(r.Response.Body, "\n") {
+				bodyLines = append(bodyLines, line)
+			}
+		}
+		if r.Response.Truncated {
+			bodyLines = append(bodyLines, dim.Render(fmt.Sprintf("(body truncated at %d bytes — adjust intruder_response_body_cap_kib to see more)", len(r.Response.BodyBytes))))
+		}
+	} else {
+		bodyLines = append(bodyLines, dim.Render("(no response body retained)"))
+	}
+
+	// Vertical windowing: respect detailScroll and the available height.
+	visible := m.height - 8
+	if visible < 5 {
+		visible = 5
+	}
+	start := m.detailScroll
+	if start < 0 {
+		start = 0
+	}
+	if start > len(bodyLines) {
+		start = len(bodyLines)
+	}
+	end := start + visible
+	if end > len(bodyLines) {
+		end = len(bodyLines)
+	}
+	window := bodyLines[start:end]
+
+	hint := dim.Render("↑/↓ scroll  ·  PgUp/PgDn page  ·  Esc back to results")
+	body := strings.Join([]string{
+		header,
+		statusLine,
+		"",
+		strings.Join(window, "\n"),
+		"",
+		hint,
+	}, "\n")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("230")).
+		Render(body)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func renderRow(cells []string, widths []int, header, highlight, cursor bool) string {
 	parts := make([]string, len(cells))
 	for i, c := range cells {
 		s := c
@@ -805,13 +973,20 @@ func renderRow(cells []string, widths []int, header bool, highlight bool) string
 		}
 		parts[i] = s + strings.Repeat(" ", widths[i]-w)
 	}
-	row := "  " + strings.Join(parts, "  ")
+	prefix := "  "
+	if cursor && !header {
+		prefix = "▶ "
+	}
+	row := prefix + strings.Join(parts, "  ")
 	style := lipgloss.NewStyle()
 	switch {
 	case header:
 		style = style.Foreground(lipgloss.Color("244")).Bold(true)
 	case highlight:
 		style = style.Foreground(lipgloss.Color("9"))
+	}
+	if cursor && !header {
+		style = style.Bold(true)
 	}
 	return style.Render(row)
 }
