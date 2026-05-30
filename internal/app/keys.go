@@ -20,7 +20,6 @@ type KeyMap struct {
 	SwitchEnv   key.Binding
 	Intruder    key.Binding
 	Help        key.Binding
-	Cancel      key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -40,8 +39,7 @@ func DefaultKeyMap() KeyMap {
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
-		Help:   key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
-		Cancel: key.NewBinding(key.WithKeys("esc")),
+		Help: key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
 	}
 }
 
@@ -132,13 +130,25 @@ func (k KeyMap) HelpSections() []HelpSection {
 			{Keys: "Ctrl+F", Desc: "Search in body"},
 			{Keys: "D", Desc: "Toggle diff vs previous"},
 		}},
-		{Title: "Intruder", Items: []HelpItem{
-			{Keys: "{{$payload}}", Desc: "Marker in URL / body / headers, replaced per request"},
-			{Keys: "←/→", Desc: "Switch payload kind in the config modal"},
+		{Title: "Intruder — markers", Items: []HelpItem{
+			{Keys: "{{$payload}}", Desc: "Position 1 marker (alias of {{$payload1}}); use in Sniper"},
+			{Keys: "{{$payload1..N}}", Desc: "Numbered marker for Pitchfork / ClusterBomb (N up to 8)"},
+		}},
+		{Title: "Intruder — config modal", Items: []HelpItem{
+			{Keys: "←/→ on Mode", Desc: "Switch attack mode: Sniper / Pitchfork / ClusterBomb"},
+			{Keys: "←/→ on Positions", Desc: "Adjust position count (Pitchfork / ClusterBomb only)"},
+			{Keys: "←/→ on Payload kind", Desc: "Switch generator: Range / List / Brute / CaseToggle"},
 			{Keys: "Tab / Shift+Tab", Desc: "Move between fields"},
 			{Keys: "Enter", Desc: "Start run"},
-			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll results"},
-			{Keys: "Esc", Desc: "Cancel run / close overlay"},
+			{Keys: "Esc", Desc: "Cancel modal"},
+		}},
+		{Title: "Intruder — results table", Items: []HelpItem{
+			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll"},
+			{Keys: "s", Desc: "Cycle sort column (# → status → size → ms → #)"},
+			{Keys: "S", Desc: "Reverse sort direction on the current column"},
+			{Keys: "/", Desc: "Open payload-substring filter (Enter accept, Esc drop)"},
+			{Keys: "f", Desc: "Cycle status preset: All → Errors → 2xx → All"},
+			{Keys: "Esc", Desc: "Clear filter, or (no filter) cancel run + close overlay"},
 		}},
 		{Title: "Chaining", Items: []HelpItem{
 			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},
