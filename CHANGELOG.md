@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-05-30
+
+### Fixed
+
+- **OAuth Authorization Code callback never arrived when
+  Redirect URI used `[::1]` (IPv6 loopback).** v1.6.0's
+  `parseLoopback` accepted `::1` as a valid loopback host
+  but the actual `net.Listen` call was hard-coded to
+  `127.0.0.1`, so a browser following the IdP's
+  `[::1]:port/callback` redirect hit nothing and the flow
+  timed out after 5 minutes. The listener now binds to the
+  host the user wrote in their Redirect URI
+  (`127.0.0.1` → IPv4-only, `::1` → IPv6-only, `localhost`
+  → whatever the kernel's dual-stack resolves). A new
+  regression test pins the IPv6 end-to-end path and skips
+  cleanly on environments without IPv6 loopback.
+- **Ctrl+/ help overlay's Auth section was stuck on
+  pre-v1.6.0 wording.** The type list showed only
+  "None / Bearer / Basic / OAuth", the `g` row was framed
+  as Client-Credentials-only, and Esc-on-action-row (the
+  cancel for an in-flight OAuth AC flow added in v1.6.0)
+  was undocumented. The section now lists all five types,
+  describes `g` as covering both grants, and includes the
+  Esc cancel.
+
+### Notes
+
+- The `internal/oauth.parseLoopback` helper's signature
+  changed from `(int, string, error)` to
+  `(string, int, string, error)` to expose the parsed
+  host. The function is unexported so this is not a
+  surface change.
+- Comment in `internal/oauth/authcode.go` around
+  `openBrowser` rewritten — the old comment claimed the
+  full constructed URL was printed to stderr / shown in
+  the status line as a recovery path, neither of which
+  was implemented. The functional gap (no recovery from
+  openBrowser failure) is intentional scope-out and is
+  deferred to a future release.
+
+[1.6.2]: https://github.com/lea-151107/pollen/releases/tag/v1.6.2
+
 ## [1.6.1] - 2026-05-30
 
 ### Fixed
