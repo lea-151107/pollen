@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-05-31
+
+### Fixed
+
+- **Settings overlay couldn't be opened with `Ctrl+,` in
+  standard terminals.** v1.7.0 bound the Settings overlay
+  to `Ctrl+,` only, mirroring VS Code. The comma key has
+  no traditional ASCII control code (Ctrl+A..Z map to
+  0x01..0x1A; Ctrl+[, ], ^, _ to 0x1B..0x1F; Ctrl+, sends
+  a plain `,`), and bubbletea v1 doesn't enable the kitty
+  / CSI-u keyboard protocol that would carry the distinct
+  sequence. The binding therefore never fired in xterm,
+  GNOME Terminal, macOS Terminal.app, Windows Terminal, or
+  WSL — every press was seen as a literal comma. The fix
+  adds `Ctrl+P` (ASCII 0x10, universally available) as the
+  primary binding; `Ctrl+,` is kept as an alias for
+  terminals that speak CSI-u so the VS Code muscle memory
+  still works there. The Help overlay's Global section
+  now reads "Ctrl+P / Ctrl+, : Open settings overlay".
+
+### Notes
+
+- The Settings overlay implementation itself is unchanged;
+  only the keybinding that opens it is fixed.
+- v1.x SemVer-frozen surface: additive only — Ctrl+P is a
+  new binding, Ctrl+, remains documented.
+
+[1.7.1]: https://github.com/lea-151107/pollen/releases/tag/v1.7.1
+
 ## [1.7.0] - 2026-05-31
 
 ### Added
