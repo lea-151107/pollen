@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-05-31
+
+### Added
+
+- **OAuth 2.0 Device Authorization Grant (RFC 8628).** The
+  Auth panel gains a sixth type, "OAuth DC", that drives the
+  Device Code flow. Unlike Authorization Code, pollen does
+  not launch a browser — it displays the IdP-issued user
+  code + verification URL for the user to transcribe on
+  whatever device they already have logged in, then polls
+  the token endpoint until authorization completes. Fields:
+  Device URL, Token URL, Client ID, Client Secret
+  (optional), Scope. Pressing `g` starts the flow; Esc
+  cancels in-flight Authorize or Poll. Honors the RFC
+  state machine — `authorization_pending` continues
+  polling, `slow_down` adds 5 seconds to the interval,
+  `access_denied` / `expired_token` are terminal. 30-minute
+  total timeout. This finally makes OAuth usable in
+  WSL/SSH/CI/headless environments where the Authorization
+  Code flow's browser launch isn't viable, structurally
+  resolving the openBrowser-failure recovery item deferred
+  since v1.6.2.
+- **In-TUI Settings overlay (`Ctrl+,`).** All 17 keys from
+  `settings.json` are now editable from inside pollen.
+  Bool fields toggle on Enter; int / float / string fields
+  drop into an editor with range validation. Each commit
+  is applied to the matching runtime global (HTTP timeout,
+  response cap, intruder defaults, proxy URL, …) and
+  written back to `settings.json` immediately, so no
+  restart is needed for most edits. Two fields — CA cert
+  file and Enable cookies — are flagged with a `restart`
+  badge because they're consumed only at startup.
+
+### Notes
+
+- Token persistence handles `device_code` tokens the same
+  as CC and AC entries: keyed by
+  `(token_url, client_id, grant)` in
+  `~/.config/pollen/oauth_tokens.json`. Auto-refresh-on-
+  send applies uniformly across all three grants.
+- v1.x SemVer-frozen surface gains:
+  - `AuthOAuthDC` AuthType
+  - `Ctrl+,` keybinding for the Settings overlay
+- Existing configuration files load unchanged.
+
+[1.7.0]: https://github.com/lea-151107/pollen/releases/tag/v1.7.0
+
 ## [1.6.6] - 2026-05-31
 
 ### Fixed
