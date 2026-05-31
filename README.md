@@ -708,8 +708,10 @@ identically.
 
 ## In-TUI Settings overlay (v1.7.0+)
 
-Pressing `Ctrl+,` opens a modal Settings panel that exposes
-all 17 keys from `settings.json` without leaving pollen.
+Pressing `Ctrl+P` (or `Ctrl+,` on terminals that speak the
+kitty / CSI-u keyboard protocol) opens a modal Settings
+panel that exposes all 17 keys from `settings.json` without
+leaving pollen.
 Boolean fields toggle inline on Enter; integer, float, and
 string fields drop into a textinput editor where Enter
 validates and commits and Esc discards. Validation matches

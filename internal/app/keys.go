@@ -42,8 +42,13 @@ func DefaultKeyMap() KeyMap {
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
-		Help:     key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
-		Settings: key.NewBinding(key.WithKeys("ctrl+,")),
+		Help: key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
+		// Ctrl+P maps to ASCII 0x10 (DLE) and is recognised by every
+		// terminal; Ctrl+, has no traditional ASCII control code and
+		// only reaches the app on modern terminals running the
+		// kitty / CSI-u keyboard protocol. Bind both so muscle memory
+		// from VS Code etc. survives where the terminal supports it.
+		Settings: key.NewBinding(key.WithKeys("ctrl+p", "ctrl+,")),
 	}
 }
 
