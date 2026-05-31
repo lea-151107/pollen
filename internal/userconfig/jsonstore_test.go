@@ -62,6 +62,38 @@ func TestLoadJSON_CorruptSurfacesError(t *testing.T) {
 	}
 }
 
+func TestSaveJSONSecure_Uses0600(t *testing.T) {
+	withTempOverride(t)
+
+	if err := SaveJSONSecure("secret.json", testPayload{Name: "creds"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	path, _ := Path("secret.json")
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if perm := st.Mode().Perm(); perm != 0o600 {
+		t.Errorf("file mode = %o, want 0600", perm)
+	}
+}
+
+func TestSaveJSON_Uses0644(t *testing.T) {
+	withTempOverride(t)
+
+	if err := SaveJSON("plain.json", testPayload{Name: "plain"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	path, _ := Path("plain.json")
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if perm := st.Mode().Perm(); perm != 0o644 {
+		t.Errorf("file mode = %o, want 0644 (regression: should not change with SaveJSONSecure addition)", perm)
+	}
+}
+
 func TestSaveJSON_AtomicViaTmpRename(t *testing.T) {
 	withTempOverride(t)
 
