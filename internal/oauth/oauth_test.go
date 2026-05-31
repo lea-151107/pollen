@@ -142,6 +142,37 @@ func TestRefresh_MissingFieldsValidate(t *testing.T) {
 	}
 }
 
+// TestRefresh_PreservesRefreshTokenWhenIdPOmitsIt pins the v1.6.5 fix:
+// per RFC 6749 §6 the IdP MAY rotate the refresh token but is not
+// required to. Google OAuth, for example, returns the refresh response
+// without a refresh_token field — the client is expected to continue
+// using the one it had. Pre-v1.6.5 pollen silently overwrote the old
+// value with "", which the v1.6.4 disk persistence then wrote out and
+// broke future refreshes.
+func TestRefresh_PreservesRefreshTokenWhenIdPOmitsIt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if got := r.PostForm.Get("refresh_token"); got != "OLD-RT" {
+			t.Errorf("refresh_token sent: %s", got)
+		}
+		// Note: no refresh_token field in the response body.
+		_, _ = w.Write([]byte(`{"access_token":"NEW-AT","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer srv.Close()
+	tok, err := Refresh(context.Background(), RefreshConfig{
+		TokenURL: srv.URL, RefreshToken: "OLD-RT",
+	}, httpDoerForTest())
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if tok.AccessToken != "NEW-AT" {
+		t.Errorf("access_token = %q, want NEW-AT", tok.AccessToken)
+	}
+	if tok.RefreshToken != "OLD-RT" {
+		t.Errorf("refresh_token = %q, want OLD-RT (preserved from input when IdP omits)", tok.RefreshToken)
+	}
+}
+
 func TestToken_IsExpired(t *testing.T) {
 	none := &Token{}
 	if none.IsExpired(0) {

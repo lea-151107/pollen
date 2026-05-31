@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5] - 2026-05-31
+
+### Fixed
+
+- **OAuth Refresh dropped the existing refresh_token when the
+  IdP omitted it from the response.** RFC 6749 §6 lets the
+  authorization server choose whether to rotate the refresh
+  token on each refresh — when it does not (omits the field
+  from the response), the client is expected to continue
+  using the existing one. Google OAuth, for example,
+  documents exactly this behavior, and Microsoft Entra /
+  Auth0 / Okta all support non-rotating configurations.
+  Pollen 1.6.0–1.6.4 silently overwrote the in-memory
+  refresh_token with `""` whenever the IdP omitted it, which
+  was annoying but recoverable (press `g` or re-authorize).
+  v1.6.4's disk persistence made this break permanent: the
+  empty refresh_token landed in
+  `~/.config/pollen/oauth_tokens.json` and every subsequent
+  session lost the ability to auto-refresh. `oauth.Refresh`
+  now fills the returned Token's `RefreshToken` from the
+  caller-supplied config when the IdP omits it, matching
+  the behavior of `golang.org/x/oauth2`.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged. No settings, key
+  bindings, or persistence formats changed.
+- The rotation case (server returns a new refresh_token) is
+  unaffected — the new token is still adopted and persisted.
+- Existing on-disk entries that already lost their
+  refresh_token from earlier sessions cannot be recovered by
+  this fix; affected users need to re-fetch (CC: `g`) or
+  re-authorize (AC: `g`, then browser flow) once. Future
+  refreshes against non-rotating IdPs then survive across
+  sessions as designed.
+
+[1.6.5]: https://github.com/lea-151107/pollen/releases/tag/v1.6.5
+
 ## [1.6.4] - 2026-05-31
 
 ### Added
