@@ -178,6 +178,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(statusError, "OAuth AC: "+msg.Err)
 		return m, m.statusTick(4 * time.Second)
 
+	case ui.AuthOAuthDCAuthorizeMsg:
+		// Device authorization step finished; display the user_code
+		// and chain into the polling loop. Authorize msg carries
+		// ctx + cfg so the poll Cmd reuses both.
+		m.auth.SetOAuthDCAuth(msg.Auth)
+		return m, ui.OAuthDCPollCmd(msg.Ctx, msg.Cfg, msg.Auth.DeviceCode, msg.Auth.Interval)
+
+	case ui.AuthOAuthDCTokenMsg:
+		m.auth.SetOAuthDCToken(msg.Token)
+		m.persistOAuthToken(oauth.GrantDeviceCode)
+		m.setStatus(statusOK, "OAuth DC token acquired")
+		return m, m.statusTick(2 * time.Second)
+
+	case ui.AuthOAuthDCErrorMsg:
+		m.auth.SetOAuthDCError(msg.Err)
+		m.setStatus(statusError, "OAuth DC: "+msg.Err)
+		return m, m.statusTick(4 * time.Second)
+
 	case ui.AuthForgetTokenMsg:
 		if m.tokenStore != nil {
 			if m.tokenStore.Forget(msg.TokenURL, msg.ClientID, msg.Grant) {
@@ -198,6 +216,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.persistOAuthToken(oauth.GrantClientCredentials)
 		case ui.AuthOAuthAC:
 			m.persistOAuthToken(oauth.GrantAuthorizationCode)
+		case ui.AuthOAuthDC:
+			m.persistOAuthToken(oauth.GrantDeviceCode)
 		}
 		// Replace the "refreshing OAuth token…" toast set in the Send
 		// handler with a positive confirmation. Without this, the

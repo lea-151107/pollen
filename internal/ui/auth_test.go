@@ -218,6 +218,42 @@ func TestAuth_ForgetToken_AC_EmitsMessageAndClearsToken(t *testing.T) {
 	}
 }
 
+func TestAuth_OAuthDC_DefaultsAndCursorRange(t *testing.T) {
+	a := NewAuth()
+	a.authType = AuthOAuthDC
+	if got := a.authLastCursor(); got != 6 {
+		t.Errorf("OAuth DC authLastCursor = %d, want 6", got)
+	}
+}
+
+func TestAuth_OAuthDC_ResetClearsFlowState(t *testing.T) {
+	a := NewAuth()
+	a.authType = AuthOAuthDC
+	a.oauthDCDeviceURL.SetValue("https://idp/device")
+	a.oauthDCAuth = &oauth.DeviceAuthorization{UserCode: "WDJB-MJHT"}
+	a.oauthDCToken = &oauth.Token{AccessToken: "AT"}
+	a.oauthDCError = "boom"
+	a.oauthDCPolling = true
+	a.Reset()
+	if a.oauthDCDeviceURL.Value() != "" {
+		t.Errorf("Reset should clear Device URL")
+	}
+	if a.oauthDCAuth != nil || a.oauthDCToken != nil {
+		t.Errorf("Reset should clear DC auth + token")
+	}
+	if a.oauthDCError != "" || a.oauthDCPolling {
+		t.Errorf("Reset should clear DC flow state")
+	}
+}
+
+func TestAuth_View_TabBarIncludesOAuthDC(t *testing.T) {
+	a := NewAuth()
+	got := a.View(140)
+	if !strings.Contains(got, "OAuth DC") {
+		t.Errorf("wide-width tab strip missing OAuth DC, got:\n%s", got)
+	}
+}
+
 func TestAuth_OAuthAC_DefaultsAndCursorRange(t *testing.T) {
 	a := NewAuth()
 	if got := a.oauthACRedirect.Value(); got != "http://127.0.0.1:8765/callback" {
