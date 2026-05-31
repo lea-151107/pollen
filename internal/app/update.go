@@ -52,6 +52,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.intruder.SetSize(msg.Width, msg.Height)
 		m.help.SetSize(msg.Width, msg.Height)
+		m.settingsPanel.SetSize(msg.Width, msg.Height)
 		return m, nil
 
 	case sendResultMsg:
@@ -227,6 +228,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fire independently.
 		m.setStatus(statusOK, "OAuth token refreshed")
 		return m, tea.Batch(m.sendRequest(), m.statusTick(2*time.Second))
+
+	case ui.SettingsAppliedMsg:
+		m.applySettings(msg.Setting)
+		return m, nil
 
 	case authRefreshFailedMsg:
 		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")
@@ -427,6 +432,17 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.help, cmd = m.help.Update(km)
 		return m, cmd
 
+	case m.settingsPanel.IsOpen():
+		// Ctrl+, closes the overlay; everything else delegates to
+		// the SettingsPanel's own Update.
+		if key.Matches(km, m.keys.Settings) {
+			m.settingsPanel.Close()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.settingsPanel, cmd = m.settingsPanel.Update(km)
+		return m, cmd
+
 	case m.envSwitcherOpen:
 		return m.handleEnvSwitcher(km)
 
@@ -434,6 +450,13 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Ctrl+/ is a non-printing key, so it doesn't conflict with text
 		// input — no isTextEditingFocus guard needed.
 		m.help.Open(m.keys.HelpSections())
+		return m, nil
+
+	case key.Matches(km, m.keys.Settings):
+		// Open the Settings overlay with the current on-disk state.
+		// Live edits propagate via SettingsAppliedMsg → applySettings.
+		s, _ := settings.Load()
+		m.settingsPanel.Open(s)
 		return m, nil
 
 	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode(), m.response.FilterActive() || m.response.SearchActive()):

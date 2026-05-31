@@ -22,6 +22,7 @@ type KeyMap struct {
 	SwitchEnv   key.Binding
 	Intruder    key.Binding
 	Help        key.Binding
+	Settings    key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -41,7 +42,8 @@ func DefaultKeyMap() KeyMap {
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
-		Help: key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
+		Help:     key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
+		Settings: key.NewBinding(key.WithKeys("ctrl+,")),
 	}
 }
 
@@ -67,6 +69,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 				{Keys: bindingKeys(k.Intruder), Desc: "Open Intruder (concurrent requests)"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
 				{Keys: bindingKeys(k.Help), Desc: "This help"},
+				{Keys: bindingKeys(k.Settings), Desc: "Open settings overlay"},
 				{Keys: "u", Desc: "Undo last history delete"},
 				{Keys: "Ctrl+L", Desc: "Redraw screen"},
 			},

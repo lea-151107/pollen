@@ -123,6 +123,9 @@ type Model struct {
 	// (neither saved nor consulted for hydration).
 	tokenStore     *oauth.TokenStore
 	persistTokens  bool
+
+	// settingsPanel is the in-TUI settings editor opened with Ctrl+,.
+	settingsPanel ui.SettingsPanel
 }
 
 type pendingUndo struct {
@@ -222,6 +225,7 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	// short-circuits when persistTokens is false.
 	m.tokenStore, _ = oauth.LoadTokenStore()
 	m.auth.SetTokenLookup(m.makeTokenLookup())
+	m.settingsPanel = ui.NewSettingsPanel()
 	if m.responsePanelRatio <= 0 || m.responsePanelRatio >= 1 {
 		m.responsePanelRatio = 0.5
 	}
