@@ -941,28 +941,16 @@ func (a Auth) renderOAuthDCStatus() string {
 	if a.focused && a.cursor == 6 {
 		cursorMark = hi.Render("▶ ")
 	}
+	// Case order matches CC (renderOAuthStatus) and AC
+	// (renderOAuthACStatus): transient state (polling) takes
+	// precedence over error, which takes precedence over the static
+	// token preview. Without this order a re-fetch on an already-
+	// hydrated panel would render the stale "Bearer …" the entire
+	// time the flow is in flight — leaving the user with no chance
+	// to transcribe the user_code on their second device — and a
+	// failed re-fetch would hide the error behind the still-stale
+	// token.
 	switch {
-	case a.oauthDCToken != nil && a.oauthDCToken.AccessToken != "":
-		tok := a.oauthDCToken.AccessToken
-		var preview string
-		runes := []rune(tok)
-		if len(runes) > 16 {
-			preview = string(runes[:8]) + "…" + string(runes[len(runes)-4:])
-		} else {
-			preview = tok
-		}
-		expiry := ""
-		if !a.oauthDCToken.ExpiresAt.IsZero() {
-			remaining := time.Until(a.oauthDCToken.ExpiresAt).Round(time.Second)
-			if remaining > 0 {
-				expiry = fmt.Sprintf("  (expires in %s)", remaining)
-			} else {
-				expiry = "  (expired)"
-			}
-		}
-		return cursorMark + ok.Render("Bearer "+preview) + dim.Render(expiry+"  · press g to re-fetch")
-	case a.oauthDCError != "":
-		return cursorMark + bad.Render("error: "+a.oauthDCError) + dim.Render("  (press g to retry)")
 	case a.oauthDCPolling && a.oauthDCAuth != nil:
 		// Prominent display: visit URL + user_code + countdown.
 		uri := a.oauthDCAuth.VerificationURI
@@ -982,6 +970,27 @@ func (a Auth) renderOAuthDCStatus() string {
 		return strings.Join(lines, "\n  ")
 	case a.oauthDCPolling:
 		return cursorMark + dim.Render("contacting IdP…")
+	case a.oauthDCError != "":
+		return cursorMark + bad.Render("error: "+a.oauthDCError) + dim.Render("  (press g to retry)")
+	case a.oauthDCToken != nil && a.oauthDCToken.AccessToken != "":
+		tok := a.oauthDCToken.AccessToken
+		var preview string
+		runes := []rune(tok)
+		if len(runes) > 16 {
+			preview = string(runes[:8]) + "…" + string(runes[len(runes)-4:])
+		} else {
+			preview = tok
+		}
+		expiry := ""
+		if !a.oauthDCToken.ExpiresAt.IsZero() {
+			remaining := time.Until(a.oauthDCToken.ExpiresAt).Round(time.Second)
+			if remaining > 0 {
+				expiry = fmt.Sprintf("  (expires in %s)", remaining)
+			} else {
+				expiry = "  (expired)"
+			}
+		}
+		return cursorMark + ok.Render("Bearer "+preview) + dim.Render(expiry+"  · press g to re-fetch")
 	default:
 		return cursorMark + dim.Render("press g to start device flow (RFC 8628)")
 	}

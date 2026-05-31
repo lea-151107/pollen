@@ -218,6 +218,48 @@ func TestAuth_ForgetToken_AC_EmitsMessageAndClearsToken(t *testing.T) {
 	}
 }
 
+func TestAuth_OAuthDC_RefetchShowsPollingNotStaleToken(t *testing.T) {
+	// v1.7.2 regression: pre-fix, the renderer's switch put `token != nil`
+	// first, so pressing g to re-fetch left the stale Bearer preview
+	// on screen while the new flow ran in the background. The user
+	// never saw the new user_code and couldn't authorize on a second
+	// device. Pin: a panel with a token AND oauthDCPolling=true
+	// renders the polling state, not the stale Bearer.
+	a := NewAuth()
+	a.authType = AuthOAuthDC
+	a.oauthDCToken = &oauth.Token{AccessToken: "OLDTOKEN1234567890"}
+	a.oauthDCPolling = true // re-fetch in progress, Authorize not yet returned
+	a.oauthDCAuth = nil
+	a.Focus()
+	got := a.View(140)
+	if !strings.Contains(got, "contacting IdP") {
+		t.Errorf("re-fetch should show 'contacting IdP…', got:\n%s", got)
+	}
+	if strings.Contains(got, "Bearer OLDTOKE") {
+		t.Errorf("re-fetch should hide stale Bearer preview, got:\n%s", got)
+	}
+}
+
+func TestAuth_OAuthDC_FailedRefetchShowsError(t *testing.T) {
+	// v1.7.2 regression: same case order bug meant a failed re-fetch
+	// left an error on the panel that was hidden behind the stale
+	// Bearer preview (case order put token first). Pin: token + error
+	// renders the error, not the stale token.
+	a := NewAuth()
+	a.authType = AuthOAuthDC
+	a.oauthDCToken = &oauth.Token{AccessToken: "OLDTOKEN1234567890"}
+	a.oauthDCError = "denied by user"
+	a.oauthDCPolling = false
+	a.Focus()
+	got := a.View(140)
+	if !strings.Contains(got, "error:") || !strings.Contains(got, "denied by user") {
+		t.Errorf("failed re-fetch should surface the error, got:\n%s", got)
+	}
+	if strings.Contains(got, "Bearer OLDTOKE") {
+		t.Errorf("failed re-fetch should hide stale Bearer, got:\n%s", got)
+	}
+}
+
 func TestAuth_OAuthDC_DefaultsAndCursorRange(t *testing.T) {
 	a := NewAuth()
 	a.authType = AuthOAuthDC
