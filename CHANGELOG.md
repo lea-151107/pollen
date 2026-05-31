@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-05-31
+
+### Fixed
+
+- **OAuth DC status renderer hid the user_code during a
+  re-fetch.** The switch in `renderOAuthDCStatus` evaluated
+  the static `token != nil` case before the in-flight
+  polling case, so pressing `g` on a panel that already held
+  a Device Code token rendered the stale "Bearer …" preview
+  for the entire flow. The user never saw the new IdP-issued
+  user code, couldn't authorize on a second device, and the
+  Poll loop ran for 30 minutes returning
+  `authorization_pending` before timing out. A failed
+  re-fetch had the same shape: the error was hidden behind
+  the stale token until the user manually pressed `d` to
+  forget it. The cases are now ordered transient → error →
+  static, matching CC's `renderOAuthStatus` and AC's
+  `renderOAuthACStatus`.
+- **Settings overlay accepted `NaN` in float fields.**
+  `strconv.ParseFloat("NaN", 64)` succeeds with math.NaN(),
+  and IEEE 754 NaN comparisons return false, so the
+  `f <= min || f >= max` range check let NaN slip through.
+  The value landed in `m.responsePanelRatio` and propagated
+  into View's layout math, corrupting column counts for
+  the session. (json.Marshal coincidentally rejects NaN so
+  settings.json stayed clean.) The float validator now
+  rejects NaN and ±Inf via `math.IsNaN` / `math.IsInf`
+  before the range comparison.
+- **Ctrl+P swallowed bubbles textarea / textinput default
+  bindings.** v1.7.1 bound Ctrl+P to the Settings overlay
+  for universal terminal support. The global Settings case
+  in `handleKey` fires before focus delegation, so Ctrl+P
+  never reached `bubbles/textarea.LinePrevious` (default
+  Ctrl+P, used to move the cursor up a line in the Body
+  editor) or `bubbles/textinput.PrevSuggestion` (default
+  Ctrl+P, used to cycle suggestions backwards in Headers).
+  Both surfaces now keep their Ctrl+P behaviour: the
+  Settings binding gets the existing `isTextEditingFocus`
+  guard, same pattern the `u` undo shortcut already uses.
+  Ctrl+P still opens Settings from any non-editing focus.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged: no settings, key
+  bindings, or persistence formats changed; the Settings
+  binding's behaviour is narrowed, not extended.
+- A real but lower-priority data race remains:
+  `applySettings` writes plain (non-atomic) `httpx` package
+  vars that the Send Cmd goroutine reads from `httpx.Do`.
+  CI's `go test -race ./...` doesn't catch it because no
+  test exercises a parallel Send + Settings edit; production
+  occurrences are rare and effects are limited to torn
+  reads of primitive types. A larger refactor (Snapshot
+  pattern or atomic primitives in httpx) is reserved for a
+  future release.
+
+[1.7.2]: https://github.com/lea-151107/pollen/releases/tag/v1.7.2
+
 ## [1.7.1] - 2026-05-31
 
 ### Fixed
