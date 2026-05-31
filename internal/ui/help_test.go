@@ -44,6 +44,15 @@ func keyMsg(s string) tea.KeyMsg {
 	}
 }
 
+// pressDown sends "down" n times. Used to skip past the action buttons
+// that sit above the section list so tests can target section indices.
+func pressDown(h Help, n int) Help {
+	for i := 0; i < n; i++ {
+		h, _ = h.Update(keyMsg("down"))
+	}
+	return h
+}
+
 func TestHelp_Open_PreExpandsFirstSection(t *testing.T) {
 	h := NewHelp()
 	h.Open(sampleSections())
@@ -66,6 +75,9 @@ func TestHelp_Open_PreExpandsFirstSection(t *testing.T) {
 func TestHelp_CursorNavigation_UpDown(t *testing.T) {
 	h := NewHelp()
 	h.Open(sampleSections())
+	nb := len(h.buttons)
+	total := nb + len(sampleSections())
+
 	h, _ = h.Update(keyMsg("down"))
 	if h.cursor != 1 {
 		t.Errorf("after down, cursor = %d, want 1", h.cursor)
@@ -74,14 +86,16 @@ func TestHelp_CursorNavigation_UpDown(t *testing.T) {
 	if h.cursor != 2 {
 		t.Errorf("after j, cursor = %d, want 2", h.cursor)
 	}
-	h, _ = h.Update(keyMsg("down"))
-	if h.cursor != 2 {
+	// Drive to the last focusable row, then assert clamp.
+	h = pressDown(h, total) // overshoot
+	if h.cursor != total-1 {
 		t.Errorf("cursor at last should clamp, got %d", h.cursor)
 	}
-	h, _ = h.Update(keyMsg("up"))
-	h, _ = h.Update(keyMsg("k"))
+	for i := 0; i < total; i++ {
+		h, _ = h.Update(keyMsg("up"))
+	}
 	if h.cursor != 0 {
-		t.Errorf("after up,k cursor = %d, want 0", h.cursor)
+		t.Errorf("after many up, cursor = %d, want 0", h.cursor)
 	}
 	h, _ = h.Update(keyMsg("up"))
 	if h.cursor != 0 {
@@ -92,9 +106,10 @@ func TestHelp_CursorNavigation_UpDown(t *testing.T) {
 func TestHelp_GandShiftG_JumpFirstLast(t *testing.T) {
 	h := NewHelp()
 	h.Open(sampleSections())
+	last := len(h.buttons) + len(sampleSections()) - 1
 	h, _ = h.Update(keyMsg("G"))
-	if h.cursor != len(sampleSections())-1 {
-		t.Errorf("after G, cursor = %d, want %d", h.cursor, len(sampleSections())-1)
+	if h.cursor != last {
+		t.Errorf("after G, cursor = %d, want %d", h.cursor, last)
 	}
 	h, _ = h.Update(keyMsg("g"))
 	if h.cursor != 0 {
@@ -109,6 +124,9 @@ func TestHelp_PgUpPgDn_JumpsFive(t *testing.T) {
 		long[i] = HelpSection{Title: "S", Items: []HelpItem{{Keys: "k", Desc: "d"}}}
 	}
 	h.Open(long)
+	nb := len(h.buttons)
+	last := nb + len(long) - 1
+
 	h, _ = h.Update(keyMsg("pgdown"))
 	if h.cursor != 5 {
 		t.Errorf("after pgdown, cursor = %d, want 5", h.cursor)
@@ -124,7 +142,7 @@ func TestHelp_PgUpPgDn_JumpsFive(t *testing.T) {
 	// Clamp at edges.
 	h, _ = h.Update(keyMsg("pgdown"))
 	h, _ = h.Update(keyMsg("pgdown"))
-	if h.cursor != len(long)-1 {
+	if h.cursor != last {
 		t.Errorf("pgdown should clamp at last, got %d", h.cursor)
 	}
 }
@@ -132,8 +150,9 @@ func TestHelp_PgUpPgDn_JumpsFive(t *testing.T) {
 func TestHelp_EnterTogglesExpanded(t *testing.T) {
 	h := NewHelp()
 	h.Open(sampleSections())
-	// Move to History (collapsed by default).
-	h, _ = h.Update(keyMsg("down"))
+	nb := len(h.buttons)
+	// Skip past buttons, then move to History section (collapsed by default).
+	h = pressDown(h, nb+1)
 	if h.expanded[1] {
 		t.Fatalf("section 1 should start collapsed")
 	}
@@ -250,7 +269,8 @@ func TestHelp_View_EmptyWhenClosed(t *testing.T) {
 func TestHelp_Reopen_PreservesExpansionWhenSameCount(t *testing.T) {
 	h := NewHelp()
 	h.Open(sampleSections())
-	h, _ = h.Update(keyMsg("down"))
+	nb := len(h.buttons)
+	h = pressDown(h, nb+1)           // skip past buttons to History section
 	h, _ = h.Update(keyMsg("enter")) // expand History
 	h.Close()
 	h.Open(sampleSections())
@@ -259,5 +279,106 @@ func TestHelp_Reopen_PreservesExpansionWhenSameCount(t *testing.T) {
 	}
 	if h.cursor != 0 {
 		t.Errorf("Re-open should reset cursor to 0, got %d", h.cursor)
+	}
+}
+
+func TestHelp_Button_OpenSettings_EmitsMsgAndCloses(t *testing.T) {
+	h := NewHelp()
+	h.Open(sampleSections())
+	if h.cursor != 0 {
+		t.Fatalf("cursor should start at first button (0), got %d", h.cursor)
+	}
+	h, cmd := h.Update(keyMsg("enter"))
+	if h.IsOpen() {
+		t.Errorf("activating the Settings button should close the help overlay")
+	}
+	if cmd == nil {
+		t.Fatalf("Settings button should return a tea.Cmd that emits HelpOpenSettingsMsg")
+	}
+	if _, ok := cmd().(HelpOpenSettingsMsg); !ok {
+		t.Errorf("expected HelpOpenSettingsMsg, got %T", cmd())
+	}
+}
+
+func TestHelp_Button_Reset_EntersConfirmMode(t *testing.T) {
+	h := NewHelp()
+	h.Open(sampleSections())
+	// Move from button 0 (open settings) to button 1 (reset).
+	h, _ = h.Update(keyMsg("down"))
+	h, cmd := h.Update(keyMsg("enter"))
+	if !h.IsOpen() {
+		t.Errorf("reset button should keep the overlay open (confirm view)")
+	}
+	if !h.confirming {
+		t.Errorf("reset button should switch into confirming mode")
+	}
+	if cmd != nil {
+		t.Errorf("reset button should not emit a Msg until y is pressed")
+	}
+}
+
+func TestHelp_Confirm_YExecutesAndCloses(t *testing.T) {
+	h := NewHelp()
+	h.Open(sampleSections())
+	h, _ = h.Update(keyMsg("down"))  // to reset button
+	h, _ = h.Update(keyMsg("enter")) // enter confirm
+	h, cmd := h.Update(keyMsg("y"))
+	if h.IsOpen() {
+		t.Errorf("y should close the help overlay")
+	}
+	if h.confirming {
+		t.Errorf("y should leave confirming mode")
+	}
+	if cmd == nil {
+		t.Fatalf("y should emit HelpResetSettingsMsg")
+	}
+	if _, ok := cmd().(HelpResetSettingsMsg); !ok {
+		t.Errorf("expected HelpResetSettingsMsg, got %T", cmd())
+	}
+}
+
+func TestHelp_Confirm_NCancels(t *testing.T) {
+	h := NewHelp()
+	h.Open(sampleSections())
+	h, _ = h.Update(keyMsg("down"))
+	h, _ = h.Update(keyMsg("enter"))
+	h, cmd := h.Update(keyMsg("n"))
+	if !h.IsOpen() {
+		t.Errorf("n should keep overlay open")
+	}
+	if h.confirming {
+		t.Errorf("n should leave confirming mode")
+	}
+	if cmd != nil {
+		t.Errorf("n should not emit any Msg")
+	}
+}
+
+func TestHelp_Confirm_EscCancels(t *testing.T) {
+	h := NewHelp()
+	h.Open(sampleSections())
+	h, _ = h.Update(keyMsg("down"))
+	h, _ = h.Update(keyMsg("enter"))
+	h, _ = h.Update(keyMsg("esc"))
+	if !h.IsOpen() {
+		t.Errorf("Esc in confirm view should cancel, not close")
+	}
+	if h.confirming {
+		t.Errorf("Esc should leave confirming mode")
+	}
+}
+
+func TestHelp_View_ConfirmModeShowsPrompt(t *testing.T) {
+	h := NewHelp()
+	h.Open(sampleSections())
+	h.SetSize(80, 30)
+	h, _ = h.Update(keyMsg("down"))
+	h, _ = h.Update(keyMsg("enter"))
+	got := h.View()
+	if !strings.Contains(got, "Reset settings") {
+		t.Errorf("confirm view should show its title, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Y:") || !strings.Contains(got, "N") {
+		t.Errorf("confirm view should show Y / N hints, got:\n%s", got)
 	}
 }

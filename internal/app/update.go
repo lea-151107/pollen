@@ -233,6 +233,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applySettings(msg.Setting)
 		return m, nil
 
+	case ui.HelpOpenSettingsMsg:
+		// "Open Settings" button in the Ctrl+/ help overlay.
+		// Help.Update already cleared its open flag before emitting
+		// this msg, so we only need to open Settings here.
+		s, _ := settings.Load()
+		m.settingsPanel.Open(s)
+		return m, nil
+
+	case ui.HelpResetSettingsMsg:
+		// "Reset settings to defaults" button in the help overlay,
+		// after y confirmation. applySettings handles both runtime
+		// dispatch and disk persistence (s.Save). Re-seed the
+		// Settings panel if it happens to be open so the user sees
+		// the new values.
+		def := settings.Defaults()
+		m.applySettings(def)
+		if m.settingsPanel.IsOpen() {
+			m.settingsPanel.Open(def)
+		}
+		m.setStatus(statusOK, "settings reset to defaults")
+		return m, m.statusTick(2 * time.Second)
+
 	case authRefreshFailedMsg:
 		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")
 		return m, m.statusTick(5 * time.Second)

@@ -42,6 +42,27 @@ type Settings struct {
 	OAuthPersistTokens bool `json:"oauth_persist_tokens"`
 }
 
+// Defaults returns a *Settings populated with the canonical default values,
+// matching what Load() yields when no settings.json is present. Used by both
+// startup (via Load) and the in-TUI "reset to defaults" action so the two
+// stay in lockstep.
+func Defaults() *Settings {
+	return &Settings{
+		OAuthPersistTokens:         true,
+		ResponsePanelRatio:         0.5,
+		RequestTimeoutSecs:         60,
+		MaxResponseMiB:             32,
+		HistoryLimit:               200,
+		TextPreviewKiB:             100,
+		SidebarMaxWidth:            40,
+		HexDumpKiB:                 4,
+		IntruderConcurrency:        5,
+		IntruderDelayMs:            0,
+		IntruderMaxRequests:        1000,
+		IntruderResponseBodyCapKiB: 64,
+	}
+}
+
 // Load reads settings from disk. Missing or corrupt files fall back to
 // defaults — a bad disk state never blocks startup.
 func Load() (*Settings, error) {
