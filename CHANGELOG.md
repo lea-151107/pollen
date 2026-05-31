@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.6] - 2026-05-31
+
+### Fixed
+
+- **GitHub Actions CI was red on `windows-latest` since
+  v1.6.4.** The three regression tests added with the v1.6.4
+  disk-persistence work pinned exact POSIX file mode bits
+  (0o600 for `SaveJSONSecure` / TokenStore, 0o644 for
+  `SaveJSON`) via `os.Stat(...).Mode().Perm()`. On Windows,
+  Go's `os.WriteFile` reports 0o666 regardless of the
+  requested mode because permissions are ACL-based — so
+  every `go test -race ./...` run on the windows-latest
+  matrix job failed for two releases. The underlying
+  production code (`SaveJSON` / `SaveJSONSecure`) is correct
+  on POSIX and Linux/macOS CI jobs continue to verify that.
+  The Windows-only mode assertions now skip with a
+  `runtime.GOOS == "windows"` guard and an inline comment
+  explaining the asymmetry.
+
+### Notes
+
+- No production code changed. Windows file protection is
+  still provided by the user-profile default ACL pollen's
+  config directory inherits.
+- This patch's CI run is itself the verification — six
+  matrix jobs need to pass.
+
+[1.6.6]: https://github.com/lea-151107/pollen/releases/tag/v1.6.6
+
 ## [1.6.5] - 2026-05-31
 
 ### Fixed
