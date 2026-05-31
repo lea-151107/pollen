@@ -452,9 +452,15 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.help.Open(m.keys.HelpSections())
 		return m, nil
 
-	case key.Matches(km, m.keys.Settings):
+	case key.Matches(km, m.keys.Settings) && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode(), m.response.FilterActive() || m.response.SearchActive()):
 		// Open the Settings overlay with the current on-disk state.
 		// Live edits propagate via SettingsAppliedMsg → applySettings.
+		// The isTextEditingFocus guard keeps Ctrl+P out of the global
+		// path while the user is typing in a textinput / textarea so
+		// bubbles' default Ctrl+P bindings (textarea LinePrevious,
+		// textinput PrevSuggestion) still work. Settings can be
+		// opened with Ctrl+P from any non-editing focus or via the
+		// CSI-u-only Ctrl+, alias.
 		s, _ := settings.Load()
 		m.settingsPanel.Open(s)
 		return m, nil
