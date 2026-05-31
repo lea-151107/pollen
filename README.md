@@ -587,8 +587,8 @@ type is selected. Errors (network, bad credentials, missing
 `access_token`) surface inline with the server's `error_description`
 when present.
 
-Tokens are session-only — pollen does not write them to disk in
-v1.5.0.
+Tokens fetched here are written to disk by default since v1.6.4
+— see *Token persistence* below.
 
 ## OAuth 2.0 Authorization Code with PKCE
 
@@ -633,7 +633,38 @@ the new token transparently. Refresh failure aborts the send and
 the status line prompts you to re-authorize. Skipped silently for
 non-OAuth auth types or tokens without a `refresh_token`.
 
-Tokens are session-only — pollen does not write them to disk.
+### Token persistence (v1.6.4+)
+
+Successful OAuth fetches (CC and AC) and refreshes are written
+to `~/.config/pollen/oauth_tokens.json` with **mode 0600**
+(owner read/write only). On next start, when the Auth panel
+contains a matching Token URL + Client ID, pollen automatically
+hydrates the access token + refresh token from disk — for
+Authorization Code that means no second browser dance, and for
+Client Credentials it means the in-memory cache survives a
+restart.
+
+Entries are keyed by `(token_url, client_id, grant)`. CC and AC
+tokens for the same IdP/client coexist. Scope is stored in each
+entry but not part of the key; re-fetching with a different
+scope overwrites the prior entry.
+
+To forget the persisted token for the current Token URL + Client
+ID, press `d` on the Auth panel's action row (the same row
+where `g` triggers a fetch / refresh). The on-disk entry is
+removed and the in-memory token is cleared. A status toast
+confirms.
+
+To disable persistence entirely, set
+`"oauth_persist_tokens": false` in `settings.json`. The default
+is `true` (opt-out). When disabled, pollen neither reads nor
+writes the token file — the file may still exist on disk from a
+prior session, but it's left untouched.
+
+The auto-refresh-on-send path from v1.6.0 still works: a
+hydrated-but-expired token gets refreshed transparently before
+the next Send and the refreshed token is written back to
+`oauth_tokens.json`.
 
 ## Versioning and stability
 
