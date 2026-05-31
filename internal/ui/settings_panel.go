@@ -7,6 +7,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -375,6 +376,14 @@ func builtinSettingsFields() []settingField {
 				f, err := strconv.ParseFloat(raw, 64)
 				if err != nil {
 					return fmt.Errorf("not a number")
+				}
+				// IEEE 754 NaN compares false against everything, so
+				// it sneaks past the range check below. Reject NaN
+				// and Inf explicitly before the comparison so a typed
+				// "NaN" can't land in settings.json and break layout
+				// math that uses the value.
+				if math.IsNaN(f) || math.IsInf(f, 0) {
+					return fmt.Errorf("not a finite number")
 				}
 				if f <= min || f >= max {
 					return fmt.Errorf("must be > %.2f and < %.2f", min, max)

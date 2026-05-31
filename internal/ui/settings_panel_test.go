@@ -196,6 +196,52 @@ func TestSettings_IntEdit_AppliesValidValue(t *testing.T) {
 	}
 }
 
+func TestSettings_FloatEdit_RejectsNaN(t *testing.T) {
+	// v1.7.2 regression: NaN comparisons in IEEE 754 are always
+	// false, so a raw "NaN" string would slip past the range check
+	// and land in settings.json, breaking layout math that uses the
+	// ratio.
+	p := NewSettingsPanel()
+	p.Open(sampleSettings())
+	p, _ = p.Update(settingsKeyMsg("G")) // Response panel ratio (last field)
+	p, _ = p.Update(settingsKeyMsg("enter"))
+	p.editor.SetValue("NaN")
+	p, cmd := p.Update(settingsKeyMsg("enter"))
+	if cmd != nil {
+		t.Errorf("NaN must not commit")
+	}
+	if !p.editing || p.editErr == "" {
+		t.Errorf("editor should stay open with a validation error")
+	}
+	if p.draft.ResponsePanelRatio != 0.5 {
+		t.Errorf("draft must not be polluted with NaN, got %v", p.draft.ResponsePanelRatio)
+	}
+}
+
+func TestSettings_FloatEdit_RejectsPosInf(t *testing.T) {
+	p := NewSettingsPanel()
+	p.Open(sampleSettings())
+	p, _ = p.Update(settingsKeyMsg("G"))
+	p, _ = p.Update(settingsKeyMsg("enter"))
+	p.editor.SetValue("Inf")
+	p, cmd := p.Update(settingsKeyMsg("enter"))
+	if cmd != nil {
+		t.Errorf("+Inf must not commit")
+	}
+}
+
+func TestSettings_FloatEdit_RejectsNegInf(t *testing.T) {
+	p := NewSettingsPanel()
+	p.Open(sampleSettings())
+	p, _ = p.Update(settingsKeyMsg("G"))
+	p, _ = p.Update(settingsKeyMsg("enter"))
+	p.editor.SetValue("-Inf")
+	p, cmd := p.Update(settingsKeyMsg("enter"))
+	if cmd != nil {
+		t.Errorf("-Inf must not commit")
+	}
+}
+
 func TestSettings_FloatEdit_ValidatesRatio(t *testing.T) {
 	p := NewSettingsPanel()
 	p.Open(sampleSettings())
