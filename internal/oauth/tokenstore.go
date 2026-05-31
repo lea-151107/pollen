@@ -12,6 +12,11 @@ const TokenStoreFile = "oauth_tokens.json"
 const (
 	GrantClientCredentials = "client_credentials"
 	GrantAuthorizationCode = "authorization_code"
+	// GrantDeviceCode keys Device Authorization Grant tokens
+	// (RFC 8628). Short string rather than the URN
+	// "urn:ietf:params:oauth:grant-type:device_code" to keep the
+	// on-disk file compact and aligned with the other grant slugs.
+	GrantDeviceCode = "device_code"
 )
 
 // StoredToken is one entry in the on-disk token store. It carries
