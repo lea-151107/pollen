@@ -16,6 +16,7 @@ import (
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/importer"
 	intruderpkg "github.com/lea-151107/pollen/internal/intruder"
+	"github.com/lea-151107/pollen/internal/oauth"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 )
@@ -157,6 +158,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ui.AuthOAuthTokenMsg:
 		m.auth.SetOAuthToken(msg.Token)
+		m.persistOAuthToken(oauth.GrantClientCredentials)
 		m.setStatus(statusOK, "OAuth token acquired")
 		return m, m.statusTick(2 * time.Second)
 
@@ -167,6 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ui.AuthOAuthACTokenMsg:
 		m.auth.SetOAuthACToken(msg.Token)
+		m.persistOAuthToken(oauth.GrantAuthorizationCode)
 		m.setStatus(statusOK, "OAuth AC token acquired")
 		return m, m.statusTick(2 * time.Second)
 
@@ -175,8 +178,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(statusError, "OAuth AC: "+msg.Err)
 		return m, m.statusTick(4 * time.Second)
 
+	case ui.AuthForgetTokenMsg:
+		if m.tokenStore != nil {
+			if m.tokenStore.Forget(msg.TokenURL, msg.ClientID, msg.Grant) {
+				_ = m.tokenStore.Save()
+			}
+		}
+		m.setStatus(statusOK, "OAuth token forgotten")
+		return m, m.statusTick(2 * time.Second)
+
 	case authRefreshedSendMsg:
 		m.auth.ApplyRefreshedToken(msg.Token)
+		// Persist the freshly-refreshed token so the next pollen
+		// start picks up the new ExpiresAt instead of refreshing
+		// from a stale on-disk entry. Routes to the CC or AC slot
+		// based on the active auth type.
+		switch m.auth.Type() {
+		case ui.AuthOAuth:
+			m.persistOAuthToken(oauth.GrantClientCredentials)
+		case ui.AuthOAuthAC:
+			m.persistOAuthToken(oauth.GrantAuthorizationCode)
+		}
 		// Replace the "refreshing OAuth token…" toast set in the Send
 		// handler with a positive confirmation. Without this, the
 		// "refreshing…" string would persist on screen past the

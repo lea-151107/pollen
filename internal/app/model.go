@@ -14,6 +14,7 @@ import (
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/intruder"
+	"github.com/lea-151107/pollen/internal/oauth"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 )
@@ -115,6 +116,13 @@ type Model struct {
 	intruder             ui.Intruder
 	intruderCh           <-chan intruder.Result
 	intruderBodyCapBytes int // forwarded into RunConfig.ResponseBodyCap
+
+	// tokenStore is the on-disk OAuth token persistence layer. nil only
+	// in tests that bypass New(). persistTokens mirrors the Settings flag
+	// of the same intent — when false, the store is left untouched
+	// (neither saved nor consulted for hydration).
+	tokenStore     *oauth.TokenStore
+	persistTokens  bool
 }
 
 type pendingUndo struct {
@@ -193,6 +201,9 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	// Load per-panel settings (defaults applied inside settings.Load).
 	intruderConc, intruderDelay, intruderMax := 5, 0, 1000
 	intruderBodyCapBytes := 64 * 1024
+	// persistTokens defaults to true (opt-out). Stays at true if the
+	// settings load below fails entirely.
+	m.persistTokens = true
 	if s, err := settings.Load(); err == nil {
 		m.responsePanelRatio = s.ResponsePanelRatio
 		m.sidebarMaxWidth = s.SidebarMaxWidth
@@ -200,9 +211,17 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 		intruderDelay = s.IntruderDelayMs
 		intruderMax = s.IntruderMaxRequests
 		intruderBodyCapBytes = s.IntruderResponseBodyCapKiB * 1024
+		m.persistTokens = s.OAuthPersistTokens
 	}
 	m.intruderBodyCapBytes = intruderBodyCapBytes
 	m.intruder = ui.NewIntruder(intruderConc, intruderDelay, intruderMax)
+
+	// OAuth token persistence. LoadTokenStore returns an empty store
+	// on missing or corrupt files, so startup never blocks. The Auth
+	// panel's lookup is set unconditionally; the lookup func itself
+	// short-circuits when persistTokens is false.
+	m.tokenStore, _ = oauth.LoadTokenStore()
+	m.auth.SetTokenLookup(m.makeTokenLookup())
 	if m.responsePanelRatio <= 0 || m.responsePanelRatio >= 1 {
 		m.responsePanelRatio = 0.5
 	}
@@ -260,6 +279,47 @@ func (m *Model) setStatus(kind statusKind, msg string) {
 	m.statusMsg = msg
 	m.statusGen++
 	m.pendingUndo = nil
+}
+
+// makeTokenLookup returns the function injected into ui.Auth so the
+// panel can hydrate persisted OAuth tokens without depending on the
+// oauth.TokenStore directly. Honors persistTokens — when disabled,
+// the lookup short-circuits to (nil, false) so on-disk entries are
+// neither read nor offered.
+func (m *Model) makeTokenLookup() ui.TokenLookup {
+	return func(tokenURL, clientID, grant string) (*oauth.Token, bool) {
+		if !m.persistTokens || m.tokenStore == nil {
+			return nil, false
+		}
+		st, ok := m.tokenStore.Find(tokenURL, clientID, grant)
+		if !ok {
+			return nil, false
+		}
+		return &oauth.Token{
+			AccessToken:  st.AccessToken,
+			TokenType:    st.TokenType,
+			RefreshToken: st.RefreshToken,
+			ExpiresAt:    st.ExpiresAt,
+			Scope:        st.Scope,
+		}, true
+	}
+}
+
+// persistOAuthToken upserts the current Auth panel's token into the
+// on-disk store and writes it. Best-effort: any error is swallowed
+// because the in-memory token remains usable for the session.
+// No-op when persistTokens is false or there's no current OAuth
+// token to record.
+func (m *Model) persistOAuthToken(grant string) {
+	if !m.persistTokens || m.tokenStore == nil {
+		return
+	}
+	tok, cfg, ok := m.auth.CurrentOAuthToken()
+	if !ok {
+		return
+	}
+	m.tokenStore.Put(cfg.TokenURL, cfg.ClientID, cfg.Scope, grant, tok)
+	_ = m.tokenStore.Save()
 }
 
 // statusTick returns a command that clears the current status after ttl,
