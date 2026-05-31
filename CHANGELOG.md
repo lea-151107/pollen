@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.4] - 2026-05-31
+
+### Added
+
+- **OAuth token persistence to disk.** Successful OAuth
+  fetches (Client Credentials and Authorization Code) and
+  refreshes are now written to
+  `~/.config/pollen/oauth_tokens.json` (mode 0600). On next
+  start, when the Auth panel's Token URL + Client ID match
+  a stored entry, the access + refresh token are hydrated
+  automatically — no second browser dance for AC, no
+  in-memory cache lost across sessions for CC. Entries are
+  keyed by `(token_url, client_id, grant)` so CC and AC
+  tokens for the same IdP/client coexist. The hydrated-but-
+  expired path goes through the existing v1.6.0
+  auto-refresh-on-send.
+- **`d` on the Auth panel action row forgets the persisted
+  token** for the current Token URL + Client ID. The
+  on-disk entry is removed and the in-memory token is
+  cleared; a status toast confirms.
+- **`oauth_persist_tokens` setting** (default `true`).
+  Users who prefer session-only OAuth set this to `false`
+  in `settings.json`; when disabled, pollen neither reads
+  nor writes the token file.
+- **`userconfig.SaveJSONSecure`** internal helper writes
+  JSON with 0o600 mode (owner read/write only) via the
+  same atomic temp+rename pattern as `SaveJSON`. Existing
+  `SaveJSON` callers (settings, env, history, collections)
+  continue to use 0o644.
+
+### Notes
+
+- v1.x SemVer-frozen surface: only additive changes —
+  a new settings field, a new keybinding (`d` on the OAuth
+  action row), and a new on-disk file. Existing
+  configurations load unchanged. The Auth panel's tab
+  strip is unchanged.
+- `oauth_persist_tokens` defaults to `true` because the
+  feature exists to remove friction from the OAuth dance;
+  the file mode (0600) and `d` forget shortcut give
+  security-conscious users two opt-out paths.
+- Token encryption at rest is intentionally not provided;
+  0600 in `~/.config` follows the same posture as
+  `gh`, `gcloud`, and `aws-cli`.
+
+[1.6.4]: https://github.com/lea-151107/pollen/releases/tag/v1.6.4
+
 ## [1.6.3] - 2026-05-30
 
 ### Fixed

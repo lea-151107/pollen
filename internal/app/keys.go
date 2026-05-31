@@ -102,6 +102,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 			{Keys: "↓ / ↑", Desc: "Move between fields"},
 			{Keys: "Esc/↑", Desc: "Back to type selector"},
 			{Keys: "g", Desc: "OAuth: fetch (CC) / authorize (AC) / refresh"},
+			{Keys: "d on action row", Desc: "OAuth: forget the persisted token for current URL+ID"},
 			{Keys: "Esc on action row", Desc: "OAuth AC: cancel in-flight authorization"},
 		}},
 		{Title: "Dynamic variables", Items: []ui.HelpItem{

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/lea-151107/pollen/internal/oauth"
 )
 
@@ -105,6 +107,114 @@ func TestAuth_OAuthPreview_ShortToken(t *testing.T) {
 	}
 	if strings.Contains(got, "…") {
 		t.Errorf("short token should not be elided, got: %q", got)
+	}
+}
+
+func TestAuth_TokenLookup_HydratesCC(t *testing.T) {
+	a := NewAuth()
+	a.SetType(AuthOAuth)
+	a.oauthTokenURL.SetValue("https://idp.example.com/token")
+	a.oauthClientID.SetValue("myclient")
+	a.SetTokenLookup(func(url, id, grant string) (*oauth.Token, bool) {
+		if url == "https://idp.example.com/token" && id == "myclient" && grant == "client_credentials" {
+			return &oauth.Token{AccessToken: "PERSISTED"}, true
+		}
+		return nil, false
+	})
+	// Drive Update through any key to trigger tail hydration.
+	a.Focus()
+	a, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	tok := a.OAuthToken()
+	if tok == nil || tok.AccessToken != "PERSISTED" {
+		t.Errorf("expected CC hydration from lookup, got token=%v", tok)
+	}
+}
+
+func TestAuth_TokenLookup_HydratesAC(t *testing.T) {
+	a := NewAuth()
+	a.SetType(AuthOAuthAC)
+	a.oauthTokenURL.SetValue("https://idp.example.com/token")
+	a.oauthClientID.SetValue("myclient")
+	a.SetTokenLookup(func(url, id, grant string) (*oauth.Token, bool) {
+		if grant == "authorization_code" {
+			return &oauth.Token{AccessToken: "PERSISTED_AC"}, true
+		}
+		return nil, false
+	})
+	a.Focus()
+	a, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	tok := a.OAuthACToken()
+	if tok == nil || tok.AccessToken != "PERSISTED_AC" {
+		t.Errorf("expected AC hydration, got token=%v", tok)
+	}
+}
+
+func TestAuth_TokenLookup_DoesNotHydrateWhenURLOrIDEmpty(t *testing.T) {
+	a := NewAuth()
+	a.SetType(AuthOAuth)
+	// Token URL set, Client ID empty → lookup should not fire.
+	a.oauthTokenURL.SetValue("https://idp.example.com/token")
+	called := false
+	a.SetTokenLookup(func(url, id, grant string) (*oauth.Token, bool) {
+		called = true
+		return nil, false
+	})
+	a.Focus()
+	a, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if called {
+		t.Errorf("lookup should be skipped when ClientID is empty")
+	}
+}
+
+func TestAuth_ForgetToken_EmitsMessageAndClearsToken(t *testing.T) {
+	a := NewAuth()
+	a.SetType(AuthOAuth)
+	a.oauthTokenURL.SetValue("https://idp.example.com/token")
+	a.oauthClientID.SetValue("myclient")
+	a.oauthToken = &oauth.Token{AccessToken: "AT"}
+	a.cursor = 5
+	a.Focus()
+
+	a2, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if a2.OAuthToken() != nil {
+		t.Errorf("token should be cleared in-memory after `d`")
+	}
+	if cmd == nil {
+		t.Fatalf("expected a Cmd emitting AuthForgetTokenMsg")
+	}
+	msg := cmd()
+	forget, ok := msg.(AuthForgetTokenMsg)
+	if !ok {
+		t.Fatalf("expected AuthForgetTokenMsg, got %T", msg)
+	}
+	if forget.TokenURL != "https://idp.example.com/token" || forget.ClientID != "myclient" || forget.Grant != "client_credentials" {
+		t.Errorf("forget message has wrong fields: %+v", forget)
+	}
+}
+
+func TestAuth_ForgetToken_AC_EmitsMessageAndClearsToken(t *testing.T) {
+	a := NewAuth()
+	a.SetType(AuthOAuthAC)
+	a.oauthTokenURL.SetValue("https://idp.example.com/token")
+	a.oauthClientID.SetValue("myclient")
+	a.oauthACToken = &oauth.Token{AccessToken: "AT"}
+	a.cursor = 7
+	a.Focus()
+
+	a2, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if a2.OAuthACToken() != nil {
+		t.Errorf("AC token should be cleared in-memory after `d`")
+	}
+	if cmd == nil {
+		t.Fatalf("expected a Cmd")
+	}
+	msg := cmd()
+	forget, ok := msg.(AuthForgetTokenMsg)
+	if !ok {
+		t.Fatalf("expected AuthForgetTokenMsg, got %T", msg)
+	}
+	if forget.Grant != "authorization_code" {
+		t.Errorf("grant = %q, want authorization_code", forget.Grant)
 	}
 }
 

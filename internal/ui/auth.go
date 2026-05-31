@@ -56,6 +56,15 @@ type AuthOAuthACTokenMsg struct{ Token *oauth.Token }
 // user cancellation.
 type AuthOAuthACErrorMsg struct{ Err string }
 
+// AuthForgetTokenMsg asks the app layer to drop the persisted OAuth
+// token matching (TokenURL, ClientID, Grant). Emitted from the
+// Auth panel's action row when the user presses `d`.
+type AuthForgetTokenMsg struct {
+	TokenURL string
+	ClientID string
+	Grant    string // "client_credentials" or "authorization_code"
+}
+
 // Auth holds the user-selected authentication scheme and its inputs. When
 // non-None, the app's buildAuthFromPanel returns the Authorization header
 // value to inject.
@@ -98,7 +107,19 @@ type Auth struct {
 	//   OAuth AC: 0=type, 1=Auth URL, 2=Token URL, 3=ID, 4=secret,
 	//             5=Redirect URI, 6=scope, 7=action
 	cursor int
+
+	// lookup is consulted on each Update to hydrate the current
+	// OAuth or OAuth AC token from on-disk storage when the panel
+	// is empty but TokenURL + ClientID are set. Injected by the
+	// app layer; left nil for tests that don't exercise
+	// persistence.
+	lookup TokenLookup
 }
+
+// TokenLookup is the signature the app injects via SetTokenLookup
+// so the Auth panel can hydrate cached tokens without depending on
+// the on-disk store directly.
+type TokenLookup func(tokenURL, clientID, grant string) (*oauth.Token, bool)
 
 func NewAuth() Auth {
 	token := textinput.New()
@@ -154,6 +175,13 @@ func (a *Auth) SetType(t AuthType) {
 	a.cursor = 0
 	a.refreshFocus()
 }
+
+// SetTokenLookup injects the persistence-aware lookup callback. The
+// Auth panel calls it on each Update tail to hydrate an empty
+// oauthToken / oauthACToken when TokenURL + ClientID match a stored
+// entry. The app layer is responsible for honoring the
+// OAuthPersistTokens setting inside the callback.
+func (a *Auth) SetTokenLookup(fn TokenLookup) { a.lookup = fn }
 
 // Token returns the Bearer token raw input (trimmed of surrounding whitespace).
 // Meaningful only when Type() == AuthBearer.
@@ -379,7 +407,14 @@ func indexOfAuth(t AuthType) int {
 	return 0
 }
 
-func (a Auth) Update(msg tea.Msg) (Auth, tea.Cmd) {
+func (a Auth) Update(msg tea.Msg) (out Auth, cmd tea.Cmd) {
+	// Hydration runs against the final returned value so any path
+	// through Update (type cycle, cursor move, input edit, early
+	// return) gets a consistent chance to pull a persisted token
+	// into the panel. `return a, nil` copies `a` into the named
+	// `out`, then this defer mutates `out` directly.
+	defer func() { out.tryHydrateToken() }()
+
 	if !a.focused {
 		return a, nil
 	}
@@ -491,7 +526,32 @@ func (a Auth) Update(msg tea.Msg) (Auth, tea.Cmd) {
 		return a, oauthACFetchCmd(ctx, cfg)
 	}
 
-	var cmd tea.Cmd
+	// Forget the persisted token for the current CC/AC config.
+	// Lives on the action row so it never conflicts with text input
+	// in the URL / ID / secret / scope fields.
+	if a.authType == AuthOAuth && a.cursor == 5 && (km.String() == "d" || km.String() == "D") {
+		tokenURL := strings.TrimSpace(a.oauthTokenURL.Value())
+		clientID := strings.TrimSpace(a.oauthClientID.Value())
+		if tokenURL == "" || clientID == "" {
+			return a, nil
+		}
+		a.oauthToken = nil
+		return a, func() tea.Msg {
+			return AuthForgetTokenMsg{TokenURL: tokenURL, ClientID: clientID, Grant: "client_credentials"}
+		}
+	}
+	if a.authType == AuthOAuthAC && a.cursor == 7 && (km.String() == "d" || km.String() == "D") {
+		tokenURL := strings.TrimSpace(a.oauthTokenURL.Value())
+		clientID := strings.TrimSpace(a.oauthClientID.Value())
+		if tokenURL == "" || clientID == "" {
+			return a, nil
+		}
+		a.oauthACToken = nil
+		return a, func() tea.Msg {
+			return AuthForgetTokenMsg{TokenURL: tokenURL, ClientID: clientID, Grant: "authorization_code"}
+		}
+	}
+
 	switch {
 	case a.authType == AuthBearer && a.cursor == 1:
 		a.token, cmd = a.token.Update(msg)
@@ -521,6 +581,38 @@ func (a Auth) Update(msg tea.Msg) (Auth, tea.Cmd) {
 		a.oauthScope, cmd = a.oauthScope.Update(msg)
 	}
 	return a, cmd
+}
+
+// tryHydrateToken consults the injected lookup callback to restore
+// a token from disk when (TokenURL + ClientID) match a stored entry
+// for the active grant and the panel's in-memory token slot is
+// empty. Called at the tail of every Update so a user typing the
+// matching URL+ID gets the cached "Bearer …" preview without an
+// extra keypress. No-op when lookup is nil (tests, or persistence
+// disabled).
+func (a *Auth) tryHydrateToken() {
+	if a.lookup == nil {
+		return
+	}
+	tokenURL := strings.TrimSpace(a.oauthTokenURL.Value())
+	clientID := strings.TrimSpace(a.oauthClientID.Value())
+	if tokenURL == "" || clientID == "" {
+		return
+	}
+	switch a.authType {
+	case AuthOAuth:
+		if a.oauthToken == nil && !a.oauthFetching {
+			if tok, ok := a.lookup(tokenURL, clientID, "client_credentials"); ok {
+				a.oauthToken = tok
+			}
+		}
+	case AuthOAuthAC:
+		if a.oauthACToken == nil && !a.oauthACFetching {
+			if tok, ok := a.lookup(tokenURL, clientID, "authorization_code"); ok {
+				a.oauthACToken = tok
+			}
+		}
+	}
 }
 
 // renderOAuthStatus formats the action / status line that sits below
@@ -761,11 +853,19 @@ func (a Auth) View(width int) string {
 		case a.cursor == 0:
 			hint = "  ←/→: type  ·  Enter/↓: edit"
 		case a.authType == AuthOAuth && a.cursor == 5:
-			hint = "  g: fetch token (Client Credentials)  ·  Esc/↑: back"
+			if a.oauthToken != nil {
+				hint = "  g: refresh  ·  d: forget saved token  ·  Esc/↑: back"
+			} else {
+				hint = "  g: fetch token (Client Credentials)  ·  Esc/↑: back"
+			}
 		case a.authType == AuthOAuthAC && a.cursor == 7 && a.oauthACFetching:
 			hint = "  Esc: cancel"
 		case a.authType == AuthOAuthAC && a.cursor == 7:
-			hint = "  g: authorize (Auth Code + PKCE)  ·  Esc/↑: back"
+			if a.oauthACToken != nil {
+				hint = "  g: re-authorize  ·  d: forget saved token  ·  Esc/↑: back"
+			} else {
+				hint = "  g: authorize (Auth Code + PKCE)  ·  Esc/↑: back"
+			}
 		default:
 			hint = "  Esc/↑: back to type  ·  ↓: next field"
 		}

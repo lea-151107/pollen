@@ -29,6 +29,48 @@ func TestLoad_MissingFileReturnsDefault(t *testing.T) {
 	}
 }
 
+func TestLoad_OAuthPersistTokens_DefaultsTrue(t *testing.T) {
+	withTempConfig(t)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !s.OAuthPersistTokens {
+		t.Error("default should have OAuthPersistTokens=true (opt-out)")
+	}
+}
+
+func TestLoad_OAuthPersistTokens_ExplicitFalse(t *testing.T) {
+	withTempConfig(t)
+	// Write a file with the field explicitly set to false.
+	path, _ := userconfig.Path("settings.json")
+	if err := os.WriteFile(path, []byte(`{"oauth_persist_tokens": false}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.OAuthPersistTokens {
+		t.Error("explicit false should be respected")
+	}
+}
+
+func TestLoad_OAuthPersistTokens_CorruptFallsBackToDefault(t *testing.T) {
+	withTempConfig(t)
+	path, _ := userconfig.Path("settings.json")
+	if err := os.WriteFile(path, []byte("not json"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load on corrupt should not error, got %v", err)
+	}
+	if !s.OAuthPersistTokens {
+		t.Error("corrupt settings should fall back to default-true OAuthPersistTokens")
+	}
+}
+
 func TestSaveLoad_Roundtrip(t *testing.T) {
 	withTempConfig(t)
 	s := &Settings{SkipTLSVerify: true}

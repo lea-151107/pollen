@@ -35,6 +35,17 @@ func LoadJSON(name string, dst any) (loaded bool, err error) {
 // (via a sibling .tmp file + rename). The parent directory is created if
 // missing.
 func SaveJSON(name string, src any) error {
+	return saveJSON(name, src, 0o644)
+}
+
+// SaveJSONSecure writes src as indented JSON with 0600 mode (owner read/
+// write only). Use for credential files like oauth_tokens.json. Otherwise
+// identical to SaveJSON.
+func SaveJSONSecure(name string, src any) error {
+	return saveJSON(name, src, 0o600)
+}
+
+func saveJSON(name string, src any, mode os.FileMode) error {
 	path, err := Path(name)
 	if err != nil {
 		return err
@@ -47,7 +58,7 @@ func SaveJSON(name string, src any) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, mode); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
