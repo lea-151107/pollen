@@ -22,9 +22,10 @@ const (
 	AuthBasic
 	AuthOAuth   // = Client Credentials (legacy name kept for v1.x compat)
 	AuthOAuthAC // = Authorization Code with PKCE
+	AuthOAuthDC // = Device Authorization Grant (RFC 8628)
 )
 
-var authTypes = []AuthType{AuthNone, AuthBearer, AuthBasic, AuthOAuth, AuthOAuthAC}
+var authTypes = []AuthType{AuthNone, AuthBearer, AuthBasic, AuthOAuth, AuthOAuthAC, AuthOAuthDC}
 
 func (t AuthType) String() string {
 	switch t {
@@ -36,6 +37,8 @@ func (t AuthType) String() string {
 		return "OAuth"
 	case AuthOAuthAC:
 		return "OAuth AC"
+	case AuthOAuthDC:
+		return "OAuth DC"
 	default:
 		return "None"
 	}
@@ -62,8 +65,26 @@ type AuthOAuthACErrorMsg struct{ Err string }
 type AuthForgetTokenMsg struct {
 	TokenURL string
 	ClientID string
-	Grant    string // "client_credentials" or "authorization_code"
+	Grant    string // "client_credentials", "authorization_code", or "device_code"
 }
+
+// AuthOAuthDCAuthorizeMsg signals that the Device Code Authorize
+// step succeeded — the panel should display the user_code +
+// verification_uri while the app pushes the second stage (Poll)
+// onto the runtime using the embedded ctx/cfg.
+type AuthOAuthDCAuthorizeMsg struct {
+	Auth *oauth.DeviceAuthorization
+	Ctx  context.Context
+	Cfg  oauth.DeviceCodeConfig
+}
+
+// AuthOAuthDCTokenMsg signals a successful Device Code token
+// acquisition (polling completed with a 200 response).
+type AuthOAuthDCTokenMsg struct{ Token *oauth.Token }
+
+// AuthOAuthDCErrorMsg signals a Device Code flow failure or
+// user cancellation.
+type AuthOAuthDCErrorMsg struct{ Err string }
 
 // Auth holds the user-selected authentication scheme and its inputs. When
 // non-None, the app's buildAuthFromPanel returns the Authorization header
@@ -99,6 +120,16 @@ type Auth struct {
 	oauthACStatus   string             // user-visible progress line
 	oauthACCancel   context.CancelFunc // non-nil while a flow is in flight; Esc invokes
 
+	// OAuth Device Authorization Grant (RFC 8628) fields. DC has one
+	// DC-specific endpoint (DeviceURL); Token URL / Client ID /
+	// Secret / Scope are shared with CC and AC above.
+	oauthDCDeviceURL textinput.Model
+	oauthDCAuth      *oauth.DeviceAuthorization // user_code + verification_uri to display
+	oauthDCToken     *oauth.Token
+	oauthDCError     string
+	oauthDCPolling   bool
+	oauthDCCancel    context.CancelFunc // non-nil during Authorize or PollToken
+
 	focused bool
 	// cursor positions per type:
 	//   Bearer:   0=type, 1=token
@@ -106,6 +137,8 @@ type Auth struct {
 	//   OAuth:    0=type, 1=URL, 2=ID, 3=secret, 4=scope, 5=action
 	//   OAuth AC: 0=type, 1=Auth URL, 2=Token URL, 3=ID, 4=secret,
 	//             5=Redirect URI, 6=scope, 7=action
+	//   OAuth DC: 0=type, 1=Device URL, 2=Token URL, 3=ID, 4=secret,
+	//             5=scope, 6=action
 	cursor int
 
 	// lookup is consulted on each Update to hydrate the current
@@ -151,16 +184,17 @@ func NewAuth() Auth {
 	redirect.SetValue("http://127.0.0.1:8765/callback")
 
 	return Auth{
-		authType:        AuthNone,
-		token:           token,
-		user:            user,
-		pass:            pass,
-		oauthTokenURL:   mkInput("https://issuer.example.com/oauth/token", false),
-		oauthClientID:   mkInput("client id", false),
-		oauthSecret:     mkInput("client secret", true),
-		oauthScope:      mkInput("space-separated scopes (optional)", false),
-		oauthACAuthURL:  mkInput("https://issuer.example.com/oauth/authorize", false),
-		oauthACRedirect: redirect,
+		authType:         AuthNone,
+		token:            token,
+		user:             user,
+		pass:             pass,
+		oauthTokenURL:    mkInput("https://issuer.example.com/oauth/token", false),
+		oauthClientID:    mkInput("client id", false),
+		oauthSecret:      mkInput("client secret", true),
+		oauthScope:       mkInput("space-separated scopes (optional)", false),
+		oauthACAuthURL:   mkInput("https://issuer.example.com/oauth/authorize", false),
+		oauthACRedirect:  redirect,
+		oauthDCDeviceURL: mkInput("https://issuer.example.com/oauth/device", false),
 	}
 }
 
@@ -216,6 +250,34 @@ func (a *Auth) SetOAuthError(err string) {
 // (or nil). Used by buildAuthFromPanel when AuthOAuthAC is selected.
 func (a Auth) OAuthACToken() *oauth.Token { return a.oauthACToken }
 
+// OAuthDCToken returns the currently-fetched Device Code token (or
+// nil). Used by buildAuthFromPanel when AuthOAuthDC is selected.
+func (a Auth) OAuthDCToken() *oauth.Token { return a.oauthDCToken }
+
+// SetOAuthDCAuth stashes the device authorization response so the
+// panel can display the user_code + verification_uri while polling
+// is in flight.
+func (a *Auth) SetOAuthDCAuth(d *oauth.DeviceAuthorization) {
+	a.oauthDCAuth = d
+}
+
+// SetOAuthDCToken stores a freshly-acquired Device Code token.
+func (a *Auth) SetOAuthDCToken(t *oauth.Token) {
+	a.oauthDCToken = t
+	a.oauthDCError = ""
+	a.oauthDCPolling = false
+	a.oauthDCAuth = nil
+	a.oauthDCCancel = nil
+}
+
+// SetOAuthDCError records a failed Device Code flow.
+func (a *Auth) SetOAuthDCError(err string) {
+	a.oauthDCError = err
+	a.oauthDCPolling = false
+	a.oauthDCAuth = nil
+	a.oauthDCCancel = nil
+}
+
 // SetOAuthACToken stores a freshly-fetched Authorization Code token.
 func (a *Auth) SetOAuthACToken(t *oauth.Token) {
 	a.oauthACToken = t
@@ -262,19 +324,32 @@ func (a Auth) CurrentOAuthToken() (*oauth.Token, oauth.RefreshConfig, bool) {
 			RefreshToken: a.oauthACToken.RefreshToken,
 			Scope:        strings.TrimSpace(a.oauthScope.Value()),
 		}, true
+	case AuthOAuthDC:
+		if a.oauthDCToken == nil {
+			return nil, oauth.RefreshConfig{}, false
+		}
+		return a.oauthDCToken, oauth.RefreshConfig{
+			TokenURL:     strings.TrimSpace(a.oauthTokenURL.Value()),
+			ClientID:     strings.TrimSpace(a.oauthClientID.Value()),
+			ClientSecret: strings.TrimSpace(a.oauthSecret.Value()),
+			RefreshToken: a.oauthDCToken.RefreshToken,
+			Scope:        strings.TrimSpace(a.oauthScope.Value()),
+		}, true
 	}
 	return nil, oauth.RefreshConfig{}, false
 }
 
 // ApplyRefreshedToken replaces the currently-active OAuth token with a
-// freshly-refreshed one. Routes to the CC or AC slot depending on
-// authType.
+// freshly-refreshed one. Routes to the CC, AC, or DC slot depending
+// on authType.
 func (a *Auth) ApplyRefreshedToken(t *oauth.Token) {
 	switch a.authType {
 	case AuthOAuth:
 		a.oauthToken = t
 	case AuthOAuthAC:
 		a.oauthACToken = t
+	case AuthOAuthDC:
+		a.oauthDCToken = t
 	}
 }
 
@@ -302,6 +377,15 @@ func (a *Auth) Reset() {
 		a.oauthACCancel()
 		a.oauthACCancel = nil
 	}
+	a.oauthDCDeviceURL.SetValue("")
+	a.oauthDCAuth = nil
+	a.oauthDCToken = nil
+	a.oauthDCError = ""
+	a.oauthDCPolling = false
+	if a.oauthDCCancel != nil {
+		a.oauthDCCancel()
+		a.oauthDCCancel = nil
+	}
 	a.cursor = 0
 	a.refreshFocus()
 }
@@ -322,6 +406,7 @@ func (a *Auth) Blur() {
 	a.oauthScope.Blur()
 	a.oauthACAuthURL.Blur()
 	a.oauthACRedirect.Blur()
+	a.oauthDCDeviceURL.Blur()
 }
 
 func (a Auth) Focused() bool { return a.focused }
@@ -336,6 +421,7 @@ func (a *Auth) refreshFocus() {
 	a.oauthScope.Blur()
 	a.oauthACAuthURL.Blur()
 	a.oauthACRedirect.Blur()
+	a.oauthDCDeviceURL.Blur()
 	if !a.focused {
 		return
 	}
@@ -379,6 +465,20 @@ func (a *Auth) refreshFocus() {
 			a.oauthScope.Focus()
 		}
 		// cursor == 7 is the action row.
+	case AuthOAuthDC:
+		switch a.cursor {
+		case 1:
+			a.oauthDCDeviceURL.Focus()
+		case 2:
+			a.oauthTokenURL.Focus()
+		case 3:
+			a.oauthClientID.Focus()
+		case 4:
+			a.oauthSecret.Focus()
+		case 5:
+			a.oauthScope.Focus()
+		}
+		// cursor == 6 is the action row.
 	}
 }
 
@@ -394,6 +494,8 @@ func (a Auth) authLastCursor() int {
 		return 5
 	case AuthOAuthAC:
 		return 7
+	case AuthOAuthDC:
+		return 6
 	}
 	return 0
 }
@@ -455,6 +557,12 @@ func (a Auth) Update(msg tea.Msg) (out Auth, cmd tea.Cmd) {
 		// AuthOAuthACErrorMsg.
 		if a.authType == AuthOAuthAC && a.cursor == 7 && a.oauthACFetching && a.oauthACCancel != nil {
 			a.oauthACCancel()
+			return a, nil
+		}
+		// Same for DC: Esc on the action row during an in-flight
+		// Authorize or Poll cancels.
+		if a.authType == AuthOAuthDC && a.cursor == 6 && a.oauthDCPolling && a.oauthDCCancel != nil {
+			a.oauthDCCancel()
 			return a, nil
 		}
 		a.cursor = 0
@@ -526,6 +634,35 @@ func (a Auth) Update(msg tea.Msg) (out Auth, cmd tea.Cmd) {
 		return a, oauthACFetchCmd(ctx, cfg)
 	}
 
+	// OAuth DC action: G on the action row kicks off the device
+	// authorization request. The Cmd returns AuthOAuthDCAuthorizeMsg
+	// carrying the device + user codes and the ctx/cfg needed for
+	// the follow-up polling stage. Esc on the action row during
+	// the flow cancels via oauthDCCancel (handled in the Esc block
+	// above).
+	if a.authType == AuthOAuthDC && a.cursor == 6 && (km.String() == "g" || km.String() == "G") {
+		if a.oauthDCPolling {
+			return a, nil
+		}
+		cfg := oauth.DeviceCodeConfig{
+			DeviceURL:    strings.TrimSpace(a.oauthDCDeviceURL.Value()),
+			TokenURL:     strings.TrimSpace(a.oauthTokenURL.Value()),
+			ClientID:     strings.TrimSpace(a.oauthClientID.Value()),
+			ClientSecret: strings.TrimSpace(a.oauthSecret.Value()),
+			Scope:        strings.TrimSpace(a.oauthScope.Value()),
+		}
+		if cfg.DeviceURL == "" || cfg.TokenURL == "" || cfg.ClientID == "" {
+			a.oauthDCError = "fill in Device URL, Token URL, and Client ID first"
+			return a, nil
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		a.oauthDCPolling = true
+		a.oauthDCError = ""
+		a.oauthDCAuth = nil
+		a.oauthDCCancel = cancel
+		return a, oauthDCAuthorizeCmd(ctx, cfg)
+	}
+
 	// Forget the persisted token for the current CC/AC config.
 	// Lives on the action row so it never conflicts with text input
 	// in the URL / ID / secret / scope fields.
@@ -549,6 +686,17 @@ func (a Auth) Update(msg tea.Msg) (out Auth, cmd tea.Cmd) {
 		a.oauthACToken = nil
 		return a, func() tea.Msg {
 			return AuthForgetTokenMsg{TokenURL: tokenURL, ClientID: clientID, Grant: "authorization_code"}
+		}
+	}
+	if a.authType == AuthOAuthDC && a.cursor == 6 && (km.String() == "d" || km.String() == "D") {
+		tokenURL := strings.TrimSpace(a.oauthTokenURL.Value())
+		clientID := strings.TrimSpace(a.oauthClientID.Value())
+		if tokenURL == "" || clientID == "" {
+			return a, nil
+		}
+		a.oauthDCToken = nil
+		return a, func() tea.Msg {
+			return AuthForgetTokenMsg{TokenURL: tokenURL, ClientID: clientID, Grant: "device_code"}
 		}
 	}
 
@@ -578,6 +726,16 @@ func (a Auth) Update(msg tea.Msg) (out Auth, cmd tea.Cmd) {
 	case a.authType == AuthOAuthAC && a.cursor == 5:
 		a.oauthACRedirect, cmd = a.oauthACRedirect.Update(msg)
 	case a.authType == AuthOAuthAC && a.cursor == 6:
+		a.oauthScope, cmd = a.oauthScope.Update(msg)
+	case a.authType == AuthOAuthDC && a.cursor == 1:
+		a.oauthDCDeviceURL, cmd = a.oauthDCDeviceURL.Update(msg)
+	case a.authType == AuthOAuthDC && a.cursor == 2:
+		a.oauthTokenURL, cmd = a.oauthTokenURL.Update(msg)
+	case a.authType == AuthOAuthDC && a.cursor == 3:
+		a.oauthClientID, cmd = a.oauthClientID.Update(msg)
+	case a.authType == AuthOAuthDC && a.cursor == 4:
+		a.oauthSecret, cmd = a.oauthSecret.Update(msg)
+	case a.authType == AuthOAuthDC && a.cursor == 5:
 		a.oauthScope, cmd = a.oauthScope.Update(msg)
 	}
 	return a, cmd
@@ -610,6 +768,12 @@ func (a *Auth) tryHydrateToken() {
 		if a.oauthACToken == nil && !a.oauthACFetching {
 			if tok, ok := a.lookup(tokenURL, clientID, "authorization_code"); ok {
 				a.oauthACToken = tok
+			}
+		}
+	case AuthOAuthDC:
+		if a.oauthDCToken == nil && !a.oauthDCPolling {
+			if tok, ok := a.lookup(tokenURL, clientID, "device_code"); ok {
+				a.oauthDCToken = tok
 			}
 		}
 	}
@@ -689,6 +853,32 @@ func oauthACFetchCmd(ctx context.Context, cfg oauth.AuthCodeConfig) tea.Cmd {
 	}
 }
 
+// oauthDCAuthorizeCmd runs the Device Code §3.1 request. On success
+// it returns a message carrying the device authorization response
+// PLUS the ctx and cfg, so the app layer can chain a poll Cmd
+// without rebuilding either.
+func oauthDCAuthorizeCmd(ctx context.Context, cfg oauth.DeviceCodeConfig) tea.Cmd {
+	return func() tea.Msg {
+		auth, err := oauth.Authorize(ctx, cfg, nil)
+		if err != nil {
+			return AuthOAuthDCErrorMsg{Err: err.Error()}
+		}
+		return AuthOAuthDCAuthorizeMsg{Auth: auth, Ctx: ctx, Cfg: cfg}
+	}
+}
+
+// OAuthDCPollCmd runs the Device Code §3.4 polling loop. Exported
+// so app/update.go can chain it from AuthOAuthDCAuthorizeMsg.
+func OAuthDCPollCmd(ctx context.Context, cfg oauth.DeviceCodeConfig, deviceCode string, interval time.Duration) tea.Cmd {
+	return func() tea.Msg {
+		tok, err := oauth.PollToken(ctx, cfg, deviceCode, interval, nil)
+		if err != nil {
+			return AuthOAuthDCErrorMsg{Err: err.Error()}
+		}
+		return AuthOAuthDCTokenMsg{Token: tok}
+	}
+}
+
 // renderOAuthACStatus formats the action / status line for the
 // Authorization Code panel. Same structure as renderOAuthStatus —
 // fetching / error / token / prompt.
@@ -732,6 +922,68 @@ func (a Auth) renderOAuthACStatus() string {
 		return cursorMark + ok.Render("Bearer "+preview) + dim.Render(expiry+"  · press g to re-authorize")
 	default:
 		return cursorMark + dim.Render("press g to authorize (Auth Code + PKCE)")
+	}
+}
+
+// renderOAuthDCStatus formats the action / status line for the
+// Device Code panel. When the IdP has returned user_code +
+// verification_uri but no token yet, the line expands to a short
+// multi-line block that prominently displays both so the user can
+// transcribe the code on their browser device.
+func (a Auth) renderOAuthDCStatus() string {
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	ok := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	bad := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	hi := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+	codeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true)
+
+	cursorMark := ""
+	if a.focused && a.cursor == 6 {
+		cursorMark = hi.Render("▶ ")
+	}
+	switch {
+	case a.oauthDCToken != nil && a.oauthDCToken.AccessToken != "":
+		tok := a.oauthDCToken.AccessToken
+		var preview string
+		runes := []rune(tok)
+		if len(runes) > 16 {
+			preview = string(runes[:8]) + "…" + string(runes[len(runes)-4:])
+		} else {
+			preview = tok
+		}
+		expiry := ""
+		if !a.oauthDCToken.ExpiresAt.IsZero() {
+			remaining := time.Until(a.oauthDCToken.ExpiresAt).Round(time.Second)
+			if remaining > 0 {
+				expiry = fmt.Sprintf("  (expires in %s)", remaining)
+			} else {
+				expiry = "  (expired)"
+			}
+		}
+		return cursorMark + ok.Render("Bearer "+preview) + dim.Render(expiry+"  · press g to re-fetch")
+	case a.oauthDCError != "":
+		return cursorMark + bad.Render("error: "+a.oauthDCError) + dim.Render("  (press g to retry)")
+	case a.oauthDCPolling && a.oauthDCAuth != nil:
+		// Prominent display: visit URL + user_code + countdown.
+		uri := a.oauthDCAuth.VerificationURI
+		code := a.oauthDCAuth.UserCode
+		remaining := time.Until(a.oauthDCAuth.ExpiresAt).Round(time.Second)
+		var countdown string
+		if remaining > 0 {
+			countdown = fmt.Sprintf("polling… (expires in %s)", remaining)
+		} else {
+			countdown = "polling… (expired — press Esc, then g to retry)"
+		}
+		lines := []string{
+			cursorMark + dim.Render("Visit:  ") + uri,
+			"  " + dim.Render("Code:   ") + codeStyle.Render(code),
+			"  " + dim.Render(countdown),
+		}
+		return strings.Join(lines, "\n  ")
+	case a.oauthDCPolling:
+		return cursorMark + dim.Render("contacting IdP…")
+	default:
+		return cursorMark + dim.Render("press g to start device flow (RFC 8628)")
 	}
 }
 
@@ -843,6 +1095,24 @@ func (a Auth) View(width int) string {
 		sb.WriteString(a.oauthScope.View())
 		sb.WriteString("\n  ")
 		sb.WriteString(a.renderOAuthACStatus())
+	case AuthOAuthDC:
+		a.oauthDCDeviceURL.Width = inputW
+		a.oauthTokenURL.Width = inputW
+		a.oauthClientID.Width = inputW
+		a.oauthSecret.Width = inputW
+		a.oauthScope.Width = inputW
+		sb.WriteString("\n  Device URL:   ")
+		sb.WriteString(a.oauthDCDeviceURL.View())
+		sb.WriteString("\n  Token URL:    ")
+		sb.WriteString(a.oauthTokenURL.View())
+		sb.WriteString("\n  Client ID:    ")
+		sb.WriteString(a.oauthClientID.View())
+		sb.WriteString("\n  Client Secret:")
+		sb.WriteString(a.oauthSecret.View())
+		sb.WriteString("\n  Scope:        ")
+		sb.WriteString(a.oauthScope.View())
+		sb.WriteString("\n  ")
+		sb.WriteString(a.renderOAuthDCStatus())
 	}
 
 	var hint string
@@ -865,6 +1135,14 @@ func (a Auth) View(width int) string {
 				hint = "  g: re-authorize  ·  d: forget saved token  ·  Esc/↑: back"
 			} else {
 				hint = "  g: authorize (Auth Code + PKCE)  ·  Esc/↑: back"
+			}
+		case a.authType == AuthOAuthDC && a.cursor == 6 && a.oauthDCPolling:
+			hint = "  Esc: cancel"
+		case a.authType == AuthOAuthDC && a.cursor == 6:
+			if a.oauthDCToken != nil {
+				hint = "  g: re-fetch  ·  d: forget saved token  ·  Esc/↑: back"
+			} else {
+				hint = "  g: start device flow (RFC 8628)  ·  Esc/↑: back"
 			}
 		default:
 			hint = "  Esc/↑: back to type  ·  ↓: next field"

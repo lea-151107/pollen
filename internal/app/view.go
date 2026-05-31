@@ -80,6 +80,9 @@ func (m Model) View() string {
 	if m.help.IsOpen() {
 		return m.help.View()
 	}
+	if m.settingsPanel.IsOpen() {
+		return m.settingsPanel.View()
+	}
 	if m.envSwitcherOpen {
 		return envSwitcherView(m.env.Names(), m.envSwitcherCursor, m.env.Current, m.width, m.height)
 	}

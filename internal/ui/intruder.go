@@ -205,6 +205,15 @@ func (m Intruder) positionForFocus() (idx int, kindRow bool) {
 func (m Intruder) State() IntruderState         { return m.state }
 func (m Intruder) Results() []intruder.Result    { return m.results }
 func (m *Intruder) SetSize(w, h int)             { m.width = w; m.height = h }
+
+// SetDefaultConcurrency / SetDefaultDelayMs / SetDefaultMaxRequests
+// update the config-modal default values. Called from the Settings
+// overlay when the user edits the corresponding settings.json keys
+// at runtime. In-flight runs are unaffected (each run snapshots its
+// config at start); the new defaults apply to the next OpenConfig.
+func (m *Intruder) SetDefaultConcurrency(n int) { m.concInput.SetValue(strconv.Itoa(n)) }
+func (m *Intruder) SetDefaultDelayMs(n int)     { m.delayInput.SetValue(strconv.Itoa(n)) }
+func (m *Intruder) SetDefaultMaxRequests(n int) { m.maxInput.SetValue(strconv.Itoa(n)) }
 func (m *Intruder) OpenConfig()                  { m.state = IntruderConfig; m.formErr = ""; m.scrollOffset = 0 }
 func (m *Intruder) Close()                       { m.state = IntruderHidden }
 func (m *Intruder) SetFormErr(s string)          { m.formErr = s }

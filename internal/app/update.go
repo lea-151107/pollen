@@ -52,6 +52,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.intruder.SetSize(msg.Width, msg.Height)
 		m.help.SetSize(msg.Width, msg.Height)
+		m.settingsPanel.SetSize(msg.Width, msg.Height)
 		return m, nil
 
 	case sendResultMsg:
@@ -178,6 +179,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(statusError, "OAuth AC: "+msg.Err)
 		return m, m.statusTick(4 * time.Second)
 
+	case ui.AuthOAuthDCAuthorizeMsg:
+		// Device authorization step finished; display the user_code
+		// and chain into the polling loop. Authorize msg carries
+		// ctx + cfg so the poll Cmd reuses both.
+		m.auth.SetOAuthDCAuth(msg.Auth)
+		return m, ui.OAuthDCPollCmd(msg.Ctx, msg.Cfg, msg.Auth.DeviceCode, msg.Auth.Interval)
+
+	case ui.AuthOAuthDCTokenMsg:
+		m.auth.SetOAuthDCToken(msg.Token)
+		m.persistOAuthToken(oauth.GrantDeviceCode)
+		m.setStatus(statusOK, "OAuth DC token acquired")
+		return m, m.statusTick(2 * time.Second)
+
+	case ui.AuthOAuthDCErrorMsg:
+		m.auth.SetOAuthDCError(msg.Err)
+		m.setStatus(statusError, "OAuth DC: "+msg.Err)
+		return m, m.statusTick(4 * time.Second)
+
 	case ui.AuthForgetTokenMsg:
 		if m.tokenStore != nil {
 			if m.tokenStore.Forget(msg.TokenURL, msg.ClientID, msg.Grant) {
@@ -198,6 +217,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.persistOAuthToken(oauth.GrantClientCredentials)
 		case ui.AuthOAuthAC:
 			m.persistOAuthToken(oauth.GrantAuthorizationCode)
+		case ui.AuthOAuthDC:
+			m.persistOAuthToken(oauth.GrantDeviceCode)
 		}
 		// Replace the "refreshing OAuth token…" toast set in the Send
 		// handler with a positive confirmation. Without this, the
@@ -207,6 +228,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fire independently.
 		m.setStatus(statusOK, "OAuth token refreshed")
 		return m, tea.Batch(m.sendRequest(), m.statusTick(2*time.Second))
+
+	case ui.SettingsAppliedMsg:
+		m.applySettings(msg.Setting)
+		return m, nil
 
 	case authRefreshFailedMsg:
 		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")
@@ -407,6 +432,17 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.help, cmd = m.help.Update(km)
 		return m, cmd
 
+	case m.settingsPanel.IsOpen():
+		// Ctrl+, closes the overlay; everything else delegates to
+		// the SettingsPanel's own Update.
+		if key.Matches(km, m.keys.Settings) {
+			m.settingsPanel.Close()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.settingsPanel, cmd = m.settingsPanel.Update(km)
+		return m, cmd
+
 	case m.envSwitcherOpen:
 		return m.handleEnvSwitcher(km)
 
@@ -414,6 +450,13 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Ctrl+/ is a non-printing key, so it doesn't conflict with text
 		// input — no isTextEditingFocus guard needed.
 		m.help.Open(m.keys.HelpSections())
+		return m, nil
+
+	case key.Matches(km, m.keys.Settings):
+		// Open the Settings overlay with the current on-disk state.
+		// Live edits propagate via SettingsAppliedMsg → applySettings.
+		s, _ := settings.Load()
+		m.settingsPanel.Open(s)
 		return m, nil
 
 	case km.String() == "u" && m.pendingUndo != nil && !isTextEditingFocus(m.focus, m.body.InEditorMode(), m.history.InFilterMode(), m.collUI.InFilterMode(), m.response.FilterActive() || m.response.SearchActive()):

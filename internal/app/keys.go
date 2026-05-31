@@ -22,6 +22,7 @@ type KeyMap struct {
 	SwitchEnv   key.Binding
 	Intruder    key.Binding
 	Help        key.Binding
+	Settings    key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -41,7 +42,8 @@ func DefaultKeyMap() KeyMap {
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
-		Help: key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
+		Help:     key.NewBinding(key.WithKeys("ctrl+/", "ctrl+_")),
+		Settings: key.NewBinding(key.WithKeys("ctrl+,")),
 	}
 }
 
@@ -67,6 +69,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 				{Keys: bindingKeys(k.Intruder), Desc: "Open Intruder (concurrent requests)"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
 				{Keys: bindingKeys(k.Help), Desc: "This help"},
+				{Keys: bindingKeys(k.Settings), Desc: "Open settings overlay"},
 				{Keys: "u", Desc: "Undo last history delete"},
 				{Keys: "Ctrl+L", Desc: "Redraw screen"},
 			},
@@ -97,13 +100,13 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 			{Keys: "Ctrl+D", Desc: "Delete row"},
 		}},
 		{Title: "Auth", Items: []ui.HelpItem{
-			{Keys: "←/→", Desc: "Select type (None / Bearer / Basic / OAuth / OAuth AC)"},
+			{Keys: "←/→", Desc: "Select type (None / Bearer / Basic / OAuth / OAuth AC / OAuth DC)"},
 			{Keys: "Enter/↓", Desc: "Edit fields"},
 			{Keys: "↓ / ↑", Desc: "Move between fields"},
 			{Keys: "Esc/↑", Desc: "Back to type selector"},
-			{Keys: "g", Desc: "OAuth: fetch (CC) / authorize (AC) / refresh"},
+			{Keys: "g", Desc: "OAuth: fetch (CC) / authorize (AC) / start device flow (DC) / refresh"},
 			{Keys: "d on action row", Desc: "OAuth: forget the persisted token for current URL+ID"},
-			{Keys: "Esc on action row", Desc: "OAuth AC: cancel in-flight authorization"},
+			{Keys: "Esc on action row", Desc: "OAuth AC/DC: cancel in-flight authorization / polling"},
 		}},
 		{Title: "Dynamic variables", Items: []ui.HelpItem{
 			{Keys: "{{$timestamp}}", Desc: "Unix epoch seconds (fresh per request)"},

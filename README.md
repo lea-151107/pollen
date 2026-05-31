@@ -666,6 +666,70 @@ hydrated-but-expired token gets refreshed transparently before
 the next Send and the refreshed token is written back to
 `oauth_tokens.json`.
 
+## OAuth 2.0 Device Authorization Grant (v1.7.0+)
+
+The Auth panel's type selector adds a sixth option, **OAuth DC**,
+for the OAuth 2.0 Device Authorization Grant (RFC 8628). It
+exposes five input rows — Device URL, Token URL, Client ID,
+Client Secret (optional), Scope — plus an action row. Unlike
+Authorization Code, pollen **does not launch a browser**: the
+IdP returns a short `user_code` and a `verification_uri`, and
+the user transcribes them on whatever device they already have
+logged in (laptop, phone). Once the user approves, pollen
+polls the token endpoint until the IdP issues the access
+token.
+
+Pressing `g` on the action row issues the §3.1 device
+authorization request and begins polling per §3.4–3.5. The
+panel prominently displays the verification URL and user
+code; an `(expires in M:SS)` countdown reflects the
+authorization window the IdP returned. Esc cancels the
+in-flight Authorize or Poll stage. The whole flow has a
+30-minute timeout.
+
+Device Code is the OAuth grant of choice for pollen's
+typical environments — SSH sessions, WSL, CI runners,
+containers — where the Authorization Code flow's browser
+launch isn't viable. Headless terminals can't always open a
+browser, but they can always print a URL for the user to
+visit on a different device.
+
+The slow_down response (RFC 8628 §3.5) is honoured: every
+slow_down adds 5 seconds to the poll interval as required
+by the spec. authorization_pending continues polling at the
+current interval. access_denied and expired_token are
+terminal errors.
+
+Persisted Device Code tokens land in the same
+`~/.config/pollen/oauth_tokens.json` as CC and AC tokens,
+keyed by `(token_url, client_id, "device_code")`. Auto-
+refresh-on-send and the `d` forget shortcut work
+identically.
+
+## In-TUI Settings overlay (v1.7.0+)
+
+Pressing `Ctrl+,` opens a modal Settings panel that exposes
+all 17 keys from `settings.json` without leaving pollen.
+Boolean fields toggle inline on Enter; integer, float, and
+string fields drop into a textinput editor where Enter
+validates and commits and Esc discards. Validation matches
+the same ranges that `settings.Load` clamps; out-of-range
+values keep the editor open with an inline `error: …` line.
+
+Each successful commit is applied to the relevant runtime
+global (HTTP timeout, response cap, intruder defaults,
+proxy URL, persist-tokens flag, …) and written back to
+`settings.json` immediately. Two fields — **CA cert file**
+and **Enable cookies** — are loaded only at startup and
+carry a `restart` badge so the user knows the change is
+persisted but takes effect on the next pollen launch.
+
+Navigation mirrors the rest of pollen's overlays: ↑/↓ or
+j/k for the cursor, g/G for first/last, PgUp/PgDn to hop
+five rows, Esc / q to close. The Ctrl+/ help overlay's
+Global section advertises the binding so it's
+discoverable.
+
 ## Versioning and stability
 
 Pollen follows [Semantic Versioning](https://semver.org). Starting at v1.0.0,
