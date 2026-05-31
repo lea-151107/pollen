@@ -32,16 +32,27 @@ type Settings struct {
 	IntruderDelayMs            int `json:"intruder_delay_ms,omitempty"`
 	IntruderMaxRequests        int `json:"intruder_max_requests,omitempty"`
 	IntruderResponseBodyCapKiB int `json:"intruder_response_body_cap_kib,omitempty"`
+
+	// OAuthPersistTokens controls whether successfully-fetched OAuth
+	// access/refresh tokens are written to ~/.config/pollen/oauth_tokens.json
+	// (mode 0600) and re-loaded on next start. Defaults to true; users who
+	// want session-only OAuth set this to false in settings.json.
+	// Intentionally NOT tagged omitempty so both true and false are written
+	// explicitly — the file ends up self-documenting.
+	OAuthPersistTokens bool `json:"oauth_persist_tokens"`
 }
 
 // Load reads settings from disk. Missing or corrupt files fall back to
 // defaults — a bad disk state never blocks startup.
 func Load() (*Settings, error) {
-	s := &Settings{}
+	// Fields that default to a non-zero value are pre-initialized here
+	// so json.Unmarshal — which only overwrites present fields —
+	// preserves the default when the JSON omits the field.
+	s := &Settings{OAuthPersistTokens: true}
 	if _, err := userconfig.LoadJSON(fileName, s); err != nil {
-		// Corrupt file: reset to zero so partial unmarshal doesn't leave
-		// stray values, then fall through to the normalization below.
-		s = &Settings{}
+		// Corrupt file: reset to defaults so a partial unmarshal doesn't
+		// leave stray values, then fall through to the normalization below.
+		s = &Settings{OAuthPersistTokens: true}
 	}
 	if s.ResponsePanelRatio <= 0 || s.ResponsePanelRatio >= 1 {
 		s.ResponsePanelRatio = 0.5
