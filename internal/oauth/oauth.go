@@ -118,9 +118,15 @@ type RefreshConfig struct {
 }
 
 // Refresh exchanges a refresh token for a new access token per
-// RFC 6749 §6. The server may or may not rotate the refresh token; if
-// it does, the new RefreshToken comes back in the response and the
-// caller should persist it in place of the old one.
+// RFC 6749 §6. The authorization server MAY rotate the refresh
+// token: when it does, the new RefreshToken comes back in the
+// response and supersedes the old one. When it does NOT (omits the
+// refresh_token field, permitted by §6), the client implicitly
+// continues using the existing one — Refresh fills the returned
+// Token's RefreshToken from cfg so callers (notably the v1.6.4
+// disk-persistence path) don't accidentally store an empty value
+// and lose the ability to refresh again. Google OAuth is the
+// canonical example of a non-rotating IdP.
 func Refresh(ctx context.Context, cfg RefreshConfig, doer Doer) (*Token, error) {
 	if cfg.TokenURL == "" {
 		return nil, fmt.Errorf("oauth: token_url is required")
@@ -137,7 +143,14 @@ func Refresh(ctx context.Context, cfg RefreshConfig, doer Doer) (*Token, error) 
 	if cfg.ClientID != "" {
 		form.Set("client_id", cfg.ClientID)
 	}
-	return postForm(ctx, cfg.TokenURL, cfg.ClientID, cfg.ClientSecret, form, doer)
+	t, err := postForm(ctx, cfg.TokenURL, cfg.ClientID, cfg.ClientSecret, form, doer)
+	if err != nil {
+		return nil, err
+	}
+	if t.RefreshToken == "" {
+		t.RefreshToken = cfg.RefreshToken
+	}
+	return t, nil
 }
 
 // postForm POSTs application/x-www-form-urlencoded body with optional
