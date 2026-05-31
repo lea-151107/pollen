@@ -3,6 +3,7 @@ package oauth
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -101,6 +102,13 @@ func TestTokenStore_Find_EmptyKeyNeverMatches(t *testing.T) {
 }
 
 func TestTokenStore_Save_Uses0600Mode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows file permissions are ACL-based; Go's os.WriteFile
+		// reports 0o666 regardless of the requested mode. The 0o600
+		// guarantee from SaveJSONSecure is meaningful only on POSIX
+		// systems, where this test continues to pin it.
+		t.Skip("POSIX mode bits don't apply on Windows (ACL-based)")
+	}
 	withTempUserconfig(t)
 
 	s := &TokenStore{}

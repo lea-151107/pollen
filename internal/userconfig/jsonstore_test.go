@@ -3,6 +3,7 @@ package userconfig
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -63,6 +64,13 @@ func TestLoadJSON_CorruptSurfacesError(t *testing.T) {
 }
 
 func TestSaveJSONSecure_Uses0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows file permissions are ACL-based; Go's os.WriteFile
+		// reports 0o666 regardless of the requested mode. The 0o600
+		// guarantee is meaningful only on POSIX systems, where this
+		// test continues to pin it.
+		t.Skip("POSIX mode bits don't apply on Windows (ACL-based)")
+	}
 	withTempOverride(t)
 
 	if err := SaveJSONSecure("secret.json", testPayload{Name: "creds"}); err != nil {
@@ -79,6 +87,12 @@ func TestSaveJSONSecure_Uses0600(t *testing.T) {
 }
 
 func TestSaveJSON_Uses0644(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows file permissions are ACL-based; Go's os.WriteFile
+		// reports 0o666 regardless of the requested mode. This
+		// regression test pins POSIX behaviour only.
+		t.Skip("POSIX mode bits don't apply on Windows (ACL-based)")
+	}
 	withTempOverride(t)
 
 	if err := SaveJSON("plain.json", testPayload{Name: "plain"}); err != nil {
