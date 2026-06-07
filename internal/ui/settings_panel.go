@@ -98,6 +98,13 @@ func (p *SettingsPanel) Close() {
 // IsOpen reports whether the panel is currently visible.
 func (p SettingsPanel) IsOpen() bool { return p.open }
 
+// IsEditing reports whether a field editor is currently active, so the
+// app can keep the Settings toggle key (Ctrl+P / Ctrl+,) from closing the
+// panel mid-edit. The panel deliberately blocks accidental close while
+// editing — Esc only exits the editor, q types into the field — and this
+// accessor lets the app routing honor that same protection.
+func (p SettingsPanel) IsEditing() bool { return p.editing }
+
 // SetSize records the parent terminal dimensions so View can clip
 // the centered modal correctly.
 func (p *SettingsPanel) SetSize(w, h int) {

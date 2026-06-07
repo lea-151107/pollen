@@ -455,9 +455,13 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case m.settingsPanel.IsOpen():
-		// Ctrl+, closes the overlay; everything else delegates to
-		// the SettingsPanel's own Update.
-		if key.Matches(km, m.keys.Settings) {
+		// Ctrl+P / Ctrl+, toggles the overlay closed — but only from
+		// navigation mode. While a field editor is active the panel
+		// deliberately blocks accidental close (q types into the field,
+		// Esc only exits the editor), so the toggle must defer to the
+		// editor too; otherwise an in-progress edit is silently lost.
+		// Everything else delegates to the SettingsPanel's own Update.
+		if key.Matches(km, m.keys.Settings) && !m.settingsPanel.IsEditing() {
 			m.settingsPanel.Close()
 			return m, nil
 		}

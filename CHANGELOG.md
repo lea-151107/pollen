@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-06-07
+
+### Fixed
+
+- **Ctrl+P closed the Settings overlay while a field
+  editor was active, discarding the in-progress edit.**
+  v1.7.1 added Ctrl+P as the Settings overlay binding. The
+  global Settings case in `handleKey` intercepts that key
+  while the overlay is open and calls `Close()` before
+  delegating to the panel's own `Update`, and that
+  interception had no "am I editing?" guard. The Settings
+  panel otherwise deliberately blocks accidental close
+  during editing — `q` types into the field and Esc only
+  exits the editor (two-step exit, enforced by
+  `TestSettings_EscFromEditDiscards` /
+  `TestSettings_QClosesFromNavigate`) — so Ctrl+P (and the
+  `Ctrl+,` alias) was the one key that punched through that
+  protection, silently throwing away whatever the user had
+  typed. This mirrors the v1.7.2 fix that guarded the
+  overlay-OPEN path against stealing bubbles textarea /
+  textinput Ctrl+P; the symmetric overlay-CLOSE path was
+  missed. The close shortcut now carries a
+  `SettingsPanel.IsEditing()` guard: while editing, Ctrl+P
+  falls through to the field editor (a no-op for the plain
+  textinput) and the edit survives; from navigation mode
+  Ctrl+P still toggles the overlay closed.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged: no settings, key
+  bindings, or persistence formats changed; the Settings
+  binding's reach is narrowed (it no longer fires while a
+  field editor is active), not extended.
+- Adds the first app-layer test that drives `Model.Update`
+  with key messages
+  (`internal/app/update_settings_keys_test.go`); the
+  routing layer had no key-driven coverage before, which is
+  why this regression slipped through.
+- The `applySettings` httpx package-globals data race
+  flagged in v1.7.2 / v1.7.3 is unchanged; the deferred fix
+  plan (Snapshot pattern or atomic primitives in `httpx`)
+  still stands.
+
+[1.7.4]: https://github.com/lea-151107/pollen/releases/tag/v1.7.4
+
 ## [1.7.3] - 2026-05-31
 
 ### Added
