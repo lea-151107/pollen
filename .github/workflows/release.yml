@@ -11,10 +11,6 @@ jobs:
   goreleaser:
     name: goreleaser
     runs-on: ubuntu-latest
-    # setup-go@v6 defaults GOTOOLCHAIN=local; allow auto-download so the
-    # go.mod-required toolchain is used regardless of the runner's Go.
-    env:
-      GOTOOLCHAIN: auto
     steps:
       - uses: actions/checkout@v5
         with:

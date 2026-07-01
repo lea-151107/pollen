@@ -37,7 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI: pinned `goreleaser-action` to `~> v2` (matching
   `.goreleaser.yml`'s `version: 2`, silencing the `latest`
   warning) and bumped `actions/checkout` → v5 and
-  `actions/setup-go` → v6 off the deprecated Node 20 runtime.
+  `actions/setup-go` → v6 off the deprecated Node 20
+  runtime. Because setup-go@v6 defaults `GOTOOLCHAIN=local`,
+  the test matrix's stale `'1.21'` entry (which go.mod's
+  `go 1.26.3` never actually let run — it silently
+  auto-upgraded under v5) is replaced by `'1.26.3'`, the
+  real supported minimum.
 
 ### Notes
 
