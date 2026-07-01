@@ -288,38 +288,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.statusTick(3 * time.Second)
 
 	case wsConnectedMsg:
-		// Handshake succeeded: store the connection and start pumping frames.
+		// Handshake succeeded. If the user cancelled (or started a new
+		// attempt) while we were dialing, this connection is stale — close
+		// it rather than leak a live socket behind a hidden overlay.
+		if msg.gen != m.wsGen {
+			return m, closeConnCmd(msg.conn) // close off the UI goroutine
+		}
 		m.wsConn = msg.conn
 		m.wsCh = msg.conn.Events()
 		m.ws.MarkConnected()
-		return m, nextWSEventCmd(m.wsCh)
+		return m, nextWSEventCmd(m.wsCh, msg.gen)
 
-	case ui.WSEventMsg:
-		switch wsconn.EventKind(msg.Kind) {
+	case wsEventMsg:
+		if msg.gen != m.wsGen {
+			return m, nil // stale pump from a superseded connection
+		}
+		switch msg.kind {
 		case wsconn.EventText:
-			m.ws.AppendReceived(msg.Text)
+			m.ws.AppendReceived(msg.text)
 		case wsconn.EventBinary:
 			m.ws.AppendSystem("(binary frame received)")
 		case wsconn.EventError:
-			m.ws.AppendError(msg.Err)
+			m.ws.AppendError(msg.err)
 			m.ws.MarkDisconnected("error")
 		case wsconn.EventClosed:
 			m.ws.MarkDisconnected("closed by peer")
 		}
-		// Keep reading; the channel close arrives as WSClosedMsg.
+		// Keep reading; the channel close arrives as wsClosedMsg.
 		if m.wsCh != nil {
-			return m, nextWSEventCmd(m.wsCh)
+			return m, nextWSEventCmd(m.wsCh, msg.gen)
 		}
 		return m, nil
 
-	case ui.WSClosedMsg:
+	case wsClosedMsg:
+		if msg.gen != m.wsGen {
+			return m, nil
+		}
 		m.ws.MarkDisconnected("closed")
 		m.wsConn = nil
 		m.wsCh = nil
 		return m, nil
 
-	case ui.WSErrorMsg:
-		m.ws.AppendError(msg.Err)
+	case wsErrorMsg:
+		if msg.gen != m.wsGen {
+			return m, nil
+		}
+		m.ws.AppendError(msg.err)
 		m.ws.MarkDisconnected("error")
 		m.wsConn = nil
 		m.wsCh = nil

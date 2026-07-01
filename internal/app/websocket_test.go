@@ -112,7 +112,6 @@ func TestWebSocket_EndToEnd(t *testing.T) {
 	if m.ws.State() != ui.WSConnected || m.wsConn == nil {
 		t.Fatal("model should be connected after wsConnectedMsg")
 	}
-	defer m.closeWebSocket()
 
 	// Type a message and send it.
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ping")})
@@ -123,22 +122,98 @@ func TestWebSocket_EndToEnd(t *testing.T) {
 		t.Fatal("Enter with text should dispatch a send command")
 	}
 	if msg := sendCmd(); msg != nil {
-		if e, ok := msg.(ui.WSErrorMsg); ok {
-			t.Fatalf("send failed: %s", e.Err)
+		if e, ok := msg.(wsErrorMsg); ok {
+			t.Fatalf("send failed: %s", e.err)
 		}
 	}
 
 	// Read the echoed frame back through the pump command.
 	evMsg := runWithTimeout(t, readCmd)
-	ev, ok := evMsg.(ui.WSEventMsg)
+	ev, ok := evMsg.(wsEventMsg)
 	if !ok {
-		t.Fatalf("expected WSEventMsg, got %T (%v)", evMsg, evMsg)
+		t.Fatalf("expected wsEventMsg, got %T (%v)", evMsg, evMsg)
 	}
 	updated, _ = m.Update(ev)
 	m = updated.(Model)
 	if !strings.Contains(m.ws.View(), "ping") {
 		t.Errorf("echoed frame should appear in the session log")
 	}
+
+	// Esc disconnects and closes the overlay, clearing the live connection.
+	// The network close runs as a Cmd off the UI thread; run it so the
+	// connection is torn down before the server shuts down.
+	updated, closeCmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.ws.State() != ui.WSHidden {
+		t.Errorf("Esc should hide the session overlay, state=%d", m.ws.State())
+	}
+	if m.wsConn != nil {
+		t.Errorf("Esc should clear the live connection")
+	}
+	if closeCmd != nil {
+		closeCmd()
+	}
+}
+
+// TestWebSocket_CancelWhileConnectingDropsLateConn pins the fix for the
+// connection leak: if the overlay is closed (Esc) while a dial is still in
+// flight, the later-arriving wsConnectedMsg must be treated as stale and its
+// connection closed, not stored behind a hidden overlay.
+func TestWebSocket_CancelWhileConnectingDropsLateConn(t *testing.T) {
+	// Read-loop server: it consumes frames (and the client's close frame),
+	// so the client-side close handshake completes promptly.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close(websocket.StatusNormalClosure, "")
+		ctx := r.Context()
+		for {
+			if _, _, err := c.Read(ctx); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	m := newApplyTestModel(t)
+	m.ws.SetSize(80, 24)
+	m.urlBar.SetValue(srv.URL)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
+	m = updated.(Model)
+	updated, dialCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	// Cancel while "connecting" (before the dial result is delivered).
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.ws.State() != ui.WSHidden {
+		t.Fatalf("Esc while connecting should hide the overlay")
+	}
+
+	// The dial now completes and delivers a (stale) wsConnectedMsg.
+	connMsg := dialCmd()
+	cm, ok := connMsg.(wsConnectedMsg)
+	if !ok {
+		t.Fatalf("expected wsConnectedMsg, got %T", connMsg)
+	}
+	updated, closeCmd := m.Update(cm)
+	m = updated.(Model)
+
+	if m.wsConn != nil {
+		t.Errorf("stale connection must not be stored after cancel")
+	}
+	if m.ws.State() != ui.WSHidden {
+		t.Errorf("stale wsConnectedMsg must not reopen the overlay")
+	}
+	// The handler returns a Cmd to close the stale connection; run it so the
+	// socket is actually torn down (proving the leak is closed, not stored).
+	if closeCmd == nil {
+		t.Fatal("stale wsConnectedMsg should return a close command")
+	}
+	closeCmd()
 }
 
 // runWithTimeout runs a tea.Cmd on a goroutine and fails if it doesn't
