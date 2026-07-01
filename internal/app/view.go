@@ -74,6 +74,9 @@ func (m Model) View() string {
 	if m.intruder.State() != ui.IntruderHidden {
 		return m.intruder.View()
 	}
+	if m.ws.State() != ui.WSHidden {
+		return m.ws.View()
+	}
 	if m.copyMenuOpen {
 		return copyMenuView(m.width, m.height)
 	}

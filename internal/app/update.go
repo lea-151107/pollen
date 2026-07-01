@@ -19,6 +19,7 @@ import (
 	"github.com/lea-151107/pollen/internal/oauth"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/wsconn"
 )
 
 // clearStatusMsg fires when a transient toast should be cleared. The gen
@@ -51,6 +52,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.intruder.SetSize(msg.Width, msg.Height)
+		m.ws.SetSize(msg.Width, msg.Height)
 		m.help.SetSize(msg.Width, msg.Height)
 		m.settingsPanel.SetSize(msg.Width, msg.Height)
 		return m, nil
@@ -285,6 +287,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus(statusOK, fmt.Sprintf("exported %d rows to %s", len(results), path))
 		return m, m.statusTick(3 * time.Second)
 
+	case wsConnectedMsg:
+		// Handshake succeeded: store the connection and start pumping frames.
+		m.wsConn = msg.conn
+		m.wsCh = msg.conn.Events()
+		m.ws.MarkConnected()
+		return m, nextWSEventCmd(m.wsCh)
+
+	case ui.WSEventMsg:
+		switch wsconn.EventKind(msg.Kind) {
+		case wsconn.EventText:
+			m.ws.AppendReceived(msg.Text)
+		case wsconn.EventBinary:
+			m.ws.AppendSystem("(binary frame received)")
+		case wsconn.EventError:
+			m.ws.AppendError(msg.Err)
+			m.ws.MarkDisconnected("error")
+		case wsconn.EventClosed:
+			m.ws.MarkDisconnected("closed by peer")
+		}
+		// Keep reading; the channel close arrives as WSClosedMsg.
+		if m.wsCh != nil {
+			return m, nextWSEventCmd(m.wsCh)
+		}
+		return m, nil
+
+	case ui.WSClosedMsg:
+		m.ws.MarkDisconnected("closed")
+		m.wsConn = nil
+		m.wsCh = nil
+		return m, nil
+
+	case ui.WSErrorMsg:
+		m.ws.AppendError(msg.Err)
+		m.ws.MarkDisconnected("error")
+		m.wsConn = nil
+		m.wsCh = nil
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -394,6 +434,41 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.intruder, cmd = m.intruder.Update(km)
+		return m, cmd
+	}
+
+	// WebSocket overlay: Enter connects (form) or sends (session); Esc
+	// disconnects and closes. Everything else (URL/send editing, scrolling)
+	// falls through to the component's own Update.
+	if m.ws.State() != ui.WSHidden {
+		switch m.ws.State() {
+		case ui.WSConfig:
+			switch km.String() {
+			case "enter":
+				return m, m.startWebSocket()
+			case "esc":
+				m.ws.Close()
+				return m, nil
+			}
+		case ui.WSConnected:
+			switch km.String() {
+			case "enter":
+				// Only send on a live connection — Enter while still
+				// connecting or after a disconnect is a no-op rather than
+				// a spurious "not connected" error.
+				text := strings.TrimSpace(m.ws.SendInput())
+				if text == "" || m.wsConn == nil {
+					return m, nil
+				}
+				m.ws.AppendSent(text)
+				m.ws.ClearSendInput()
+				return m, m.wsSend(text)
+			case "esc":
+				return m, m.closeWebSocket()
+			}
+		}
+		var cmd tea.Cmd
+		m.ws, cmd = m.ws.Update(km)
 		return m, cmd
 	}
 
@@ -570,6 +645,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.Intruder):
 		m.intruder.SetSize(m.width, m.height)
 		m.intruder.OpenConfig()
+		return m, nil
+
+	case key.Matches(km, m.keys.WebSocket):
+		m.ws.SetSize(m.width, m.height)
+		m.ws.OpenConfig(m.urlBar.Value())
 		return m, nil
 
 	case key.Matches(km, m.keys.SwitchEnv):
