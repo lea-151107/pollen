@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2026-07-01
+
+### Fixed
+
+- **Data race on the `httpx` transport globals.** Since
+  v1.7.2 the notes have flagged that `applySettings` (plus
+  the Ctrl+T TLS toggle and startup) wrote the httpx
+  transport options — `RequestTimeout`, `MaxResponseBytes`,
+  `ProxyURL`, `DisableRedirects`, `CACertPool`, `CookieJar`
+  — as plain package variables on the UI goroutine while
+  the Send goroutine read the very same variables inside
+  `httpx.Do`. Only `SkipTLSVerify` was atomic; the rest
+  raced, so a settings change mid-request could tear a
+  request's transport configuration. All of them are now
+  folded into a single immutable `httpx.Config` snapshot,
+  swapped atomically via `httpx.SetConfig` and read once
+  per request through an `atomic.Pointer`. Each `httpx.Do`
+  call loads one consistent snapshot for its whole
+  lifetime. Callers that change one field (Ctrl+T,
+  `applySettings`, startup) Snapshot → mutate → SetConfig;
+  writes are serialized by the single UI goroutine, so no
+  compare-and-swap is needed. `applySettings` starts from
+  the current snapshot so the startup-only CACertPool /
+  CookieJar survive a live settings reapply.
+
+### Changed
+
+- Internal API only: the `httpx` package variables are
+  replaced by `httpx.Config` + `httpx.SetConfig` /
+  `httpx.Snapshot`. No user-facing surface change.
+
+### Notes
+
+- v1.x SemVer-frozen surface unchanged: no settings, key
+  bindings, or persistence formats changed.
+- Adds `internal/httpx` `TestConfig_ConcurrentSetAndDo`,
+  which drives `SetConfig` and `Do` concurrently; run with
+  `-race` (needs a cgo-capable toolchain) to catch
+  regressions.
+- Closes the deferred httpx data-race fix plan carried in
+  the v1.7.2 / v1.7.3 / v1.7.4 notes.
+
+[1.7.5]: https://github.com/lea-151107/pollen/releases/tag/v1.7.5
+
 ## [1.7.4] - 2026-06-07
 
 ### Fixed

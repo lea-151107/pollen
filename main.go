@@ -274,14 +274,15 @@ func main() {
 	// settings shouldn't block startup.
 	cfg, _ := settings.Load()
 	if cfg != nil {
-		httpx.SkipTLSVerify.Store(cfg.SkipTLSVerify)
-		httpx.RequestTimeout = time.Duration(cfg.RequestTimeoutSecs) * time.Second
-		httpx.MaxResponseBytes = cfg.MaxResponseMiB * 1024 * 1024
+		hc := httpx.Snapshot()
+		hc.SkipTLSVerify = cfg.SkipTLSVerify
+		hc.RequestTimeout = time.Duration(cfg.RequestTimeoutSecs) * time.Second
+		hc.MaxResponseBytes = cfg.MaxResponseMiB * 1024 * 1024
 		store.SetMaxEntries(cfg.HistoryLimit)
 		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
 		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
-		httpx.ProxyURL = cfg.ProxyURL
-		httpx.DisableRedirects = cfg.DisableRedirects
+		hc.ProxyURL = cfg.ProxyURL
+		hc.DisableRedirects = cfg.DisableRedirects
 		if cfg.CACertFile != "" {
 			data, err := os.ReadFile(cfg.CACertFile)
 			if err != nil {
@@ -291,15 +292,16 @@ func main() {
 				if !pool.AppendCertsFromPEM(data) {
 					fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: no valid PEM certificates\n")
 				} else {
-					httpx.CACertPool = pool
+					hc.CACertPool = pool
 				}
 			}
 		}
 		if cfg.EnableCookies {
 			if jar, err := cookiejar.New(nil); err == nil {
-				httpx.CookieJar = jar
+				hc.CookieJar = jar
 			}
 		}
+		httpx.SetConfig(hc)
 	}
 
 	// Variable environment (~/.config/pollen/env.json). Missing/corrupt → empty.

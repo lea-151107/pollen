@@ -534,7 +534,7 @@ func (r Response) View(width, height int) string {
 		}
 		if r.resp.Truncated {
 			statusLine += lipgloss.NewStyle().Foreground(lipgloss.Color("214")).
-				Render(fmt.Sprintf("   (truncated at %s)", formatSize(httpx.MaxResponseBytes)))
+				Render(fmt.Sprintf("   (truncated at %s)", formatSize(httpx.Snapshot().MaxResponseBytes)))
 		}
 		// Show diff badge only when the diff view is actually what's displayed.
 		// When a jq filter is locked, baseDisplayBody returns the filter content
