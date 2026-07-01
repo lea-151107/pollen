@@ -199,8 +199,8 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	if opts.StartCollection != "" {
 		m.collUI.SetFilter(opts.StartCollection)
 	}
-	// Seed view-visible TLS state from the httpx global (loaded by main.go).
-	m.tlsInsecure = httpx.SkipTLSVerify.Load()
+	// Seed view-visible TLS state from the httpx config (loaded by main.go).
+	m.tlsInsecure = httpx.Snapshot().SkipTLSVerify
 	// Load per-panel settings (defaults applied inside settings.Load).
 	intruderConc, intruderDelay, intruderMax := 5, 0, 1000
 	intruderBodyCapBytes := 64 * 1024

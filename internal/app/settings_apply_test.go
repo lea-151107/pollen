@@ -44,19 +44,20 @@ func TestApplySettings_PropagatesRuntimeGlobals(t *testing.T) {
 	}
 	m.applySettings(s)
 
-	if !httpx.SkipTLSVerify.Load() {
+	hc := httpx.Snapshot()
+	if !hc.SkipTLSVerify {
 		t.Errorf("SkipTLSVerify should be applied")
 	}
-	if httpx.RequestTimeout != 120*time.Second {
-		t.Errorf("RequestTimeout = %v, want 120s", httpx.RequestTimeout)
+	if hc.RequestTimeout != 120*time.Second {
+		t.Errorf("RequestTimeout = %v, want 120s", hc.RequestTimeout)
 	}
-	if httpx.MaxResponseBytes != 64*1024*1024 {
-		t.Errorf("MaxResponseBytes = %d, want %d", httpx.MaxResponseBytes, 64*1024*1024)
+	if hc.MaxResponseBytes != 64*1024*1024 {
+		t.Errorf("MaxResponseBytes = %d, want %d", hc.MaxResponseBytes, 64*1024*1024)
 	}
-	if httpx.ProxyURL != "http://proxy.example.com:3128" {
-		t.Errorf("ProxyURL = %q", httpx.ProxyURL)
+	if hc.ProxyURL != "http://proxy.example.com:3128" {
+		t.Errorf("ProxyURL = %q", hc.ProxyURL)
 	}
-	if !httpx.DisableRedirects {
+	if !hc.DisableRedirects {
 		t.Errorf("DisableRedirects should be true")
 	}
 	if ui.TextPreviewLimit != 200*1024 {

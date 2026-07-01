@@ -24,32 +24,52 @@ import (
 	"github.com/lea-151107/pollen/internal/history"
 )
 
-// SkipTLSVerify controls whether HTTP requests skip TLS certificate verification.
-// Atomic so the UI can toggle it from any goroutine safely.
-var SkipTLSVerify atomic.Bool
+// Config is an immutable snapshot of the transport options applied to every
+// request. It is swapped atomically via SetConfig so the UI goroutine can
+// update settings while the Send goroutine reads them in Do without a data
+// race — each Do call reads one consistent snapshot for its whole lifetime.
+type Config struct {
+	// SkipTLSVerify skips TLS certificate verification (self-signed testing).
+	SkipTLSVerify bool
+	// MaxResponseBytes caps how much of a response body is read into memory. A
+	// dev tool that accidentally hits a large download endpoint shouldn't OOM
+	// the terminal; bytes beyond this cap are discarded and surfaced via
+	// Truncated.
+	MaxResponseBytes int
+	// RequestTimeout is the HTTP client timeout applied to every request.
+	RequestTimeout time.Duration
+	// ProxyURL, when non-empty, routes all requests through the given proxy.
+	ProxyURL string
+	// CACertPool, when non-nil, is the trusted CA pool for TLS verification.
+	CACertPool *x509.CertPool
+	// DisableRedirects, when true, prevents following redirects.
+	DisableRedirects bool
+	// CookieJar, when non-nil, stores and sends cookies across requests.
+	CookieJar http.CookieJar
+}
 
-// MaxResponseBytes caps how much of a response body is read into memory. A
-// dev tool that accidentally hits a large download endpoint shouldn't OOM the
-// terminal; bytes beyond this cap are discarded and surfaced via Truncated.
-var MaxResponseBytes = 32 * 1024 * 1024 // 32 MiB
+// current holds the active Config snapshot. Never nil after init.
+var current atomic.Pointer[Config]
 
-// RequestTimeout is the HTTP client timeout applied to every request.
-var RequestTimeout = 60 * time.Second
+func init() {
+	current.Store(&Config{
+		MaxResponseBytes: 32 * 1024 * 1024, // 32 MiB
+		RequestTimeout:   60 * time.Second,
+	})
+}
 
-// ProxyURL, when non-empty, routes all requests through the given proxy.
-var ProxyURL string
+// SetConfig atomically installs a new transport config. The value is copied,
+// so the caller may reuse the struct afterwards.
+func SetConfig(c Config) { current.Store(&c) }
 
-// CACertPool, when non-nil, is used as the trusted CA pool for TLS verification.
-var CACertPool *x509.CertPool
-
-// DisableRedirects, when true, prevents the HTTP client from following redirects.
-var DisableRedirects bool
-
-// CookieJar, when non-nil, stores and sends cookies across requests.
-var CookieJar http.CookieJar
+// Snapshot returns a copy of the active transport config. Callers that only
+// need to tweak one field should Snapshot, mutate, then SetConfig — writes are
+// serialized by the single UI goroutine, so no compare-and-swap is needed.
+func Snapshot() Config { return *current.Load() }
 
 // Do executes the given request and returns a Response.
 func Do(req history.Request) (*history.Response, error) {
+	cfg := current.Load()
 	body, contentType, err := buildBody(req)
 	if err != nil {
 		return nil, err
@@ -79,15 +99,15 @@ func Do(req history.Request) (*history.Response, error) {
 	// config without mutating the shared default.
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tlsCfg := &tls.Config{}
-	if SkipTLSVerify.Load() {
+	if cfg.SkipTLSVerify {
 		tlsCfg.InsecureSkipVerify = true //nolint:gosec // user-opt-in for self-signed testing
 	}
-	if CACertPool != nil {
-		tlsCfg.RootCAs = CACertPool
+	if cfg.CACertPool != nil {
+		tlsCfg.RootCAs = cfg.CACertPool
 	}
 	tr.TLSClientConfig = tlsCfg
-	if ProxyURL != "" {
-		if u, err := url.Parse(ProxyURL); err == nil {
+	if cfg.ProxyURL != "" {
+		if u, err := url.Parse(cfg.ProxyURL); err == nil {
 			tr.Proxy = http.ProxyURL(u)
 		} else {
 			// Malformed proxy_url: the user clearly intended to send via
@@ -100,8 +120,8 @@ func Do(req history.Request) (*history.Response, error) {
 			tr.Proxy = nil
 		}
 	}
-	client := &http.Client{Timeout: RequestTimeout, Transport: tr, Jar: CookieJar}
-	if DisableRedirects {
+	client := &http.Client{Timeout: cfg.RequestTimeout, Transport: tr, Jar: cfg.CookieJar}
+	if cfg.DisableRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}
@@ -114,13 +134,13 @@ func Do(req history.Request) (*history.Response, error) {
 	defer resp.Body.Close()
 
 	// Cap the body read so a runaway endpoint cannot exhaust memory.
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, int64(MaxResponseBytes)+1))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, int64(cfg.MaxResponseBytes)+1))
 	if err != nil {
 		return nil, err
 	}
 	truncated := false
-	if len(respBody) > MaxResponseBytes {
-		respBody = respBody[:MaxResponseBytes]
+	if len(respBody) > cfg.MaxResponseBytes {
+		respBody = respBody[:cfg.MaxResponseBytes]
 		truncated = true
 	}
 	elapsed := time.Since(start)

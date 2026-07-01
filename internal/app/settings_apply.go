@@ -21,11 +21,15 @@ import (
 // picks them up. The Settings overlay shows a "restart" badge for
 // these to set the user's expectation.
 func (m *Model) applySettings(s *settings.Settings) {
-	httpx.SkipTLSVerify.Store(s.SkipTLSVerify)
-	httpx.RequestTimeout = time.Duration(s.RequestTimeoutSecs) * time.Second
-	httpx.MaxResponseBytes = s.MaxResponseMiB * 1024 * 1024
-	httpx.ProxyURL = s.ProxyURL
-	httpx.DisableRedirects = s.DisableRedirects
+	// Start from the current snapshot so startup-only fields (CACertPool,
+	// CookieJar) survive a live settings reapply, then atomically swap.
+	c := httpx.Snapshot()
+	c.SkipTLSVerify = s.SkipTLSVerify
+	c.RequestTimeout = time.Duration(s.RequestTimeoutSecs) * time.Second
+	c.MaxResponseBytes = s.MaxResponseMiB * 1024 * 1024
+	c.ProxyURL = s.ProxyURL
+	c.DisableRedirects = s.DisableRedirects
+	httpx.SetConfig(c)
 
 	m.store.SetMaxEntries(s.HistoryLimit)
 	ui.TextPreviewLimit = s.TextPreviewKiB * 1024

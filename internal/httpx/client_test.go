@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lea-151107/pollen/internal/history"
 )
@@ -93,13 +94,21 @@ func TestDo_POST_Form(t *testing.T) {
 }
 
 func TestDo_TruncatesOversizedBody(t *testing.T) {
+	// Use a small cap so the test stays fast and deterministic.
+	orig := Snapshot()
+	cap := 256 * 1024
+	c := orig
+	c.MaxResponseBytes = cap
+	SetConfig(c)
+	defer SetConfig(orig)
+
 	// Send slightly more than the cap to force truncation.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		// Write cap+1024 bytes of NUL to make the receiver hit the limit.
 		chunk := make([]byte, 64*1024)
 		written := 0
-		for written < MaxResponseBytes+1024 {
+		for written < cap+1024 {
 			n, err := w.Write(chunk)
 			if err != nil {
 				return
@@ -116,11 +125,11 @@ func TestDo_TruncatesOversizedBody(t *testing.T) {
 	if !resp.Truncated {
 		t.Errorf("expected Truncated=true")
 	}
-	if resp.SizeBytes != MaxResponseBytes {
-		t.Errorf("expected SizeBytes=%d, got %d", MaxResponseBytes, resp.SizeBytes)
+	if resp.SizeBytes != cap {
+		t.Errorf("expected SizeBytes=%d, got %d", cap, resp.SizeBytes)
 	}
-	if len(resp.BodyBytes) != MaxResponseBytes {
-		t.Errorf("expected BodyBytes len=%d, got %d", MaxResponseBytes, len(resp.BodyBytes))
+	if len(resp.BodyBytes) != cap {
+		t.Errorf("expected BodyBytes len=%d, got %d", cap, len(resp.BodyBytes))
 	}
 }
 
@@ -147,15 +156,20 @@ func TestDo_TLSVerify(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	orig := Snapshot()
+	defer SetConfig(orig) // restore for other tests
+
 	// Default: should fail with x509 error.
-	SkipTLSVerify.Store(false)
+	c := orig
+	c.SkipTLSVerify = false
+	SetConfig(c)
 	if _, err := Do(history.Request{Method: "GET", URL: srv.URL}); err == nil {
 		t.Error("expected TLS verification error with default settings")
 	}
 
 	// Skip verify: should succeed.
-	SkipTLSVerify.Store(true)
-	defer SkipTLSVerify.Store(false) // restore for other tests
+	c.SkipTLSVerify = true
+	SetConfig(c)
 	resp, err := Do(history.Request{Method: "GET", URL: srv.URL})
 	if err != nil {
 		t.Fatalf("expected success with SkipTLSVerify, got %v", err)
@@ -371,9 +385,11 @@ func TestDo_MalformedProxyURLFallsThroughToDirect(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	oldProxy := ProxyURL
-	ProxyURL = "://invalid" // url.Parse rejects empty scheme
-	defer func() { ProxyURL = oldProxy }()
+	orig := Snapshot()
+	c := orig
+	c.ProxyURL = "://invalid" // url.Parse rejects empty scheme
+	SetConfig(c)
+	defer SetConfig(orig)
 
 	resp, err := Do(history.Request{Method: "GET", URL: srv.URL})
 	if err != nil {
@@ -382,6 +398,44 @@ func TestDo_MalformedProxyURLFallsThroughToDirect(t *testing.T) {
 	if resp.Status != 200 || resp.Body != "ok" {
 		t.Errorf("unexpected response: %+v", resp)
 	}
+}
+
+// TestConfig_ConcurrentSetAndDo exercises the data race that motivated the
+// snapshot refactor: the UI goroutine swapping config via SetConfig while a
+// Send goroutine reads it inside Do. Run with -race to catch regressions.
+func TestConfig_ConcurrentSetAndDo(t *testing.T) {
+	orig := Snapshot()
+	defer SetConfig(orig)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	done := make(chan struct{})
+	// Writer: continuously swap config, mimicking applySettings / Ctrl+T.
+	go func() {
+		for i := 0; ; i++ {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			c := Snapshot()
+			c.SkipTLSVerify = i%2 == 0
+			c.RequestTimeout = 30 * time.Second
+			c.ProxyURL = ""
+			SetConfig(c)
+		}
+	}()
+
+	// Reader: fire requests that read the config inside Do.
+	for i := 0; i < 200; i++ {
+		if _, err := Do(history.Request{Method: "GET", URL: srv.URL}); err != nil {
+			t.Fatalf("Do: %v", err)
+		}
+	}
+	close(done)
 }
 
 func TestDo_InvalidURL(t *testing.T) {

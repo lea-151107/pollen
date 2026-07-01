@@ -590,8 +590,10 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(km, m.keys.ToggleTLS):
-		newVal := !httpx.SkipTLSVerify.Load()
-		httpx.SkipTLSVerify.Store(newVal)
+		hc := httpx.Snapshot()
+		newVal := !hc.SkipTLSVerify
+		hc.SkipTLSVerify = newVal
+		httpx.SetConfig(hc)
 		m.tlsInsecure = newVal
 		// Persist; surface persistence failures so the user knows the
 		// preference won't survive a restart.
