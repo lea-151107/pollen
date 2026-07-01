@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-07-01
+
+### Fixed
+
+- **Disconnecting a WebSocket could freeze the TUI for up
+  to ~5 seconds.** `closeWebSocket` (Esc) and the stale-
+  connection cleanup called `wsconn.Conn.Close()` directly
+  on the Bubble Tea update goroutine. coder/websocket's
+  `Close` performs a close handshake that blocks until the
+  peer replies or an internal timeout (~5s) elapses, so
+  against an unresponsive server the whole UI hung. The
+  network close now runs off the UI goroutine via a
+  `tea.Cmd`; the overlay closes and `wsConn` is cleared
+  immediately while the handshake completes in the
+  background.
+- **A WebSocket connection could leak if you cancelled
+  while it was still connecting.** The handshake runs
+  asynchronously (up to a 30s dial timeout). Pressing Esc
+  during connect closed the overlay, but the later-arriving
+  dial result was still stored — a live socket left running
+  behind a hidden overlay — and stale read-pump events
+  could even clear a *newer* connection. Connection
+  attempts are now tagged with a generation counter
+  (`wsGen`, mirroring `requestGen`): results from a
+  cancelled or superseded attempt are discarded, and a
+  stale successful dial is closed instead of stored.
+
+### Changed
+
+- CI: pinned `goreleaser-action` to `~> v2` (matching
+  `.goreleaser.yml`'s `version: 2`, silencing the `latest`
+  warning) and bumped `actions/checkout` → v5 and
+  `actions/setup-go` → v6 off the deprecated Node 20 runtime.
+
+### Notes
+
+- Also hardened `internal/httpx`
+  `TestConfig_ConcurrentSetAndDo` to wait for its writer
+  goroutine before returning, so it can no longer leak into
+  a later test and flip the shared config under it.
+- No user-facing surface change; purely fixes to the v1.8.0
+  WebSocket feature plus CI maintenance.
+
+[1.8.1]: https://github.com/lea-151107/pollen/releases/tag/v1.8.1
+
 ## [1.8.0] - 2026-07-01
 
 ### Added

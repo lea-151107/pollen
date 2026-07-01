@@ -67,28 +67,11 @@ type WebSocket struct {
 	width, height int
 }
 
-// WSConnectMsg / WSEventMsg / WSClosedMsg / WSErrorMsg are the tea.Msg types
-// the app layer exchanges with the network side. They live here so both the
-// component and the app import them from one place.
-
-// WSEventMsg carries one incoming frame or connection event. The concrete
-// Event type lives in internal/wsconn; the app translates it into log
-// appends, so this package stays dependency-free of wsconn.
-type WSEventMsg struct {
-	// Kind mirrors wsconn.EventKind; Text/Data/Err carry the payload. The
-	// app fills these in from a wsconn.Event.
-	Kind int
-	Text string
-	Err  string
-}
-
-// WSClosedMsg signals the read pump's channel closed (connection ended).
-type WSClosedMsg struct{}
-
-// WSErrorMsg reports a dial or send failure.
-type WSErrorMsg struct {
-	Err string
-}
+// The WebSocket async messages (connect / event / close / error) are handled
+// entirely at the app layer, which drives this component through the
+// Mark*/Append* methods below. They carry a live connection and a generation
+// tag, so they live in package app rather than here to avoid a dependency on
+// internal/wsconn.
 
 // NewWebSocket constructs a hidden WebSocket overlay.
 func NewWebSocket() WebSocket {

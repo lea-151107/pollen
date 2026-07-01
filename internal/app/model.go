@@ -121,9 +121,13 @@ type Model struct {
 	// ws owns the WebSocket overlay (connect form + live session). wsConn is
 	// the live connection (nil when disconnected) and wsCh is its read-pump
 	// channel; Update schedules a follow-up nextWSEventCmd after each event.
+	// wsGen tags each connection attempt so late results from a cancelled or
+	// superseded dial/pump are discarded instead of leaking a connection or
+	// corrupting a newer session (mirrors requestGen).
 	ws     ui.WebSocket
 	wsConn *wsconn.Conn
 	wsCh   <-chan wsconn.Event
+	wsGen  int
 
 	// tokenStore is the on-disk OAuth token persistence layer. nil only
 	// in tests that bypass New(). persistTokens mirrors the Settings flag

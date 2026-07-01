@@ -413,8 +413,10 @@ func TestConfig_ConcurrentSetAndDo(t *testing.T) {
 	defer srv.Close()
 
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	// Writer: continuously swap config, mimicking applySettings / Ctrl+T.
 	go func() {
+		defer close(stopped)
 		for i := 0; ; i++ {
 			select {
 			case <-done:
@@ -435,7 +437,11 @@ func TestConfig_ConcurrentSetAndDo(t *testing.T) {
 			t.Fatalf("Do: %v", err)
 		}
 	}
+	// Wait for the writer to actually exit before returning; otherwise it
+	// could keep calling SetConfig concurrently with a subsequent test and
+	// flip the global config that test relies on.
 	close(done)
+	<-stopped
 }
 
 func TestDo_InvalidURL(t *testing.T) {
