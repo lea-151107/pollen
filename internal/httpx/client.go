@@ -67,6 +67,46 @@ func SetConfig(c Config) { current.Store(&c) }
 // serialized by the single UI goroutine, so no compare-and-swap is needed.
 func Snapshot() Config { return *current.Load() }
 
+// newTransport builds an *http.Transport carrying the snapshot's TLS-skip,
+// custom CA pool, and proxy settings. DefaultTransport is always cloned so
+// each caller gets independent config without mutating the shared default.
+func newTransport(cfg *Config) *http.Transport {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tlsCfg := &tls.Config{}
+	if cfg.SkipTLSVerify {
+		tlsCfg.InsecureSkipVerify = true //nolint:gosec // user-opt-in for self-signed testing
+	}
+	if cfg.CACertPool != nil {
+		tlsCfg.RootCAs = cfg.CACertPool
+	}
+	tr.TLSClientConfig = tlsCfg
+	if cfg.ProxyURL != "" {
+		if u, err := url.Parse(cfg.ProxyURL); err == nil {
+			tr.Proxy = http.ProxyURL(u)
+		} else {
+			// Malformed proxy_url: the user clearly intended to send via
+			// a specific proxy. Falling through to http.DefaultTransport's
+			// ProxyFromEnvironment would silently route via $HTTP_PROXY
+			// (or direct) instead, which is the opposite of what they
+			// asked for. Force tr.Proxy = nil so the request goes direct
+			// and the failure is at least loud (DNS / connect error) rather
+			// than wrong-proxy.
+			tr.Proxy = nil
+		}
+	}
+	return tr
+}
+
+// NewHandshakeClient returns an *http.Client configured from the current
+// transport snapshot (TLS skip, CA pool, proxy) for use as the handshake
+// client of a protocol upgrade such as a WebSocket dial. It deliberately
+// leaves Client.Timeout unset — a WebSocket connection outlives the
+// handshake, so the caller governs the handshake deadline via context and
+// the connection lifetime separately.
+func NewHandshakeClient() *http.Client {
+	return &http.Client{Transport: newTransport(current.Load())}
+}
+
 // Do executes the given request and returns a Response.
 func Do(req history.Request) (*history.Response, error) {
 	cfg := current.Load()
@@ -95,32 +135,7 @@ func Do(req history.Request) (*history.Response, error) {
 		httpReq.Header.Set("Content-Type", contentType)
 	}
 
-	// Always clone DefaultTransport so each request gets independent TLS/proxy
-	// config without mutating the shared default.
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tlsCfg := &tls.Config{}
-	if cfg.SkipTLSVerify {
-		tlsCfg.InsecureSkipVerify = true //nolint:gosec // user-opt-in for self-signed testing
-	}
-	if cfg.CACertPool != nil {
-		tlsCfg.RootCAs = cfg.CACertPool
-	}
-	tr.TLSClientConfig = tlsCfg
-	if cfg.ProxyURL != "" {
-		if u, err := url.Parse(cfg.ProxyURL); err == nil {
-			tr.Proxy = http.ProxyURL(u)
-		} else {
-			// Malformed proxy_url: the user clearly intended to send via
-			// a specific proxy. Falling through to http.DefaultTransport's
-			// ProxyFromEnvironment would silently route via $HTTP_PROXY
-			// (or direct) instead, which is the opposite of what they
-			// asked for. Force tr.Proxy = nil so the request goes direct
-			// and the failure is at least loud (DNS / connect error) rather
-			// than wrong-proxy.
-			tr.Proxy = nil
-		}
-	}
-	client := &http.Client{Timeout: cfg.RequestTimeout, Transport: tr, Jar: cfg.CookieJar}
+	client := &http.Client{Timeout: cfg.RequestTimeout, Transport: newTransport(cfg), Jar: cfg.CookieJar}
 	if cfg.DisableRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse

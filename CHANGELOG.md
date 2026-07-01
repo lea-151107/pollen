@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-07-01
+
+### Added
+
+- **WebSocket sessions (Ctrl+W).** pollen can now open a
+  live WebSocket connection alongside its HTTP tooling.
+  Ctrl+W pops a connect form prefilled from the URL bar;
+  the request editor's headers and Auth panel (Bearer /
+  Basic / any OAuth grant) ride along on the handshake, and
+  `{{var}}` / response-chaining expansion applies to the
+  URL and header values exactly as for an HTTP send. Once
+  connected, a fullscreen session view logs frames as they
+  arrive — outgoing `▶`, incoming `◀`, system/error lines,
+  each timestamped — with a send box (Enter sends) and a
+  scrollable log (↑/↓, PgUp/PgDn; it auto-follows the tail
+  until you scroll up). Esc disconnects and closes. The
+  RFC 6455 close / peer-close / error states are surfaced
+  distinctly. Built on `github.com/coder/websocket`; the
+  dial reuses the shared httpx transport snapshot, so proxy
+  and TLS-skip / custom-CA settings apply to the handshake
+  too. This is a session-only MVP: connections and their
+  message logs are not persisted, and saving WebSocket
+  endpoints to collections, auto-reconnect, ping/pong
+  visualization, and binary-frame send are deliberately
+  deferred to a later release.
+
+### Notes
+
+- v1.x SemVer-frozen surface: this is purely additive. Like
+  `AuthOAuthAC` / `AuthOAuthDC` before it, WebSocket support
+  adds a new overlay and the Ctrl+W binding without
+  changing any existing settings key, key binding, or
+  persistence format; existing `collections.json`,
+  `settings.json`, and `oauth_tokens.json` load unchanged.
+- New dependency: `github.com/coder/websocket`.
+- New packages/files: `internal/wsconn` (connection layer),
+  `internal/ui/websocket.go` (overlay), and
+  `internal/app/websocket.go` (glue), each mirroring the
+  Intruder overlay's state-machine + channel-to-tea.Msg
+  pattern.
+
+[1.8.0]: https://github.com/lea-151107/pollen/releases/tag/v1.8.0
+
 ## [1.7.5] - 2026-07-01
 
 ### Fixed

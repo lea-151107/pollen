@@ -21,6 +21,7 @@ type KeyMap struct {
 	ToggleTLS   key.Binding
 	SwitchEnv   key.Binding
 	Intruder    key.Binding
+	WebSocket   key.Binding
 	Help        key.Binding
 	Settings    key.Binding
 }
@@ -39,6 +40,7 @@ func DefaultKeyMap() KeyMap {
 		ToggleTLS:  key.NewBinding(key.WithKeys("ctrl+t")),
 		SwitchEnv:  key.NewBinding(key.WithKeys("ctrl+e")),
 		Intruder:   key.NewBinding(key.WithKeys("ctrl+r")),
+		WebSocket:  key.NewBinding(key.WithKeys("ctrl+w")),
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
@@ -72,6 +74,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 				{Keys: bindingKeys(k.ToggleTLS), Desc: "Toggle TLS verification skip"},
 				{Keys: bindingKeys(k.SwitchEnv), Desc: "Switch variable environment"},
 				{Keys: bindingKeys(k.Intruder), Desc: "Open Intruder (concurrent requests)"},
+				{Keys: bindingKeys(k.WebSocket), Desc: "Open WebSocket session"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
 				{Keys: bindingKeys(k.Help), Desc: "This help"},
 				{Keys: bindingKeys(k.Settings), Desc: "Open settings overlay"},
@@ -173,6 +176,12 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll response body"},
 			{Keys: "g", Desc: "Jump to top"},
 			{Keys: "Esc", Desc: "Back to results table"},
+		}},
+		{Title: "WebSocket", Items: []ui.HelpItem{
+			{Keys: "Ctrl+W", Desc: "Open connect form (prefills the URL bar)"},
+			{Keys: "Enter", Desc: "Connect (form) / send message (session)"},
+			{Keys: "↑/↓ PgUp/PgDn", Desc: "Scroll the message log"},
+			{Keys: "Esc", Desc: "Disconnect and close the overlay"},
 		}},
 		{Title: "Chaining", Items: []ui.HelpItem{
 			{Keys: "{{response.body.<path>}}", Desc: "Value from last response (jq)"},

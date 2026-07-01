@@ -17,6 +17,7 @@ import (
 	"github.com/lea-151107/pollen/internal/oauth"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
+	"github.com/lea-151107/pollen/internal/wsconn"
 )
 
 type focusArea int
@@ -116,6 +117,13 @@ type Model struct {
 	intruder             ui.Intruder
 	intruderCh           <-chan intruder.Result
 	intruderBodyCapBytes int // forwarded into RunConfig.ResponseBodyCap
+
+	// ws owns the WebSocket overlay (connect form + live session). wsConn is
+	// the live connection (nil when disconnected) and wsCh is its read-pump
+	// channel; Update schedules a follow-up nextWSEventCmd after each event.
+	ws     ui.WebSocket
+	wsConn *wsconn.Conn
+	wsCh   <-chan wsconn.Event
 
 	// tokenStore is the on-disk OAuth token persistence layer. nil only
 	// in tests that bypass New(). persistTokens mirrors the Settings flag
@@ -218,6 +226,7 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 	}
 	m.intruderBodyCapBytes = intruderBodyCapBytes
 	m.intruder = ui.NewIntruder(intruderConc, intruderDelay, intruderMax)
+	m.ws = ui.NewWebSocket()
 
 	// OAuth token persistence. LoadTokenStore returns an empty store
 	// on missing or corrupt files, so startup never blocks. The Auth
