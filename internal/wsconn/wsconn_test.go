@@ -2,13 +2,16 @@ package wsconn
 
 import (
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
 
 	"github.com/lea-151107/pollen/internal/history"
+	"github.com/lea-151107/pollen/internal/httpx"
 )
 
 // echoServer accepts a WebSocket and echoes every frame back. If want is
@@ -88,6 +91,52 @@ func TestDial_CarriesHandshakeHeaders(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Dial with header should succeed: %v", err)
+	}
+	_ = conn.Close()
+}
+
+// TestDial_CarriesSharedCookieJar proves the WebSocket handshake sends cookies
+// from the shared httpx cookie jar, matching an HTTP request. Regression guard
+// for the fix where NewHandshakeClient dropped the jar, so a session cookie set
+// by a prior HTTP login was silently lost on the WS upgrade.
+func TestDial_CarriesSharedCookieJar(t *testing.T) {
+	// The server rejects the upgrade unless the expected session cookie rides
+	// along, so a successful dial means the jar's cookie was sent.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := r.Cookie("session")
+		if err != nil || c.Value != "tok" {
+			http.Error(w, "missing session cookie", http.StatusUnauthorized)
+			return
+		}
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		conn.Close(websocket.StatusNormalClosure, "")
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	jar.SetCookies(u, []*http.Cookie{{Name: "session", Value: "tok"}})
+
+	// Install the jar on the shared transport snapshot, restoring afterwards so
+	// the global config doesn't leak into other tests.
+	orig := httpx.Snapshot()
+	c := orig
+	c.CookieJar = jar
+	httpx.SetConfig(c)
+	defer httpx.SetConfig(orig)
+
+	conn, err := Dial(Config{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("dial should succeed with the shared cookie jar carrying the session cookie: %v", err)
 	}
 	_ = conn.Close()
 }

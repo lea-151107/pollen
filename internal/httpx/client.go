@@ -99,12 +99,16 @@ func newTransport(cfg *Config) *http.Transport {
 
 // NewHandshakeClient returns an *http.Client configured from the current
 // transport snapshot (TLS skip, CA pool, proxy) for use as the handshake
-// client of a protocol upgrade such as a WebSocket dial. It deliberately
-// leaves Client.Timeout unset — a WebSocket connection outlives the
-// handshake, so the caller governs the handshake deadline via context and
+// client of a protocol upgrade such as a WebSocket dial. It also carries the
+// shared cookie jar, so a cookie-authenticated WebSocket handshake sends and
+// stores cookies exactly as an HTTP request does — otherwise a session cookie
+// set by a prior HTTP login would be silently dropped on the WS upgrade. It
+// deliberately leaves Client.Timeout unset — a WebSocket connection outlives
+// the handshake, so the caller governs the handshake deadline via context and
 // the connection lifetime separately.
 func NewHandshakeClient() *http.Client {
-	return &http.Client{Transport: newTransport(current.Load())}
+	cfg := current.Load()
+	return &http.Client{Transport: newTransport(cfg), Jar: cfg.CookieJar}
 }
 
 // Do executes the given request and returns a Response.
