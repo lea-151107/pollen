@@ -34,10 +34,11 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
   payload list (numeric range, wordlist, brute force, or case toggles),
   with configurable concurrency and a live result table. Inspired by
   Burp Suite's Sniper mode
-- **Mouse support** (opt-in via `enable_mouse` in `settings.json`): click a
-  panel to focus it, click a history / collections row to load it, scroll the
-  response body with the wheel. Off by default because mouse mode overrides the
-  terminal's own text selection / copy (hold `Shift` to select while it's on)
+- **Mouse support** (on by default): click a panel to focus it, click a history
+  / collections row to load it, scroll the response body with the wheel. Toggle
+  it live from the settings overlay (`Ctrl+,` → "Enable mouse") — turning it off
+  restores the terminal's own text selection / copy, which mouse mode otherwise
+  overrides (hold `Shift` to select while it's on)
 - Binary response detection with hex dump preview, `s`-to-save
 - TLS options: skip verification, custom CA certificate file, HTTP(S) proxy,
   cookie jar, redirect control — all toggleable from `settings.json`
@@ -213,7 +214,7 @@ the default silently so a partial or corrupt file never blocks startup.
 | `disable_redirects` | `false` | When `true`, returns 3xx responses as-is instead of following them |
 | `ca_cert_file` | `""` | Path to a PEM file with extra trusted CAs (safer than `skip_tls_verify` for internal/self-signed certs) |
 | `enable_cookies` | `false` | When `true`, cookies set by a response are replayed in subsequent requests within the same session |
-| `enable_mouse` | `false` | When `true`, enables mouse support (click to focus a panel, click a sidebar row to load it, wheel to scroll the response). Enabling it overrides the terminal's native text selection / copy — hold `Shift` to select while it's on |
+| `enable_mouse` | `true` | Mouse support (click to focus a panel, click a sidebar row to load it, wheel to scroll the response). Toggle live from the settings overlay (`Ctrl+,`). While on it overrides the terminal's native text selection / copy — set to `false` (or toggle off) to restore it; hold `Shift` to select while it's on |
 
 History stores binary response **metadata only** — the body bytes are dropped
 to keep the JSON readable and small. In-memory body bytes are also dropped

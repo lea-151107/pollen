@@ -236,8 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.sendRequest(), m.statusTick(2*time.Second))
 
 	case ui.SettingsAppliedMsg:
-		m.applySettings(msg.Setting)
-		return m, nil
+		return m, m.applySettings(msg.Setting)
 
 	case ui.HelpOpenSettingsMsg:
 		// "Open Settings" button in the Ctrl+/ help overlay.
@@ -254,12 +253,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Settings panel if it happens to be open so the user sees
 		// the new values.
 		def := settings.Defaults()
-		m.applySettings(def)
+		applyCmd := m.applySettings(def)
 		if m.settingsPanel.IsOpen() {
 			m.settingsPanel.Open(def)
 		}
 		m.setStatus(statusOK, "settings reset to defaults")
-		return m, m.statusTick(2 * time.Second)
+		return m, tea.Batch(applyCmd, m.statusTick(2*time.Second))
 
 	case authRefreshFailedMsg:
 		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")

@@ -313,7 +313,9 @@ func main() {
 		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
 		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
 	}
-	enableMouse := cfg != nil && cfg.EnableMouse
+	// Mouse defaults to ON; only an explicit enable_mouse:false disables it. A
+	// nil cfg (settings failed to load entirely) still gets the default.
+	enableMouse := cfg == nil || cfg.EnableMouse
 
 	// Variable environment (~/.config/pollen/env.json). Missing/corrupt → empty.
 	envVars, _ := env.Load()

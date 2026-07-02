@@ -3,6 +3,8 @@ package app
 import (
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
@@ -20,7 +22,11 @@ import (
 // Both are still written to settings.json so the next pollen start
 // picks them up. The Settings overlay shows a "restart" badge for
 // these to set the user's expectation.
-func (m *Model) applySettings(s *settings.Settings) {
+//
+// Returns a tea.Cmd (possibly nil): toggling EnableMouse switches SGR mouse
+// reporting live via tea.EnableMouseCellMotion / tea.DisableMouse so it takes
+// effect without a restart.
+func (m *Model) applySettings(s *settings.Settings) tea.Cmd {
 	// Start from the current snapshot so startup-only fields (CACertPool,
 	// CookieJar) survive a live settings reapply, then atomically swap.
 	c := httpx.Snapshot()
@@ -47,5 +53,17 @@ func (m *Model) applySettings(s *settings.Settings) {
 	// View-visible TLS skip mirror.
 	m.tlsInsecure = s.SkipTLSVerify
 
+	// Live mouse toggle: only emit a command when the state actually changes.
+	var cmd tea.Cmd
+	if s.EnableMouse != m.mouseEnabled {
+		m.mouseEnabled = s.EnableMouse
+		if s.EnableMouse {
+			cmd = tea.EnableMouseCellMotion
+		} else {
+			cmd = tea.DisableMouse
+		}
+	}
+
 	_ = s.Save()
+	return cmd
 }

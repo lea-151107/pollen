@@ -102,3 +102,31 @@ func TestApplySettings_SavesToDisk(t *testing.T) {
 		t.Errorf("RequestTimeoutSecs not persisted, got %d", reloaded.RequestTimeoutSecs)
 	}
 }
+
+func TestApplySettings_MouseToggleReturnsCmd(t *testing.T) {
+	m := newApplyTestModel(t)
+	// New(Options{}) leaves mouseEnabled false regardless of the on-disk
+	// default, so start from a known off state.
+	m.mouseEnabled = false
+
+	on := &settings.Settings{EnableMouse: true, OAuthPersistTokens: true}
+	if cmd := m.applySettings(on); cmd == nil {
+		t.Fatal("enabling mouse should return a non-nil command")
+	}
+	if !m.mouseEnabled {
+		t.Error("mouseEnabled should be true after enabling")
+	}
+
+	// Re-applying the same value must not emit a redundant command.
+	if cmd := m.applySettings(on); cmd != nil {
+		t.Error("re-applying the same mouse state should return nil")
+	}
+
+	off := &settings.Settings{EnableMouse: false, OAuthPersistTokens: true}
+	if cmd := m.applySettings(off); cmd == nil {
+		t.Fatal("disabling mouse should return a non-nil command")
+	}
+	if m.mouseEnabled {
+		t.Error("mouseEnabled should be false after disabling")
+	}
+}

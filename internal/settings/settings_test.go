@@ -71,6 +71,48 @@ func TestLoad_OAuthPersistTokens_CorruptFallsBackToDefault(t *testing.T) {
 	}
 }
 
+func TestLoad_EnableMouse_DefaultsTrue(t *testing.T) {
+	withTempConfig(t)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !s.EnableMouse {
+		t.Error("default should have EnableMouse=true")
+	}
+	// A settings.json that predates the field (no enable_mouse key) must also
+	// default to true, not to the zero value.
+	path, _ := userconfig.Path("settings.json")
+	if err := os.WriteFile(path, []byte(`{"skip_tls_verify": false}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s, _ = Load()
+	if !s.EnableMouse {
+		t.Error("missing enable_mouse key should default to true")
+	}
+}
+
+func TestLoad_EnableMouse_ExplicitFalse(t *testing.T) {
+	withTempConfig(t)
+	path, _ := userconfig.Path("settings.json")
+	if err := os.WriteFile(path, []byte(`{"enable_mouse": false}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.EnableMouse {
+		t.Error("explicit enable_mouse:false should be respected")
+	}
+}
+
+func TestDefaults_EnableMouseTrue(t *testing.T) {
+	if !Defaults().EnableMouse {
+		t.Error("Defaults() should have EnableMouse=true")
+	}
+}
+
 func TestSaveLoad_Roundtrip(t *testing.T) {
 	withTempConfig(t)
 	s := &Settings{SkipTLSVerify: true}

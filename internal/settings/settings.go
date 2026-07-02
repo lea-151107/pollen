@@ -30,10 +30,13 @@ type Settings struct {
 	EnableCookies      bool    `json:"enable_cookies,omitempty"`
 
 	// EnableMouse turns on SGR mouse reporting (click to focus a panel, click a
-	// sidebar row to load it, wheel to scroll). Off by default: enabling mouse
-	// mode overrides the terminal's own text selection / copy (users then hold
-	// Shift to select), which keyboard-driven users often prefer to keep.
-	EnableMouse bool `json:"enable_mouse,omitempty"`
+	// sidebar row to load it, wheel to scroll). Defaults to true; toggle it live
+	// from the settings overlay (Ctrl+,). Turning it off restores the terminal's
+	// own text selection / copy (which mouse mode otherwise overrides — you then
+	// hold Shift to select). Like OAuthPersistTokens, NOT tagged omitempty so a
+	// missing field defaults to true (see Load) yet an explicit false is honored,
+	// and both are written back explicitly for a self-documenting file.
+	EnableMouse bool `json:"enable_mouse"`
 	IntruderConcurrency        int `json:"intruder_concurrency,omitempty"`
 	IntruderDelayMs            int `json:"intruder_delay_ms,omitempty"`
 	IntruderMaxRequests        int `json:"intruder_max_requests,omitempty"`
@@ -55,6 +58,7 @@ type Settings struct {
 func Defaults() *Settings {
 	return &Settings{
 		OAuthPersistTokens:         true,
+		EnableMouse:                true,
 		ResponsePanelRatio:         0.5,
 		RequestTimeoutSecs:         60,
 		MaxResponseMiB:             32,
@@ -75,11 +79,11 @@ func Load() (*Settings, error) {
 	// Fields that default to a non-zero value are pre-initialized here
 	// so json.Unmarshal — which only overwrites present fields —
 	// preserves the default when the JSON omits the field.
-	s := &Settings{OAuthPersistTokens: true}
+	s := &Settings{OAuthPersistTokens: true, EnableMouse: true}
 	if _, err := userconfig.LoadJSON(fileName, s); err != nil {
 		// Corrupt file: reset to defaults so a partial unmarshal doesn't
 		// leave stray values, then fall through to the normalization below.
-		s = &Settings{OAuthPersistTokens: true}
+		s = &Settings{OAuthPersistTokens: true, EnableMouse: true}
 	}
 	if s.ResponsePanelRatio <= 0 || s.ResponsePanelRatio >= 1 {
 		s.ResponsePanelRatio = 0.5

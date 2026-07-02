@@ -26,10 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   use in CI (a built-in Newman-style runner). `<src>` is a saved scenario
   name, an `@file` scenario JSON definition, or `-` for stdin. Honours
   `--env`.
-- **Mouse support (opt-in).** With `enable_mouse: true` in
-  `settings.json`, click a panel to focus it, click a history /
-  collections row to load it, and scroll the response body with the wheel.
-  Implemented with the terminal's SGR mouse mode.
+- **Mouse support (on by default).** Click a panel to focus it, click a
+  history / collections row to load it, and scroll the response body with
+  the wheel (the terminal's SGR mouse mode). Toggle it live from the
+  settings overlay (`Ctrl+,` → "Enable mouse"), or via `enable_mouse` in
+  `settings.json`.
 
 ### Changed
 
@@ -40,9 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
-- Mouse support is **off by default**: enabling SGR mouse mode overrides
-  the terminal's own text selection / copy (hold `Shift` to select while
-  it is on), which keyboard-driven users often prefer to keep.
+- Mouse support is **on by default**. SGR mouse mode overrides the
+  terminal's own text selection / copy (hold `Shift` to select while it is
+  on); turn it off from the settings overlay (`Ctrl+,`) or with
+  `enable_mouse: false` if you prefer native selection.
 
 [1.9.0]: https://github.com/lea-151107/pollen/releases/tag/v1.9.0
 
