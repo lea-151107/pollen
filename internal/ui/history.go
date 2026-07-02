@@ -188,6 +188,58 @@ func (h History) Update(msg tea.Msg) (History, tea.Cmd) {
 	return h, nil
 }
 
+// RowAt maps a panel-relative y (0 = the panel's top border) to a filtered
+// entry index, mirroring View's layout math (border + title + optional filter
+// line + scrolled row window). ok is false when y falls on the border, title,
+// filter line, or an empty row. height is the same value passed to View.
+func (h History) RowAt(height, y int) (int, bool) {
+	entries := h.filtered()
+	if len(entries) == 0 {
+		return 0, false
+	}
+	innerH := height - 2
+	if innerH < 1 {
+		innerH = 1
+	}
+	titleH := 1
+	if h.filterMode || h.filter != "" {
+		titleH = 2
+	}
+	maxRows := innerH - titleH
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	start := 0
+	if h.selected >= maxRows {
+		start = h.selected - maxRows + 1
+	}
+	end := start + maxRows
+	if end > len(entries) {
+		end = len(entries)
+	}
+	// Panel-y 0 is the top border; the title sits at y=1, so the first row is at
+	// y = 1 + titleH.
+	rowLine := y - 1 - titleH
+	if rowLine < 0 {
+		return 0, false
+	}
+	idx := start + rowLine
+	if idx < 0 || idx >= end {
+		return 0, false
+	}
+	return idx, true
+}
+
+// SelectIndex moves the cursor to i (an index into the filtered list). Returns
+// false if out of range.
+func (h *History) SelectIndex(i int) bool {
+	if i < 0 || i >= len(h.filtered()) {
+		return false
+	}
+	h.selected = i
+	return true
+}
+
 func (h History) View(width, height int) string {
 	inner := width - 2
 	if inner < 1 {

@@ -14,45 +14,10 @@ func (m Model) View() string {
 	}
 
 	statusBar := m.renderStatusBar()
-	statusH := lipgloss.Height(statusBar)
 
-	contentH := m.height - statusH
-	if contentH < 5 {
-		contentH = 5
-	}
-
-	sidebarW := 0
-	showSidebar := m.showHistory || m.showCollections
-	if showSidebar {
-		sidebarW = m.width / 4
-		if sidebarW < 20 {
-			sidebarW = 20
-		}
-		if sidebarW > m.sidebarMaxWidth {
-			sidebarW = m.sidebarMaxWidth
-		}
-	}
-
-	// Split remaining width between request and response panels.
-	available := m.width - sidebarW
-	if available < 1 {
-		available = 1
-	}
-	responseW := int(float64(available) * m.responsePanelRatio)
-	if responseW < 30 {
-		responseW = 30
-	}
-	maxResponseW := available - 20
-	if maxResponseW < 1 {
-		maxResponseW = 1
-	}
-	if responseW > maxResponseW {
-		responseW = maxResponseW
-	}
-	requestW := available - responseW
-	if requestW < 1 {
-		requestW = 1
-	}
+	// layoutDims owns the column-width / content-height math so View and the
+	// mouse hit-testing in handleMouse share one source of truth.
+	sidebarW, requestW, responseW, contentH := m.layoutDims()
 
 	reqPanel := m.renderRequest(requestW, contentH)
 	respPanel := m.response.View(responseW, contentH)
@@ -76,6 +41,9 @@ func (m Model) View() string {
 	}
 	if m.ws.State() != ui.WSHidden {
 		return m.ws.View()
+	}
+	if m.scenario.State() != ui.ScenHidden {
+		return m.scenario.View()
 	}
 	if m.copyMenuOpen {
 		return copyMenuView(m.width, m.height)

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -24,6 +26,7 @@ import (
 	"github.com/lea-151107/pollen/internal/history"
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/intruder"
+	"github.com/lea-151107/pollen/internal/scenario"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 	"github.com/lea-151107/pollen/internal/userconfig"
@@ -64,6 +67,7 @@ func main() {
 		exportOpenAPI  string
 		exportIntruder string
 		importCurl     string
+		runScenario    string
 	)
 	flag.StringVar(&configDir, "config", "", "config directory (default: ~/.config/pollen)")
 	flag.StringVar(&envName, "env", "", "environment name to activate at startup")
@@ -75,6 +79,7 @@ func main() {
 	flag.StringVar(&exportOpenAPI, "export-openapi", "", "export collections as OpenAPI 3.x (.json / .yaml / .yml; use - for stdout JSON)")
 	flag.StringVar(&exportIntruder, "export-intruder", "", "export the last Intruder run (.csv / .json; use - for stdout CSV)")
 	flag.StringVar(&importCurl, "import-curl", "", "parse a curl command and add it to collections (literal, @file, or - for stdin)")
+	flag.StringVar(&runScenario, "run", "", "run a scenario headlessly and exit non-zero on failure (saved name, @file, or - for stdin JSON)")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintln(out, "Usage: pollen [--option ...]\n\nOptions:")
@@ -138,9 +143,12 @@ func main() {
 	if importCurl != "" {
 		oneShotGroups++
 	}
+	if runScenario != "" {
+		oneShotGroups++
+	}
 	if oneShotGroups > 1 {
 		fmt.Fprintln(os.Stderr,
-			"pollen: specify only one of --export-postman / --export-collections / --export-openapi / --export-intruder / --import-curl per run")
+			"pollen: specify only one of --export-postman / --export-collections / --export-openapi / --export-intruder / --import-curl / --run per run")
 		os.Exit(2)
 	}
 	if postmanTarget != "" {
@@ -258,6 +266,32 @@ func main() {
 		os.Exit(0)
 	}
 
+	if runScenario != "" {
+		// Honour proxy / TLS / timeout / cookie-jar settings so a headless run
+		// behaves like the TUI — the shared cookie jar in particular lets a
+		// login step's session cookie carry into later steps.
+		cfg, _ := settings.Load()
+		applyHTTPXConfig(cfg)
+
+		envVars, _ := env.Load()
+		if envName != "" {
+			if err := envVars.SetCurrent(envName); err != nil {
+				fmt.Fprintf(os.Stderr, "pollen: --env: %v\n", err)
+			}
+		}
+
+		sc, err := resolveScenario(runScenario)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: run: %v\n", err)
+			os.Exit(1)
+		}
+		results := scenario.Run(context.Background(), sc, scenario.RunOpts{Env: envVars})
+		if reportScenarioRun(os.Stdout, sc, results) {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	store, err := history.Open()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pollen: history: %v\n", err)
@@ -273,36 +307,13 @@ func main() {
 	// Restore persistent settings. Failures fall back to defaults silently —
 	// settings shouldn't block startup.
 	cfg, _ := settings.Load()
+	applyHTTPXConfig(cfg)
 	if cfg != nil {
-		hc := httpx.Snapshot()
-		hc.SkipTLSVerify = cfg.SkipTLSVerify
-		hc.RequestTimeout = time.Duration(cfg.RequestTimeoutSecs) * time.Second
-		hc.MaxResponseBytes = cfg.MaxResponseMiB * 1024 * 1024
 		store.SetMaxEntries(cfg.HistoryLimit)
 		ui.TextPreviewLimit = cfg.TextPreviewKiB * 1024
 		ui.DefaultHexDumpLimit = cfg.HexDumpKiB * 1024
-		hc.ProxyURL = cfg.ProxyURL
-		hc.DisableRedirects = cfg.DisableRedirects
-		if cfg.CACertFile != "" {
-			data, err := os.ReadFile(cfg.CACertFile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: %v\n", err)
-			} else {
-				pool := x509.NewCertPool()
-				if !pool.AppendCertsFromPEM(data) {
-					fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: no valid PEM certificates\n")
-				} else {
-					hc.CACertPool = pool
-				}
-			}
-		}
-		if cfg.EnableCookies {
-			if jar, err := cookiejar.New(nil); err == nil {
-				hc.CookieJar = jar
-			}
-		}
-		httpx.SetConfig(hc)
 	}
+	enableMouse := cfg != nil && cfg.EnableMouse
 
 	// Variable environment (~/.config/pollen/env.json). Missing/corrupt → empty.
 	envVars, _ := env.Load()
@@ -313,10 +324,144 @@ func main() {
 		}
 	}
 
-	opts := app.Options{StartCollection: collFilter}
-	p := tea.NewProgram(app.New(store, collStore, envVars, opts), tea.WithAltScreen())
+	opts := app.Options{StartCollection: collFilter, MouseEnabled: enableMouse}
+	progOpts := []tea.ProgramOption{tea.WithAltScreen()}
+	if enableMouse {
+		// SGR mouse mode (click + wheel). Off by default because enabling it
+		// hijacks the terminal's native text selection / copy (users must hold
+		// Shift), which many keyboard-driven users rely on.
+		progOpts = append(progOpts, tea.WithMouseCellMotion())
+	}
+	p := tea.NewProgram(app.New(store, collStore, envVars, opts), progOpts...)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "pollen: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// applyHTTPXConfig applies the network-relevant settings (TLS / timeout /
+// proxy / redirects / CA cert / cookie jar) to the global httpx config. Shared
+// by the TUI startup and the --run headless path so both behave identically.
+// nil cfg (settings failed to load) leaves the defaults in place.
+func applyHTTPXConfig(cfg *settings.Settings) {
+	if cfg == nil {
+		return
+	}
+	hc := httpx.Snapshot()
+	hc.SkipTLSVerify = cfg.SkipTLSVerify
+	hc.RequestTimeout = time.Duration(cfg.RequestTimeoutSecs) * time.Second
+	hc.MaxResponseBytes = cfg.MaxResponseMiB * 1024 * 1024
+	hc.ProxyURL = cfg.ProxyURL
+	hc.DisableRedirects = cfg.DisableRedirects
+	if cfg.CACertFile != "" {
+		data, err := os.ReadFile(cfg.CACertFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: %v\n", err)
+		} else {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(data) {
+				fmt.Fprintf(os.Stderr, "pollen: ca_cert_file: no valid PEM certificates\n")
+			} else {
+				hc.CACertPool = pool
+			}
+		}
+	}
+	if cfg.EnableCookies {
+		if jar, err := cookiejar.New(nil); err == nil {
+			hc.CookieJar = jar
+		}
+	}
+	httpx.SetConfig(hc)
+}
+
+// resolveScenario turns the --run argument into a Scenario: "@file" / "-" parse
+// a JSON scenario definition (file / stdin); anything else is looked up by name
+// in scenarios.json.
+func resolveScenario(arg string) (scenario.Scenario, error) {
+	if arg == "-" || strings.HasPrefix(arg, "@") {
+		var (
+			data []byte
+			err  error
+		)
+		if arg == "-" {
+			data, err = io.ReadAll(os.Stdin)
+		} else {
+			data, err = os.ReadFile(strings.TrimPrefix(arg, "@"))
+		}
+		if err != nil {
+			return scenario.Scenario{}, err
+		}
+		var sc scenario.Scenario
+		if err := json.Unmarshal(data, &sc); err != nil {
+			return scenario.Scenario{}, fmt.Errorf("parse scenario JSON: %w", err)
+		}
+		return sc, nil
+	}
+	store, err := scenario.Open()
+	if err != nil {
+		return scenario.Scenario{}, err
+	}
+	sc, ok := store.ByName(arg)
+	if !ok {
+		return scenario.Scenario{}, fmt.Errorf("no saved scenario named %q", arg)
+	}
+	return sc, nil
+}
+
+// reportScenarioRun prints a per-step summary of a run and returns true if any
+// step failed (so the caller can exit non-zero for CI).
+func reportScenarioRun(w io.Writer, sc scenario.Scenario, results []scenario.StepResult) (failed bool) {
+	name := sc.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	fmt.Fprintf(w, "Running scenario %q (%d steps)\n", name, len(sc.Steps))
+	passed := 0
+	for i, r := range results {
+		label := r.Name
+		if label == "" {
+			label = fmt.Sprintf("step %d", i+1)
+		}
+		switch {
+		case r.Skipped:
+			fmt.Fprintf(w, "  - %s  skipped\n", label)
+		case r.Err != "":
+			failed = true
+			fmt.Fprintf(w, "  x %s  error: %s\n", label, r.Err)
+		default:
+			stepFailed := r.Failed()
+			mark := "ok"
+			if stepFailed {
+				mark, failed = "x", true
+			} else {
+				passed++
+			}
+			fmt.Fprintf(w, "  %s %s  %d  %dms\n", markGlyph(mark), label, r.Response.Status, r.DurationMs)
+			for _, a := range r.Asserts {
+				if !a.Pass {
+					fmt.Fprintf(w, "      assertion failed: %s want %q, got %q\n",
+						assertLabel(a.Assertion), a.Assertion.Want, a.Got)
+				}
+			}
+		}
+	}
+	fmt.Fprintf(w, "%d/%d steps passed\n", passed, len(sc.Steps))
+	return failed
+}
+
+func markGlyph(mark string) string {
+	if mark == "ok" {
+		return "✓" // ✓
+	}
+	return "✗" // ✗
+}
+
+func assertLabel(a scenario.Assertion) string {
+	if a.Kind == scenario.AssertBody {
+		if a.Path != "" {
+			return "body." + a.Path + " " + string(a.Op)
+		}
+		return "body " + string(a.Op)
+	}
+	return string(a.Kind) + " " + string(a.Op)
 }

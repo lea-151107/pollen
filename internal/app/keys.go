@@ -22,6 +22,7 @@ type KeyMap struct {
 	SwitchEnv   key.Binding
 	Intruder    key.Binding
 	WebSocket   key.Binding
+	Scenario    key.Binding
 	Help        key.Binding
 	Settings    key.Binding
 }
@@ -41,6 +42,7 @@ func DefaultKeyMap() KeyMap {
 		SwitchEnv:  key.NewBinding(key.WithKeys("ctrl+e")),
 		Intruder:   key.NewBinding(key.WithKeys("ctrl+r")),
 		WebSocket:  key.NewBinding(key.WithKeys("ctrl+w")),
+		Scenario:   key.NewBinding(key.WithKeys("ctrl+g")),
 		// Ctrl+/ produces ASCII 0x1f (US) on most terminals, which bubbletea
 		// reports as "ctrl+_". Modern terminals may also report "ctrl+/" via
 		// the CSI-u protocol — bind both so either works.
@@ -75,6 +77,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 				{Keys: bindingKeys(k.SwitchEnv), Desc: "Switch variable environment"},
 				{Keys: bindingKeys(k.Intruder), Desc: "Open Intruder (concurrent requests)"},
 				{Keys: bindingKeys(k.WebSocket), Desc: "Open WebSocket session"},
+				{Keys: bindingKeys(k.Scenario), Desc: "Open scenarios (multi-request workflows)"},
 				{Keys: bindingKeys(k.Quit), Desc: "Quit"},
 				{Keys: bindingKeys(k.Help), Desc: "This help"},
 				{Keys: bindingKeys(k.Settings), Desc: "Open settings overlay"},

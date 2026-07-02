@@ -28,6 +28,12 @@ type Settings struct {
 	DisableRedirects   bool    `json:"disable_redirects,omitempty"`
 	CACertFile         string  `json:"ca_cert_file,omitempty"`
 	EnableCookies      bool    `json:"enable_cookies,omitempty"`
+
+	// EnableMouse turns on SGR mouse reporting (click to focus a panel, click a
+	// sidebar row to load it, wheel to scroll). Off by default: enabling mouse
+	// mode overrides the terminal's own text selection / copy (users then hold
+	// Shift to select), which keyboard-driven users often prefer to keep.
+	EnableMouse bool `json:"enable_mouse,omitempty"`
 	IntruderConcurrency        int `json:"intruder_concurrency,omitempty"`
 	IntruderDelayMs            int `json:"intruder_delay_ms,omitempty"`
 	IntruderMaxRequests        int `json:"intruder_max_requests,omitempty"`
