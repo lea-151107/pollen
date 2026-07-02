@@ -112,6 +112,12 @@ func (r *Response) Blur()             { r.focused = false }
 func (r Response) Focused() bool      { return r.focused }
 func (r Response) FilterActive() bool { return r.filterActive }
 
+// ScrollUp / ScrollDown move the body viewport by n lines. Used by mouse-wheel
+// handling in the app layer (which owns mouse events so it can route each wheel
+// tick to the panel under the cursor).
+func (r *Response) ScrollUp(n int)   { r.vp.LineUp(n) }
+func (r *Response) ScrollDown(n int) { r.vp.LineDown(n) }
+
 // SearchActive reports whether the in-body search input is currently capturing
 // keystrokes. Returns false once Enter "locks" the query (searchQuery is
 // preserved but the bar no longer eats input).

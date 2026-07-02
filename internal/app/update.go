@@ -53,9 +53,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.intruder.SetSize(msg.Width, msg.Height)
 		m.ws.SetSize(msg.Width, msg.Height)
+		m.scenario.SetSize(msg.Width, msg.Height)
 		m.help.SetSize(msg.Width, msg.Height)
 		m.settingsPanel.SetSize(msg.Width, msg.Height)
 		return m, nil
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 
 	case sendResultMsg:
 		// Discard out-of-order results from older Send presses; only the
@@ -232,8 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.sendRequest(), m.statusTick(2*time.Second))
 
 	case ui.SettingsAppliedMsg:
-		m.applySettings(msg.Setting)
-		return m, nil
+		return m, m.applySettings(msg.Setting)
 
 	case ui.HelpOpenSettingsMsg:
 		// "Open Settings" button in the Ctrl+/ help overlay.
@@ -250,16 +253,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Settings panel if it happens to be open so the user sees
 		// the new values.
 		def := settings.Defaults()
-		m.applySettings(def)
+		applyCmd := m.applySettings(def)
 		if m.settingsPanel.IsOpen() {
 			m.settingsPanel.Open(def)
 		}
 		m.setStatus(statusOK, "settings reset to defaults")
-		return m, m.statusTick(2 * time.Second)
+		return m, tea.Batch(applyCmd, m.statusTick(2*time.Second))
 
 	case authRefreshFailedMsg:
 		m.setStatus(statusError, "refresh failed: "+msg.Err+"  · press g on Auth panel to re-authorize")
 		return m, m.statusTick(5 * time.Second)
+
+	case scenarioResultMsg:
+		// Ignore results from a superseded/cancelled run.
+		if msg.gen != m.scenarioGen {
+			return m, nil
+		}
+		m.scenario.AppendResult(msg.res)
+		if m.scenarioCh != nil {
+			return m, nextScenarioResultCmd(m.scenarioCh, msg.gen)
+		}
+		return m, nil
+
+	case scenarioDoneMsg:
+		if msg.gen != m.scenarioGen {
+			return m, nil
+		}
+		m.scenario.MarkDone()
+		m.scenarioCh = nil
+		m.scenarioCancel = nil
+		return m, nil
 
 	case ui.IntruderDoneMsg:
 		m.intruder.MarkDone("")
@@ -435,6 +458,62 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	}
+
+	// Scenario overlay: the app handles the state-changing keys (run / save /
+	// delete / new / close) so storage and the runner stay at this layer;
+	// navigation and name editing fall through to the component's Update.
+	if m.scenario.State() != ui.ScenHidden {
+		switch m.scenario.State() {
+		case ui.ScenList:
+			switch km.String() {
+			case "enter":
+				if _, ok := m.scenario.SelectedScenario(); ok {
+					return m, m.startScenarioRun()
+				}
+				return m, nil
+			case "n":
+				m.scenario.OpenBuild(m.collStore.Entries())
+				return m, nil
+			case "d":
+				if sc, ok := m.scenario.SelectedScenario(); ok {
+					if idx := m.scenStore.IndexOf(sc.ID); idx >= 0 && m.scenStore.DeleteAt(idx) {
+						_ = m.scenStore.Save()
+					}
+					m.scenario.OpenList(m.scenStore.Entries())
+				}
+				return m, nil
+			case "esc":
+				m.scenario.Close()
+				return m, nil
+			}
+		case ui.ScenBuild:
+			switch km.String() {
+			case "ctrl+s", "enter":
+				sc, err := m.scenario.BuildScenario()
+				if err != nil {
+					m.scenario.SetBuildErr(err.Error())
+					return m, nil
+				}
+				sc.ID = uuid.NewString()
+				m.scenStore.Add(sc)
+				_ = m.scenStore.Save()
+				m.scenario.OpenList(m.scenStore.Entries())
+				return m, nil
+			case "esc":
+				m.scenario.OpenList(m.scenStore.Entries())
+				return m, nil
+			}
+		case ui.ScenResults:
+			if km.String() == "esc" {
+				m.stopScenarioRun()
+				m.scenario.OpenList(m.scenStore.Entries())
+				return m, nil
+			}
+		}
+		var cmd tea.Cmd
+		m.scenario, cmd = m.scenario.Update(km)
+		return m, cmd
 	}
 
 	// Intruder overlay takes precedence over any other panel input so the
@@ -664,6 +743,11 @@ func (m Model) handleKey(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(km, m.keys.WebSocket):
 		m.ws.SetSize(m.width, m.height)
 		m.ws.OpenConfig(m.urlBar.Value())
+		return m, nil
+
+	case key.Matches(km, m.keys.Scenario):
+		m.scenario.SetSize(m.width, m.height)
+		m.scenario.OpenList(m.scenStore.Entries())
 		return m, nil
 
 	case key.Matches(km, m.keys.SwitchEnv):

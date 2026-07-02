@@ -167,6 +167,54 @@ func (c Collections) Update(msg tea.Msg) (Collections, tea.Cmd) {
 	return c, nil
 }
 
+// RowAt maps a panel-relative y (0 = the panel's top border) to a filtered
+// entry index, mirroring View's layout. See History.RowAt for the geometry.
+func (c Collections) RowAt(height, y int) (int, bool) {
+	entries := c.filtered()
+	if len(entries) == 0 {
+		return 0, false
+	}
+	innerH := height - 2
+	if innerH < 1 {
+		innerH = 1
+	}
+	titleH := 1
+	if c.filterMode || c.filter != "" {
+		titleH = 2
+	}
+	maxRows := innerH - titleH
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	start := 0
+	if c.selected >= maxRows {
+		start = c.selected - maxRows + 1
+	}
+	end := start + maxRows
+	if end > len(entries) {
+		end = len(entries)
+	}
+	rowLine := y - 1 - titleH
+	if rowLine < 0 {
+		return 0, false
+	}
+	idx := start + rowLine
+	if idx < 0 || idx >= end {
+		return 0, false
+	}
+	return idx, true
+}
+
+// SelectIndex moves the cursor to i (an index into the filtered list). Returns
+// false if out of range.
+func (c *Collections) SelectIndex(i int) bool {
+	if i < 0 || i >= len(c.filtered()) {
+		return false
+	}
+	c.selected = i
+	return true
+}
+
 func (c Collections) View(width, height int) string {
 	inner := width - 2
 	if inner < 1 {

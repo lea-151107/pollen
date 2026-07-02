@@ -16,6 +16,12 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
 - **Request chaining**: `{{response.body.<jq-path>}}` /
   `{{response.headers.<name>}}` / `{{response.status}}` expand from the last
   response — perfect for login → use-token flows
+- **Scenarios** (`Ctrl+G`): chain several saved requests into an ordered
+  workflow. Each step can reference an earlier step's response with
+  `{{steps.<name>.body.<jq>}}` / `.status` / `.headers.<name>`, and steps can
+  carry status/body assertions. Run them in the TUI with a live per-step
+  result table, or headlessly for CI with `pollen --run <name|@file>` (exits
+  non-zero on any failure — a built-in Newman-style runner)
 - **jq filter** (`/` in response panel) for narrowing JSON output
 - **In-body search** (`Ctrl+F` in response panel) with live highlight
 - **Response diff** (`D`): character-level diff vs the previous response
@@ -28,6 +34,11 @@ your terminal. Built with Go and [Bubble Tea](https://github.com/charmbracelet/b
   payload list (numeric range, wordlist, brute force, or case toggles),
   with configurable concurrency and a live result table. Inspired by
   Burp Suite's Sniper mode
+- **Mouse support** (on by default): click a panel to focus it, click a history
+  / collections row to load it, scroll the response body with the wheel. Toggle
+  it live from the settings overlay (`Ctrl+,` → "Enable mouse") — turning it off
+  restores the terminal's own text selection / copy, which mouse mode otherwise
+  overrides (hold `Shift` to select while it's on)
 - Binary response detection with hex dump preview, `s`-to-save
 - TLS options: skip verification, custom CA certificate file, HTTP(S) proxy,
   cookie jar, redirect control — all toggleable from `settings.json`
@@ -86,6 +97,7 @@ Press `Ctrl+/` inside the app for the full list at any time.
 | `Ctrl+L` | Force terminal redraw (recover from stray output) |
 | `Ctrl+/` | Show help overlay |
 | `Ctrl+R` | Open Intruder (concurrent requests against a payload list) |
+| `Ctrl+G` | Open Scenarios (multi-request workflows) |
 | `u` | Undo last history delete (within 5 s) |
 | `Ctrl+C` | Quit |
 
@@ -99,6 +111,7 @@ Press `Ctrl+/` inside the app for the full list at any time.
 - **Headers**: `↑/↓ ←/→` navigate · `Enter` new row · `Ctrl+D` delete row · `Tab` accept suggestion
 - **Body**: `←/→` switch tab · `Enter` enter editor · `Tab` indent (2 spaces) · `Esc` leave editor
 - **Response**: `↑/↓ PgUp/PgDn` scroll · `s` save body to file · `y` copy body · `/` jq filter · `Ctrl+F` search in body · `D` toggle diff vs prev
+- **Scenarios** (`Ctrl+G`): `↑/↓` move · `Enter` run · `n` new · `d` delete · `Esc` close. In the builder: `Tab` switch name/list · `a` add highlighted collection entry as a step · `x` remove last step · `Ctrl+S` / `Enter` save
 
 ## Authentication
 
@@ -150,6 +163,7 @@ pollen [--option ...]
 | `--export-collections <path>` | Alias for `--export-postman`, kept for backwards compatibility |
 | `--export-openapi <path>` | Export all collections as an OpenAPI 3.x document. Format is picked by extension (`.yaml` / `.yml` → YAML, otherwise JSON). Use `-` for JSON on stdout |
 | `--export-intruder <path>` | Export the most recent Intruder run as CSV (default) or JSON (when `<path>` ends in `.json`). Use `-` for CSV on stdout. Exits with status 2 if no run has been recorded yet |
+| `--run <src>` | Run a scenario headlessly and exit non-zero on failure (for CI). `<src>` is a saved scenario name, `@file` (a scenario JSON definition), or `-` for stdin. Honours `--env` |
 
 Examples:
 
@@ -161,6 +175,8 @@ pollen --init-config                                   # seed default settings.j
 pollen --export-postman /tmp/pollen-collections.json
 pollen --export-openapi /tmp/pollen-openapi.yaml      # OpenAPI 3.0.3 in YAML
 pollen --export-intruder /tmp/intruder.csv            # last Intruder run
+pollen --run "login flow"                              # run a saved scenario
+pollen --run @scenario.json --env staging             # run a scenario file in staging (CI)
 ```
 
 ## Configuration
@@ -173,6 +189,7 @@ crash mid-write never leaves a corrupt half-file.
 |------|---------|
 | `history.json` | Request/response history (most-recent first, capped at `history_limit`) |
 | `collections.json` | Named saved requests |
+| `scenarios.json` | Saved multi-request workflows (Scenarios) |
 | `settings.json` | Persistent toggles and tunables |
 | `env.json` | User-defined variables for `{{name}}` expansion |
 | `clipboard.txt` | Clipboard fallback if `xclip`/`wl-clipboard` missing |
@@ -197,6 +214,7 @@ the default silently so a partial or corrupt file never blocks startup.
 | `disable_redirects` | `false` | When `true`, returns 3xx responses as-is instead of following them |
 | `ca_cert_file` | `""` | Path to a PEM file with extra trusted CAs (safer than `skip_tls_verify` for internal/self-signed certs) |
 | `enable_cookies` | `false` | When `true`, cookies set by a response are replayed in subsequent requests within the same session |
+| `enable_mouse` | `true` | Mouse support (click to focus a panel, click a sidebar row to load it, wheel to scroll the response). Toggle live from the settings overlay (`Ctrl+,`). While on it overrides the terminal's native text selection / copy — set to `false` (or toggle off) to restore it; hold `Shift` to select while it's on |
 
 History stores binary response **metadata only** — the body bytes are dropped
 to keep the JSON readable and small. In-memory body bytes are also dropped

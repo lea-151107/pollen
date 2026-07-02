@@ -326,10 +326,10 @@ func TestSettings_RestartFieldShowsBadge(t *testing.T) {
 func TestSettings_NavigatesAllFields(t *testing.T) {
 	p := NewSettingsPanel()
 	p.Open(sampleSettings())
-	// G jumps to last; verify we have 17 fields.
+	// G jumps to last; verify we have 18 fields.
 	p, _ = p.Update(settingsKeyMsg("G"))
-	if p.cursor != 16 {
-		t.Errorf("expected 17 fields (cursor 0-16 at G), got %d", p.cursor)
+	if p.cursor != 17 {
+		t.Errorf("expected 18 fields (cursor 0-17 at G), got %d", p.cursor)
 	}
 }
 

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -15,6 +16,7 @@ import (
 	"github.com/lea-151107/pollen/internal/httpx"
 	"github.com/lea-151107/pollen/internal/intruder"
 	"github.com/lea-151107/pollen/internal/oauth"
+	"github.com/lea-151107/pollen/internal/scenario"
 	"github.com/lea-151107/pollen/internal/settings"
 	"github.com/lea-151107/pollen/internal/ui"
 	"github.com/lea-151107/pollen/internal/wsconn"
@@ -138,6 +140,39 @@ type Model struct {
 
 	// settingsPanel is the in-TUI settings editor opened with Ctrl+,.
 	settingsPanel ui.SettingsPanel
+
+	// mouseEnabled mirrors Options.MouseEnabled — when false, tea.MouseMsg
+	// handling is skipped so mouse events (which the program never requests in
+	// that case) can't affect state.
+	mouseEnabled bool
+
+	// panelRects records each focusable area's on-screen rectangle, recomputed
+	// every View(). Mouse clicks are hit-tested against it to pick the target
+	// panel. Empty until the first render.
+	panelRects map[focusArea]rect
+
+	// scenario owns the scenario overlay (list / builder / live results).
+	// scenStore is the on-disk scenarios.json. scenarioCh stays non-nil while a
+	// run is in flight so Update knows to schedule the next result pull;
+	// scenarioGen tags each run so results from a superseded/cancelled run are
+	// discarded (mirrors requestGen/wsGen), and scenarioCancel stops the runner
+	// goroutine when the user closes the results view.
+	scenario       ui.Scenario
+	scenStore      *scenario.Store
+	scenarioCh     <-chan scenario.StepResult
+	scenarioGen    int
+	scenarioCancel context.CancelFunc
+}
+
+// rect is an inclusive-origin, exclusive-extent screen rectangle in terminal
+// cells, used for mouse hit-testing.
+type rect struct {
+	x, y, w, h int
+}
+
+// contains reports whether cell (px,py) falls inside r.
+func (r rect) contains(px, py int) bool {
+	return px >= r.x && px < r.x+r.w && py >= r.y && py < r.y+r.h
 }
 
 type pendingUndo struct {
@@ -159,6 +194,12 @@ type Options struct {
 	// StartCollection opens the collections sidebar at startup and pre-filters
 	// it by this name (mirrors the --collection CLI flag).
 	StartCollection string
+
+	// MouseEnabled mirrors settings.EnableMouse: when true, main.go started the
+	// program with SGR mouse reporting, so the Update loop should act on
+	// tea.MouseMsg events. It's carried into the Model so mouse handling is a
+	// no-op when the option is off.
+	MouseEnabled bool
 }
 
 func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Options) Model {
@@ -205,7 +246,12 @@ func New(store *history.Store, collStore *collections.Store, e *env.Env, opts Op
 		renameInput:     renameInput,
 		importInput:     importInput,
 		help:            ui.NewHelp(),
+		mouseEnabled:    opts.MouseEnabled,
+		scenario:        ui.NewScenario(),
 	}
+	// Scenarios persist in their own scenarios.json; a missing/corrupt file
+	// yields an empty store (never fatal), so ignore the error like env/history.
+	m.scenStore, _ = scenario.Open()
 	m.history.SetEntries(store.Entries())
 	m.collUI.SetEntries(collStore.Entries())
 	if opts.StartCollection != "" {

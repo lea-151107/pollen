@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-02
+
+### Added
+
+- **Scenarios — multi-request workflows.** Chain several requests into
+  an ordered scenario that shares one variable context. A later step can
+  reference an earlier step's response with `{{steps.<name>.body.<jq>}}`,
+  `{{steps.<name>.status}}`, or `{{steps.<name>.headers.<name>}}`;
+  `{{response.*}}` continues to mean "the immediately preceding step".
+  Steps carry optional status/body assertions. Open the overlay with
+  `Ctrl+G` to build a scenario from your saved collection entries, run it,
+  and watch a live per-step result table. Scenarios persist in
+  `scenarios.json`. Reuses the same expansion chain as the request editor
+  (env → step/response chaining → dynamic vars) and the same `httpx`
+  client, so proxy / TLS / cookie-jar settings — notably a shared cookie
+  jar for login flows — apply to a run.
+- **Headless scenario runner `--run`.** `pollen --run <name|@file|->`
+  runs a scenario without the TUI and exits non-zero on any failure, for
+  use in CI (a built-in Newman-style runner). `<src>` is a saved scenario
+  name, an `@file` scenario JSON definition, or `-` for stdin. Honours
+  `--env`.
+- **Mouse support (on by default).** Click a panel to focus it, click a
+  history / collections row to load it, and scroll the response body with
+  the wheel (the terminal's SGR mouse mode). Toggle it live from the
+  settings overlay (`Ctrl+,` → "Enable mouse"), or via `enable_mouse` in
+  `settings.json`.
+
+### Changed
+
+- The `{{response.*}}` path grammar (`status`, `body`, `body.<jq>`,
+  `headers.<name>`) moved into a shared `internal/respvars` package so the
+  request editor and the scenario runner interpret a path identically.
+  No behaviour change to existing `{{response.*}}` tokens.
+
+### Notes
+
+- Mouse support is **on by default**. SGR mouse mode overrides the
+  terminal's own text selection / copy (hold `Shift` to select while it is
+  on); turn it off from the settings overlay (`Ctrl+,`) or with
+  `enable_mouse: false` if you prefer native selection.
+
+[1.9.0]: https://github.com/lea-151107/pollen/releases/tag/v1.9.0
+
 ## [1.8.2] - 2026-07-02
 
 ### Fixed
