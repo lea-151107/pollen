@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lea-151107/pollen/internal/history"
 )
@@ -143,5 +145,50 @@ func TestExpandStepVars_UnknownLeftIntact(t *testing.T) {
 	got := expandStepVars("{{steps.missing.body.x}}", map[string]*history.Response{})
 	if got != "{{steps.missing.body.x}}" {
 		t.Errorf("unknown step token should be left intact, got %q", got)
+	}
+}
+
+// TestRunStream_CancelUnblocksProducer guards against a goroutine leak: when
+// the consumer cancels and stops reading mid-run, the producer must not block
+// forever on an unread send. It exploits the fact that a blocked send can be
+// paired by a receive (ok==true) whereas a cleanly-exited producer closes the
+// channel (ok==false).
+func TestRunStream_CancelUnblocksProducer(t *testing.T) {
+	release := make(chan struct{})
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) >= 2 {
+			<-release // hold step 2 (and later) until the test lets it return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	sc := Scenario{
+		Name: "cancel",
+		Steps: []Step{
+			{Name: "a", Request: history.Request{Method: "GET", URL: srv.URL}},
+			{Name: "b", Request: history.Request{Method: "GET", URL: srv.URL}},
+			{Name: "c", Request: history.Request{Method: "GET", URL: srv.URL}},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := RunStream(ctx, sc, RunOpts{})
+
+	<-ch           // consume step a's result; producer is now in step b (blocked)
+	cancel()       // user cancels
+	close(release) // let step b's HTTP call return so the producer reaches its send
+	time.Sleep(300 * time.Millisecond)
+
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("producer sent after cancel with no reader — it was blocked (goroutine leak)")
+		}
+		// ok == false: channel closed → producer exited cleanly.
+	case <-time.After(2 * time.Second):
+		t.Fatal("channel neither closed nor readable after cancel (goroutine leak)")
 	}
 }

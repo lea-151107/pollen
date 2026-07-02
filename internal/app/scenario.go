@@ -46,6 +46,10 @@ func (m *Model) stopScenarioRun() {
 		m.scenarioCancel = nil
 	}
 	m.scenarioCh = nil
+	// Bump the generation so any result/done that was already in flight from
+	// the cancelled run is discarded by the gen check in Update rather than
+	// applied to a stale overlay.
+	m.scenarioGen++
 }
 
 // nextScenarioResultCmd reads one StepResult from ch and emits the matching
