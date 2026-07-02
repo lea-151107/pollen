@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-07-02
+
+### Fixed
+
+- **The WebSocket handshake ignored the shared cookie jar.**
+  With `enable_cookies` on, HTTP requests share a cookie jar
+  (`httpx.Config.CookieJar`), but `httpx.NewHandshakeClient`
+  built its `*http.Client` with no `Jar`. A session cookie
+  set by a prior HTTP login was therefore never sent on the
+  WebSocket upgrade, and the 101 response's `Set-Cookie` was
+  never stored — so a cookie-authenticated WebSocket to a
+  host you had already logged into over HTTP failed the
+  handshake. The handshake client now carries `cfg.CookieJar`,
+  matching `httpx.Do`; `Client.Timeout` stays unset since a
+  WebSocket outlives its handshake.
+
+### Notes
+
+- No user-facing surface change; a fix to the v1.8.0
+  WebSocket feature. Adds `internal/wsconn`
+  `TestDial_CarriesSharedCookieJar` as a regression guard.
+
+[1.8.2]: https://github.com/lea-151107/pollen/releases/tag/v1.8.2
+
 ## [1.8.1] - 2026-07-01
 
 ### Fixed
