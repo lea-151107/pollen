@@ -98,12 +98,29 @@ func RunStream(ctx context.Context, sc Scenario, opts RunOpts) <-chan StepResult
 	ch := make(chan StepResult)
 	go func() {
 		defer close(ch)
+		// send is ctx-aware: if the consumer has stopped reading after a
+		// cancel, fall through to <-ctx.Done() and return instead of blocking
+		// forever on the unbuffered channel (defer close wakes the reader).
+		send := func(r StepResult) bool {
+			select {
+			case ch <- r:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
 		outputs := make(map[string]*history.Response, len(sc.Steps))
 		var prev *history.Response
 		aborted := false
 		for _, step := range sc.Steps {
-			if aborted || ctx.Err() != nil {
-				ch <- StepResult{Name: step.Name, Skipped: true}
+			// Cancelled: stop entirely (don't emit Skipped — nobody's reading).
+			if ctx.Err() != nil {
+				return
+			}
+			if aborted {
+				if !send(StepResult{Name: step.Name, Skipped: true}) {
+					return
+				}
 				continue
 			}
 			res := runStep(step, outputs, prev, opts)
@@ -116,7 +133,9 @@ func RunStream(ctx context.Context, sc Scenario, opts RunOpts) <-chan StepResult
 			if res.Failed() {
 				aborted = true
 			}
-			ch <- res
+			if !send(res) {
+				return
+			}
 		}
 	}()
 	return ch

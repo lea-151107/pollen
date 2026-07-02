@@ -146,11 +146,6 @@ type Model struct {
 	// that case) can't affect state.
 	mouseEnabled bool
 
-	// panelRects records each focusable area's on-screen rectangle, recomputed
-	// every View(). Mouse clicks are hit-tested against it to pick the target
-	// panel. Empty until the first render.
-	panelRects map[focusArea]rect
-
 	// scenario owns the scenario overlay (list / builder / live results).
 	// scenStore is the on-disk scenarios.json. scenarioCh stays non-nil while a
 	// run is in flight so Update knows to schedule the next result pull;
@@ -162,17 +157,6 @@ type Model struct {
 	scenarioCh     <-chan scenario.StepResult
 	scenarioGen    int
 	scenarioCancel context.CancelFunc
-}
-
-// rect is an inclusive-origin, exclusive-extent screen rectangle in terminal
-// cells, used for mouse hit-testing.
-type rect struct {
-	x, y, w, h int
-}
-
-// contains reports whether cell (px,py) falls inside r.
-func (r rect) contains(px, py int) bool {
-	return px >= r.x && px < r.x+r.w && py >= r.y && py < r.y+r.h
 }
 
 type pendingUndo struct {

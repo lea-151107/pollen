@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-07-03
+
+### Fixed
+
+- **Cancelling a running scenario leaked the runner goroutine.**
+  The scenario runner streams step results over an unbuffered
+  channel. Pressing Esc during a run cancelled the context and
+  stopped the UI from reading further results, but the runner's
+  channel sends were not context-aware, so once the in-flight
+  request returned the goroutine blocked forever on its next send
+  — leaking one goroutine plus the retained response / step
+  outputs per cancelled run. Sends now select on the cancellation
+  and the runner exits promptly; `stopScenarioRun` also bumps the
+  run generation so a result already in flight is discarded
+  instead of applied to the (now hidden) overlay.
+
+### Notes
+
+- No user-facing surface change; a fix to the v1.9.0 Scenarios
+  feature. Adds `internal/scenario`
+  `TestRunStream_CancelUnblocksProducer` as a deterministic
+  regression guard, and removes dead mouse hit-testing code
+  (`panelRects` / `rect` / `contains`) left unused in
+  `internal/app`.
+
+[1.9.1]: https://github.com/lea-151107/pollen/releases/tag/v1.9.1
+
 ## [1.9.0] - 2026-07-02
 
 ### Added
