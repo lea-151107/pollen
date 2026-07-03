@@ -53,27 +53,67 @@ func parseJSON(data []byte) ([]collections.Entry, error) {
 // ── OpenAPI 3.x ─────────────────────────────────────────────────────────────
 
 type openAPIDoc struct {
-	OpenAPI string                              `json:"openapi" yaml:"openapi"`
-	Info    struct{ Title string }              `json:"info"    yaml:"info"`
-	Servers []struct{ URL string }              `json:"servers" yaml:"servers"`
-	Paths   map[string]map[string]openAPIOpRaw  `json:"paths"   yaml:"paths"`
+	OpenAPI string                     `json:"openapi" yaml:"openapi"`
+	Info    struct{ Title string }     `json:"info"    yaml:"info"`
+	Servers []struct{ URL string }     `json:"servers" yaml:"servers"`
+	Paths   map[string]openAPIPathItem `json:"paths"   yaml:"paths"`
+}
+
+// openAPIPathItem models a Path Item Object with an explicit field per HTTP
+// operation. Modelling it as a struct (rather than map[string]openAPIOpRaw)
+// means sibling keys that are NOT operations — summary/description/$ref
+// (strings) and parameters/servers (arrays) — simply don't map to any field
+// and are ignored by both the JSON and YAML decoders, instead of failing the
+// whole document with a type-mismatch error.
+type openAPIPathItem struct {
+	Get     *openAPIOpRaw `json:"get"     yaml:"get"`
+	Post    *openAPIOpRaw `json:"post"    yaml:"post"`
+	Put     *openAPIOpRaw `json:"put"     yaml:"put"`
+	Patch   *openAPIOpRaw `json:"patch"   yaml:"patch"`
+	Delete  *openAPIOpRaw `json:"delete"  yaml:"delete"`
+	Head    *openAPIOpRaw `json:"head"    yaml:"head"`
+	Options *openAPIOpRaw `json:"options" yaml:"options"`
+	Trace   *openAPIOpRaw `json:"trace"   yaml:"trace"`
+}
+
+// operations returns the item's defined operations paired with their upper-case
+// HTTP method, in a fixed (already-sorted) order for deterministic output.
+func (p openAPIPathItem) operations() []struct {
+	method string
+	op     *openAPIOpRaw
+} {
+	all := []struct {
+		method string
+		op     *openAPIOpRaw
+	}{
+		{"DELETE", p.Delete},
+		{"GET", p.Get},
+		{"HEAD", p.Head},
+		{"OPTIONS", p.Options},
+		{"PATCH", p.Patch},
+		{"POST", p.Post},
+		{"PUT", p.Put},
+		{"TRACE", p.Trace},
+	}
+	out := all[:0]
+	for _, o := range all {
+		if o.op != nil {
+			out = append(out, o)
+		}
+	}
+	return out
 }
 
 type openAPIOpRaw struct {
-	OperationID string           `json:"operationId" yaml:"operationId"`
-	Summary     string           `json:"summary"     yaml:"summary"`
-	Parameters  []openAPIParam   `json:"parameters"  yaml:"parameters"`
+	OperationID string         `json:"operationId" yaml:"operationId"`
+	Summary     string         `json:"summary"     yaml:"summary"`
+	Parameters  []openAPIParam `json:"parameters"  yaml:"parameters"`
 }
 
 type openAPIParam struct {
 	Name     string `json:"name"     yaml:"name"`
 	In       string `json:"in"       yaml:"in"`
 	Required bool   `json:"required" yaml:"required"`
-}
-
-var httpMethods = map[string]bool{
-	"get": true, "post": true, "put": true, "patch": true,
-	"delete": true, "head": true, "options": true, "trace": true,
 }
 
 func openAPIToEntries(doc openAPIDoc) []collections.Entry {
@@ -91,19 +131,9 @@ func openAPIToEntries(doc openAPIDoc) []collections.Entry {
 
 	var entries []collections.Entry
 	for _, path := range paths {
-		ops := doc.Paths[path]
-		// Sort methods too.
-		methods := make([]string, 0, len(ops))
-		for m := range ops {
-			methods = append(methods, m)
-		}
-		sort.Strings(methods)
-
-		for _, method := range methods {
-			if !httpMethods[strings.ToLower(method)] {
-				continue
-			}
-			op := ops[method]
+		for _, mo := range doc.Paths[path].operations() {
+			method := mo.method
+			op := mo.op
 			name := op.Summary
 			if name == "" {
 				name = op.OperationID
