@@ -2,6 +2,7 @@ package curlparse
 
 import (
 	"encoding/base64"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -165,8 +166,106 @@ func TestParse_BackslashContinuation(t *testing.T) {
 	if req.URL != "https://example.com" || req.Body != "body" {
 		t.Errorf("req: %+v", req)
 	}
-	if len(req.Headers) != 1 || req.Headers[0].Key != "X" {
-		t.Errorf("headers: %+v", req.Headers)
+	// The explicit -H header must be preserved (a Content-Type default is also
+	// auto-added for the raw -d body; see TestParse_DataDefaultContentType).
+	if req.Headers[0].Key != "X" || req.Headers[0].Value != "y" {
+		t.Errorf("first header should be the explicit X:y, got %+v", req.Headers)
+	}
+}
+
+func TestParse_GetFlagMovesDataToQuery(t *testing.T) {
+	req, err := Parse(`curl -G -d 'q=hello' https://example.com/search`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if req.Method != "GET" {
+		t.Errorf("method: got %s want GET", req.Method)
+	}
+	if req.URL != "https://example.com/search?q=hello" {
+		t.Errorf("URL: got %q want .../search?q=hello", req.URL)
+	}
+	if req.Body != "" {
+		t.Errorf("body should be empty for -G, got %q", req.Body)
+	}
+}
+
+func TestParse_GetFlagAppendsWithExistingQuery(t *testing.T) {
+	req, err := Parse(`curl -G -d 'b=2' 'https://x/s?a=1'`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if req.URL != "https://x/s?a=1&b=2" {
+		t.Errorf("URL: got %q", req.URL)
+	}
+}
+
+func TestParse_DataDefaultContentType(t *testing.T) {
+	// curl's -d defaults Content-Type to application/x-www-form-urlencoded when
+	// the command gives none; pollen must not fall back to text/plain.
+	req, err := Parse(`curl https://x -d 'name=alice&age=3'`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	found := false
+	for _, h := range req.Headers {
+		if strings.EqualFold(h.Key, "Content-Type") {
+			found = true
+			if h.Value != "application/x-www-form-urlencoded" {
+				t.Errorf("Content-Type: got %q", h.Value)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected an auto Content-Type header, got %+v", req.Headers)
+	}
+}
+
+func TestParse_DataDefaultContentTypeNotAddedWhenExplicit(t *testing.T) {
+	req, err := Parse(`curl https://x -H 'Content-Type: application/json' -d '{"a":1}'`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	n := 0
+	for _, h := range req.Headers {
+		if strings.EqualFold(h.Key, "Content-Type") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("should not duplicate an explicit Content-Type, got %d", n)
+	}
+}
+
+func TestParse_DataFileRead(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/payload.json"
+	if err := os.WriteFile(path, []byte("{\"k\":\n1}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req, err := Parse(`curl https://x -d @` + path)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// -d strips newlines from the file content.
+	if req.Body != `{"k":1}` {
+		t.Errorf("body: got %q want {\"k\":1}", req.Body)
+	}
+}
+
+func TestParse_DataRawKeepsLiteralAt(t *testing.T) {
+	req, err := Parse(`curl https://x --data-raw @notafile`)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if req.Body != "@notafile" {
+		t.Errorf("--data-raw should keep the literal @, got %q", req.Body)
+	}
+}
+
+func TestParse_DataFileMissingErrors(t *testing.T) {
+	_, err := Parse(`curl https://x -d @/nonexistent/pollen-test-file`)
+	if err == nil {
+		t.Error("expected error reading a missing -d @file")
 	}
 }
 
