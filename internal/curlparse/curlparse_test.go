@@ -3,6 +3,7 @@ package curlparse
 import (
 	"encoding/base64"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -237,12 +238,14 @@ func TestParse_DataDefaultContentTypeNotAddedWhenExplicit(t *testing.T) {
 }
 
 func TestParse_DataFileRead(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/payload.json"
+	path := filepath.Join(t.TempDir(), "payload.json")
 	if err := os.WriteFile(path, []byte("{\"k\":\n1}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	req, err := Parse(`curl https://x -d @` + path)
+	// Single-quote the path so a Windows temp dir's backslashes survive the
+	// tokenizer (which treats '\' as a POSIX-shell escape) rather than being
+	// stripped — quoting a path is also how a real curl command would carry it.
+	req, err := Parse(`curl https://x -d '@` + path + `'`)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
