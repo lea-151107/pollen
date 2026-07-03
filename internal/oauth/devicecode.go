@@ -169,9 +169,14 @@ func PollToken(ctx context.Context, cfg DeviceCodeConfig, deviceCode string, int
 		// mandate an initial delay, but waiting at least once gives
 		// the user time to start the device-side flow before pollen
 		// fires its first poll.
+		// NewTimer + Stop so a cancel mid-wait doesn't leave the timer alive
+		// until it fires (time.After can't be stopped); mirrors the intruder
+		// runner's delay loop.
+		timer := time.NewTimer(interval)
 		select {
-		case <-time.After(interval):
+		case <-timer.C:
 		case <-ctx.Done():
+			timer.Stop()
 			return nil, fmt.Errorf("oauth: device poll: %w", ctx.Err())
 		}
 
