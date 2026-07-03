@@ -78,6 +78,65 @@ func TestHistory_FilterClampSelected(t *testing.T) {
 	}
 }
 
+// TestHistory_SelectByID_ReanchorAcrossPrepend is the regression test for the
+// cursor-desync bug: after a request completes, the app captures the selected
+// entry's ID, Prepends the new entry, re-sets the entries, and re-anchors by
+// ID. When a filter is active and the newly-prepended entry does NOT match it,
+// the filtered list doesn't move, so the cursor must stay on the same entry —
+// the old blind Shift(1) wrongly slid it down by one.
+func TestHistory_SelectByID_ReanchorAcrossPrepend(t *testing.T) {
+	h := NewHistory()
+	h.SetEntries([]history.Entry{
+		{ID: "old1", Request: history.Request{Method: "GET", URL: "https://example.com/a"}},
+		{ID: "old2", Request: history.Request{Method: "GET", URL: "https://example.com/b"}},
+	})
+	h.filter = "example" // active filter
+	h.selected = 0        // user selected the top filtered row (old1)
+
+	// Capture selection, then simulate a Prepend of a NON-matching entry.
+	selID := ""
+	if e := h.Selected(); e != nil {
+		selID = e.ID
+	}
+	if selID != "old1" {
+		t.Fatalf("precondition: selected should be old1, got %q", selID)
+	}
+	h.SetEntries([]history.Entry{
+		{ID: "new", Request: history.Request{Method: "GET", URL: "https://other.com/x"}}, // doesn't match "example"
+		{ID: "old1", Request: history.Request{Method: "GET", URL: "https://example.com/a"}},
+		{ID: "old2", Request: history.Request{Method: "GET", URL: "https://example.com/b"}},
+	})
+	h.SelectByID(selID)
+
+	if got := h.Selected(); got == nil || got.ID != "old1" {
+		t.Fatalf("cursor should stay on old1 after non-matching prepend, got %+v", got)
+	}
+}
+
+// TestHistory_SelectByID_MatchingPrepend covers the ordinary case: the new
+// entry matches the filter (or there's no filter), so it lands at filtered
+// index 0 and the previously-selected entry moves down by one — re-anchoring by
+// ID must follow it.
+func TestHistory_SelectByID_MatchingPrepend(t *testing.T) {
+	h := NewHistory()
+	h.SetEntries([]history.Entry{
+		{ID: "old1", Request: history.Request{Method: "GET", URL: "https://example.com/a"}},
+	})
+	h.selected = 0
+	selID := h.Selected().ID
+	h.SetEntries([]history.Entry{
+		{ID: "new", Request: history.Request{Method: "GET", URL: "https://example.com/new"}},
+		{ID: "old1", Request: history.Request{Method: "GET", URL: "https://example.com/a"}},
+	})
+	h.SelectByID(selID)
+	if got := h.Selected(); got == nil || got.ID != "old1" {
+		t.Fatalf("cursor should follow old1 to index 1, got %+v", got)
+	}
+	if h.selected != 1 {
+		t.Errorf("selected index should be 1, got %d", h.selected)
+	}
+}
+
 func TestFormatRelative(t *testing.T) {
 	now := time.Now()
 	cases := []struct {
