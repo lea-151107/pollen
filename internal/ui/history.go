@@ -70,14 +70,23 @@ func (h History) Selected() *history.Entry {
 
 func (h History) SelectedIndex() int { return h.selected }
 
-// Shift advances the cursor by delta. Used when an entry is Prepended to the
-// underlying store so the cursor keeps pointing at the same logical entry
-// instead of "moving" by one. SetEntries clamps the value afterwards.
-func (h *History) Shift(delta int) {
-	h.selected += delta
-	if h.selected < 0 {
-		h.selected = 0
+// SelectByID moves the cursor onto the filtered-view entry whose ID matches id,
+// keeping the selection anchored to the same logical entry across a store
+// mutation (e.g. a Prepend). Returns false when no visible entry matches (the
+// caller's prior clamp in SetEntries then stands). Unlike a blind index shift,
+// this stays correct when a filter is active and the newly-added entry does not
+// match it, so the filtered list did not actually move.
+func (h *History) SelectByID(id string) bool {
+	if id == "" {
+		return false
 	}
+	for i, e := range h.filtered() {
+		if e.ID == id {
+			h.selected = i
+			return true
+		}
+	}
+	return false
 }
 
 func (h *History) Focus() { h.focused = true }

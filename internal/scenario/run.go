@@ -158,6 +158,11 @@ func runStep(step Step, outputs map[string]*history.Response, prev *history.Resp
 	req.URL = expand(req.URL)
 	req.Body = expand(req.Body)
 	req.GraphQLVariables = expand(req.GraphQLVariables)
+	// Headers is a slice, so req (a value copy of step.Request) still shares its
+	// backing array with the caller's scenario template. Expanding in place would
+	// permanently overwrite the stored {{...}} tokens — corrupting a second run
+	// and anything the editor later shows/saves. Deep-copy before mutating.
+	req.Headers = append([]history.Header(nil), req.Headers...)
 	for i := range req.Headers {
 		req.Headers[i].Value = expand(req.Headers[i].Value)
 	}

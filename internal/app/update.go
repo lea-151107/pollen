@@ -73,12 +73,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.entry.Response != nil {
 			m.response.SetResponse(msg.entry.Response, msg.entry.Request.URL)
 		}
+		// Anchor the cursor to whichever entry the user had selected so a
+		// Prepend doesn't slide the highlight onto a neighbour. Re-locating by
+		// ID (rather than a blind +1 shift) stays correct when a history filter
+		// is active and the new entry doesn't match it — the filtered list, and
+		// so the cursor, must not move in that case.
+		var selID string
+		if e := m.history.Selected(); e != nil {
+			selID = e.ID
+		}
 		m.store.Prepend(msg.entry)
 		_ = m.store.Save()
-		// Prepend shifts every existing entry by 1 — slide the cursor too so
-		// it keeps pointing at the same entry the user was looking at.
-		m.history.Shift(1)
 		m.history.SetEntries(m.store.Entries())
+		m.history.SelectByID(selID)
 		// Any history mutation invalidates a pending undo (indices have shifted).
 		m.pendingUndo = nil
 		return m, nil

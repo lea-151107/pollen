@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-07-03
+
+### Fixed
+
+- **OpenAPI import failed entirely on ordinary specs.** A Path Item
+  Object with non-operation sibling keys (`summary` / `description` /
+  `$ref` strings, `parameters` / `servers` arrays) made the whole
+  document fail to unmarshal, so the import aborted instead of taking
+  the operations. Path items are now modelled with an explicit field
+  per HTTP method, so non-operation keys are ignored.
+- **Running a scenario corrupted its stored request headers.** The
+  runner expanded `{{...}}` tokens into the template's header slice in
+  place (a shared backing array), so a second run — or the editor —
+  saw the already-expanded values. Headers are now deep-copied first.
+- **History cursor jumped to the wrong entry under an active filter.**
+  On request completion the cursor was shifted by one blindly; if the
+  new entry didn't match the filter the highlight slid onto a
+  neighbour. The cursor is now re-anchored to the selected entry by ID.
+- **curl import fidelity (`--import-curl`).** `-G` now moves `-d` /
+  `--data-urlencode` data onto the URL query with no body; `-d` /
+  `--data` without an explicit `Content-Type` now defaults to
+  `application/x-www-form-urlencoded` (curl's default) instead of
+  `text/plain`; and `-d @file` now reads the file contents instead of
+  sending the literal `@file` text.
+- **Intruder wordlist parsing.** A wordlist file ending in a newline no
+  longer adds a trailing empty payload, and CRLF endings are trimmed.
+- **OAuth timeout contexts and poll timers leaked.** The
+  Authorization-Code / Device-Code completion paths now cancel their
+  `WithTimeout` context, and the device-code poll loop plus the
+  Intruder inter-request delay use a stoppable timer so a cancel
+  doesn't leave a `time.After` timer alive until it fires.
+
+### Notes
+
+- Bug-fix only; no user-facing feature changes. Adds regression tests
+  across `internal/importer`, `internal/scenario`, `internal/ui`
+  (history + intruder wordlist), and `internal/curlparse`.
+
+[1.9.2]: https://github.com/lea-151107/pollen/releases/tag/v1.9.2
+
 ## [1.9.1] - 2026-07-03
 
 ### Fixed

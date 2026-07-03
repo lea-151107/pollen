@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -89,6 +90,24 @@ func TestParsePayloadInput_List(t *testing.T) {
 	}
 	if strings.Join(cfg.Words, "|") != "a|b|c" {
 		t.Errorf("list words: %v", cfg.Words)
+	}
+}
+
+// TestParsePayloadInput_WordlistFile guards against the trailing-empty-payload
+// and CRLF bugs: a file ending in a newline must not add a blank payload, and
+// CRLF line endings must be trimmed.
+func TestParsePayloadInput_WordlistFile(t *testing.T) {
+	path := t.TempDir() + "/words.txt"
+	// CRLF endings, a blank line, and a trailing newline.
+	if err := os.WriteFile(path, []byte("alpha\r\nbeta\r\n\r\ngamma\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, errS := parsePayloadInput(intruder.PayloadList, "@"+path)
+	if errS != "" {
+		t.Fatalf("err: %s", errS)
+	}
+	if got := strings.Join(cfg.Words, "|"); got != "alpha|beta|gamma" {
+		t.Errorf("wordlist words: got %q want alpha|beta|gamma", got)
 	}
 }
 

@@ -1404,6 +1404,12 @@ func parsePayloadInput(kind intruder.PayloadKind, raw string) (intruder.PayloadC
 				return intruder.PayloadConfig{}, "cannot read wordlist: " + err.Error()
 			}
 			for _, line := range strings.Split(string(data), "\n") {
+				// Trim a trailing CR (CRLF files) and skip blank lines so a
+				// file ending in a newline doesn't add an empty payload.
+				line = strings.TrimRight(line, "\r")
+				if line == "" {
+					continue
+				}
 				words = append(words, line)
 			}
 		} else {

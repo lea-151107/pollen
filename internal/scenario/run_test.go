@@ -141,6 +141,42 @@ func TestRun_ContainsAssertion(t *testing.T) {
 	}
 }
 
+// TestRun_DoesNotMutateTemplateHeaders guards against the header-aliasing bug:
+// runStep must not expand {{...}} tokens into the caller's scenario in place,
+// or a second run (or the editor) would see the stale, already-expanded values.
+func TestRun_DoesNotMutateTemplateHeaders(t *testing.T) {
+	srv := newChainServer()
+	defer srv.Close()
+
+	sc := Scenario{
+		Name: "hdr",
+		Steps: []Step{
+			{Name: "login", Request: history.Request{Method: "POST", URL: srv.URL + "/login"}},
+			{
+				Name: "me",
+				Request: history.Request{
+					Method:  "GET",
+					URL:     srv.URL + "/me",
+					Headers: []history.Header{{Key: "Authorization", Value: "Bearer {{steps.login.body.token}}"}},
+				},
+				Assert: []Assertion{{Kind: AssertStatus, Op: OpEq, Want: "200"}},
+			},
+		},
+	}
+
+	const want = "Bearer {{steps.login.body.token}}"
+	// Run twice; both must succeed and the template must survive unchanged.
+	for i := 0; i < 2; i++ {
+		results := Run(context.Background(), sc, RunOpts{})
+		if results[1].Failed() {
+			t.Fatalf("run %d: me step failed: status=%d asserts=%+v", i, results[1].Response.Status, results[1].Asserts)
+		}
+		if got := sc.Steps[1].Request.Headers[0].Value; got != want {
+			t.Fatalf("run %d: template header was mutated: got %q want %q", i, got, want)
+		}
+	}
+}
+
 func TestExpandStepVars_UnknownLeftIntact(t *testing.T) {
 	got := expandStepVars("{{steps.missing.body.x}}", map[string]*history.Response{})
 	if got != "{{steps.missing.body.x}}" {

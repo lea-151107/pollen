@@ -342,6 +342,77 @@ func TestExportImportRoundtripFormBody(t *testing.T) {
 	}
 }
 
+// TestImportOpenAPI_PathLevelKeys is the regression test for the bug where a
+// Path Item Object with non-operation sibling keys (description/summary/$ref
+// strings, parameters/servers arrays) made the whole document fail to
+// unmarshal into map[string]map[string]openAPIOpRaw. A valid spec must import
+// its operations and ignore the extra keys.
+func TestImportOpenAPI_PathLevelKeys(t *testing.T) {
+	const spec = `{
+	  "openapi": "3.0.0",
+	  "info": {"title": "x"},
+	  "servers": [{"url": "https://api.example.com"}],
+	  "paths": {
+	    "/pets": {
+	      "summary": "Pet operations",
+	      "description": "Everything about pets",
+	      "parameters": [{"name": "trace", "in": "header"}],
+	      "servers": [{"url": "https://alt.example.com"}],
+	      "get": {"summary": "List pets"},
+	      "post": {"summary": "Create pet"}
+	    },
+	    "/health": {
+	      "$ref": "#/components/pathItems/health"
+	    }
+	  }
+	}`
+	path := writeTemp(t, "openapi.json", spec)
+	entries, err := Import(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("want 2 entries (GET+POST /pets), got %d: %+v", len(entries), entries)
+	}
+	// operations() returns GET before POST.
+	if entries[0].Request.Method != "GET" || entries[0].Name != "List pets" {
+		t.Errorf("entry[0]: got %q / %q", entries[0].Request.Method, entries[0].Name)
+	}
+	if entries[1].Request.Method != "POST" || entries[1].Name != "Create pet" {
+		t.Errorf("entry[1]: got %q / %q", entries[1].Request.Method, entries[1].Name)
+	}
+}
+
+// TestImportOpenAPIYAML_PathLevelKeys covers the same fix on the YAML path,
+// which additionally can't use json.RawMessage — the struct-per-operation model
+// works for both decoders.
+func TestImportOpenAPIYAML_PathLevelKeys(t *testing.T) {
+	const spec = `
+openapi: "3.0.0"
+info:
+  title: x
+paths:
+  /items:
+    description: Item operations
+    parameters:
+      - name: trace
+        in: header
+    get:
+      summary: List items
+`
+	path := writeTemp(t, "openapi.yaml", spec)
+	entries, err := Import(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(entries))
+	}
+	if entries[0].Name != "List items" || entries[0].Request.Method != "GET" {
+		t.Errorf("entry[0]: got %q / %q", entries[0].Name, entries[0].Request.Method)
+	}
+}
+
 func TestImportUnrecognised(t *testing.T) {
 	path := writeTemp(t, "random.json", `{"foo": "bar"}`)
 	_, err := Import(path)

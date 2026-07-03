@@ -8,6 +8,7 @@ package curlparse
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/lea-151107/pollen/internal/history"
@@ -70,7 +71,23 @@ func Parse(command string) (history.Request, error) {
 			if i >= len(tokens) {
 				return history.Request{}, fmt.Errorf("curlparse: %s requires a value", t)
 			}
-			rawBodyParts = append(rawBodyParts, tokens[i])
+			val := tokens[i]
+			// curl reads @<path> as file contents for -d/--data/--data-binary
+			// (but --data-raw takes its value verbatim, including a leading @).
+			// -d/--data additionally strip newlines from the file; --data-binary
+			// posts it byte-for-byte.
+			if t != "--data-raw" && strings.HasPrefix(val, "@") {
+				data, err := os.ReadFile(val[1:])
+				if err != nil {
+					return history.Request{}, fmt.Errorf("curlparse: %s @%s: %w", t, val[1:], err)
+				}
+				val = string(data)
+				if t != "--data-binary" {
+					val = strings.ReplaceAll(val, "\r", "")
+					val = strings.ReplaceAll(val, "\n", "")
+				}
+			}
+			rawBodyParts = append(rawBodyParts, val)
 			bodyImpliesPost = true
 		case t == "--data-urlencode":
 			i++
@@ -156,6 +173,22 @@ func Parse(command string) (history.Request, error) {
 		req.Method = "POST"
 	}
 
+	// -G / --get moves any inline data onto the URL as a query string and sends
+	// no body (curl's behaviour): `curl -G -d 'q=hi' URL` → `GET URL?q=hi`.
+	if useGet {
+		var q []string
+		q = append(q, rawBodyParts...)
+		q = append(q, formPairs...)
+		if len(q) > 0 {
+			sep := "?"
+			if strings.Contains(req.URL, "?") {
+				sep = "&"
+			}
+			req.URL += sep + strings.Join(q, "&")
+		}
+		return req, nil
+	}
+
 	// Body assembly: multipart wins over form-urlencoded wins over raw
 	// (an unusual command setting more than one will surface as the
 	// most specific kind; users very rarely mix them).
@@ -171,11 +204,24 @@ func Parse(command string) (history.Request, error) {
 		// Default raw, but if Content-Type says JSON keep BodyJSON
 		// so the editor opens the JSON tab.
 		req.BodyType = history.BodyRaw
+		hasContentType := false
 		for _, h := range req.Headers {
-			if strings.EqualFold(h.Key, "Content-Type") && strings.Contains(strings.ToLower(h.Value), "json") {
-				req.BodyType = history.BodyJSON
-				break
+			if strings.EqualFold(h.Key, "Content-Type") {
+				hasContentType = true
+				if strings.Contains(strings.ToLower(h.Value), "json") {
+					req.BodyType = history.BodyJSON
+				}
 			}
+		}
+		// curl's -d/--data defaults the Content-Type to
+		// application/x-www-form-urlencoded when the command gives none.
+		// Without this pollen would auto-apply text/plain for a raw body,
+		// changing the request semantics from what the curl command meant.
+		if !hasContentType {
+			req.Headers = append(req.Headers, history.Header{
+				Key:   "Content-Type",
+				Value: "application/x-www-form-urlencoded",
+			})
 		}
 	}
 

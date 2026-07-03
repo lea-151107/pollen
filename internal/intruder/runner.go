@@ -86,10 +86,14 @@ func startWithDoer(ctx context.Context, cfg RunConfig, do httpDoer) (<-chan Resu
 			first := true
 			for job := range payloads {
 				if !first && cfg.DelayMs > 0 {
+					// NewTimer + Stop so a cancel mid-delay doesn't leave the
+					// timer alive until it fires (time.After can't be stopped).
+					timer := time.NewTimer(time.Duration(cfg.DelayMs) * time.Millisecond)
 					select {
 					case <-ctx.Done():
+						timer.Stop()
 						return
-					case <-time.After(time.Duration(cfg.DelayMs) * time.Millisecond):
+					case <-timer.C:
 					}
 				}
 				first = false
