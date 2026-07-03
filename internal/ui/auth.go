@@ -267,6 +267,11 @@ func (a *Auth) SetOAuthDCToken(t *oauth.Token) {
 	a.oauthDCError = ""
 	a.oauthDCPolling = false
 	a.oauthDCAuth = nil
+	// Release the WithTimeout context so its timer isn't retained until the
+	// (up to 30-minute) deadline fires; mirrors Reset()'s cancel-then-nil.
+	if a.oauthDCCancel != nil {
+		a.oauthDCCancel()
+	}
 	a.oauthDCCancel = nil
 }
 
@@ -275,6 +280,9 @@ func (a *Auth) SetOAuthDCError(err string) {
 	a.oauthDCError = err
 	a.oauthDCPolling = false
 	a.oauthDCAuth = nil
+	if a.oauthDCCancel != nil {
+		a.oauthDCCancel()
+	}
 	a.oauthDCCancel = nil
 }
 
@@ -284,6 +292,9 @@ func (a *Auth) SetOAuthACToken(t *oauth.Token) {
 	a.oauthACError = ""
 	a.oauthACFetching = false
 	a.oauthACStatus = ""
+	if a.oauthACCancel != nil {
+		a.oauthACCancel()
+	}
 	a.oauthACCancel = nil
 }
 
@@ -293,6 +304,9 @@ func (a *Auth) SetOAuthACError(err string) {
 	a.oauthACError = err
 	a.oauthACFetching = false
 	a.oauthACStatus = ""
+	if a.oauthACCancel != nil {
+		a.oauthACCancel()
+	}
 	a.oauthACCancel = nil
 }
 
